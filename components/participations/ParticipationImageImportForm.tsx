@@ -38,6 +38,11 @@ import {
 } from "@/services/team.service";
 
 import {
+  getPositions,
+  type Position,
+} from "@/services/position.service";
+
+import {
   getHistPlayerTeams,
   type HistPlayerTeam,
 } from "@/services/hist-player-team.service";
@@ -79,6 +84,7 @@ interface DetectedPlayer {
   shirtNumber: number | null;
   positionId: number | null;
   isStartingXI: boolean;
+  participationState: "starter" | "substitute" | "none";
   substituteInMinute: number | null;
   substituteOutMinute: number | null;
   confidence: number;
@@ -125,6 +131,7 @@ export default function ParticipationImageImportForm({
   const [matches, setMatches] = useState<Match[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [histPlayerTeams, setHistPlayerTeams] =
     useState<HistPlayerTeam[]>([]);
   const [existingParticipations, setExistingParticipations] =
@@ -211,6 +218,7 @@ export default function ParticipationImageImportForm({
           matchesData,
           playersData,
           teamsData,
+          positionsData,
           historyData,
           participationsData,
         ] = await Promise.all([
@@ -220,6 +228,7 @@ export default function ParticipationImageImportForm({
           getMatches(),
           getPlayers(),
           getTeams(),
+          getPositions(),
           getHistPlayerTeams(),
           getParticipations(),
         ]);
@@ -234,6 +243,7 @@ export default function ParticipationImageImportForm({
         setMatches(matchesData);
         setPlayers(playersData);
         setTeams(teamsData);
+        setPositions(positionsData);
         setHistPlayerTeams(historyData);
         setExistingParticipations(
           participationsData
@@ -879,223 +889,156 @@ export default function ParticipationImageImportForm({
          * ======================================================
          */
 
-        const detected: DetectedPlayer[] =
-          [];
-
-        const usedPlayers =
-          new Set<number>();
+        /*
+         * ======================================================
+         * CONSTRUIR RESULTADO COMPLETO
+         * ======================================================
+         *
+         * La IA solo identifica los jugadores que aparecen en la
+         * imagen. Aquí cruzamos ese resultado con la plantilla
+         * completa del partido para mostrar también los jugadores
+         * que no participaron.
+         */
+        const detectedByPlayerId = new Map<
+          number,
+          any
+        >();
 
         for (const item of data.players) {
-          const playerId =
-            Number(
-              item.playerId
-            );
+          const playerId = Number(item.playerId);
 
           if (
-            !Number.isInteger(
-              playerId
-            ) ||
-            playerId <= 0
+            !Number.isInteger(playerId) ||
+            playerId <= 0 ||
+            detectedByPlayerId.has(playerId)
           ) {
             continue;
           }
-
-          /*
-           * Solo aceptamos jugadores que
-           * pertenecen a las plantillas
-           * conocidas.
-           */
 
           const rosterPlayer =
             rosterCandidates.find(
               (candidate) =>
-                candidate.playerId ===
-                playerId
+                candidate.playerId === playerId
             );
 
-          if (!rosterPlayer) {
-            continue;
+          if (rosterPlayer) {
+            detectedByPlayerId.set(
+              playerId,
+              item
+            );
           }
+        }
 
-          /*
-           * Evitamos duplicados.
-           */
-
-          if (
-            usedPlayers.has(
-              playerId
-            )
-          ) {
-            continue;
-          }
-
-          usedPlayers.add(
-            playerId
-          );
-
-          const isStartingXI =
-            Boolean(
-              item.isStartingXI
+        const detected: DetectedPlayer[] =
+          rosterCandidates.map((rosterPlayer) => {
+            const item = detectedByPlayerId.get(
+              rosterPlayer.playerId
             );
 
-          const substituteInMinute =
-            item.substituteInMinute !==
-              null &&
-            item.substituteInMinute !==
-              undefined
-              ? Number(
-                  item.substituteInMinute
-                )
-              : null;
+            if (!item) {
+              return {
+                playerId: rosterPlayer.playerId,
+                playerName: rosterPlayer.playerName,
+                shortName: rosterPlayer.shortName,
+                teamId: rosterPlayer.teamId,
+                teamSide: rosterPlayer.teamSide,
+                shirtNumber: rosterPlayer.shirtNumber,
+                positionId: rosterPlayer.positionId,
+                isStartingXI: false,
+                participationState: "none" as const,
+                substituteInMinute: null,
+                substituteOutMinute: null,
+                confidence: 0,
+                captain: false,
+                captainConfidence: 0,
+              };
+            }
 
-          const substituteOutMinute =
-            item.substituteOutMinute !==
-              null &&
-            item.substituteOutMinute !==
-              undefined
-              ? Number(
-                  item.substituteOutMinute
-                )
-              : null;
+            const isStartingXI =
+              Boolean(item.isStartingXI);
 
-          const confidence =
-            Number(
-              item.confidence
-            );
+            const substituteInMinute =
+              item.substituteInMinute !== null &&
+              item.substituteInMinute !== undefined
+                ? Number(item.substituteInMinute)
+                : null;
 
-          detected.push({
-            playerId,
+            const substituteOutMinute =
+              item.substituteOutMinute !== null &&
+              item.substituteOutMinute !== undefined
+                ? Number(item.substituteOutMinute)
+                : null;
 
-            playerName:
-              rosterPlayer.playerName,
+            const confidence = Number(item.confidence);
 
-            shortName:
-              rosterPlayer.shortName,
-
-            teamId:
-              rosterPlayer.teamId,
-
-            teamSide:
-              rosterPlayer.teamSide,
-
-            shirtNumber:
-              rosterPlayer.shirtNumber,
-
-            positionId:
-              rosterPlayer.positionId,
-
-            isStartingXI,
-
-            substituteInMinute:
-              Number.isInteger(
-                substituteInMinute
-              )
-                ? substituteInMinute
-                : null,
-
-            substituteOutMinute:
-              Number.isInteger(
-                substituteOutMinute
-              )
-                ? substituteOutMinute
-                : null,
-
-            confidence:
-              Number.isFinite(
-                confidence
-              )
+            return {
+              playerId: rosterPlayer.playerId,
+              playerName: rosterPlayer.playerName,
+              shortName: rosterPlayer.shortName,
+              teamId: rosterPlayer.teamId,
+              teamSide: rosterPlayer.teamSide,
+              shirtNumber: rosterPlayer.shirtNumber,
+              positionId: rosterPlayer.positionId,
+              isStartingXI,
+              participationState: isStartingXI
+                ? "starter"
+                : "substitute",
+              substituteInMinute:
+                Number.isInteger(substituteInMinute)
+                  ? substituteInMinute
+                  : null,
+              substituteOutMinute:
+                Number.isInteger(substituteOutMinute)
+                  ? substituteOutMinute
+                  : null,
+              confidence: Number.isFinite(confidence)
                 ? confidence
                 : 0,
-
-            /*
-             * El capitán puede ser detectado por la IA
-             * cuando la imagen muestra claramente la marca
-             * textual "(c)" antes del nombre.
-             *
-             * Siempre podrá corregirse manualmente
-             * desde la tabla de revisión.
-             */
-            captain:
-              item.captain === true,
-
-            captainConfidence:
-              Number.isFinite(
-                Number(item.captainConfidence)
-              )
-                ? Number(
-                    item.captainConfidence
-                  )
-                : 0,
+              captain: item.captain === true,
+              captainConfidence:
+                Number.isFinite(
+                  Number(item.captainConfidence)
+                )
+                  ? Number(item.captainConfidence)
+                  : 0,
+            };
           });
-        }
 
-        /*
-         * Orden:
-         * 1. Equipo local
-         * 2. Dorsal
-         * 3. Nombre
-         */
-
-        detected.sort(
-          (a, b) => {
-            if (
-              a.teamSide !==
-              b.teamSide
-            ) {
-              return a.teamSide ===
-                "home"
-                ? -1
-                : 1;
-            }
-
-            if (
-              a.shirtNumber !==
-                null &&
-              b.shirtNumber !==
-                null
-            ) {
-              return (
-                a.shirtNumber -
-                b.shirtNumber
-              );
-            }
-
-            if (
-              a.shirtNumber !==
-              null
-            ) {
-              return -1;
-            }
-
-            if (
-              b.shirtNumber !==
-              null
-            ) {
-              return 1;
-            }
-
-            return a.playerName.localeCompare(
-              b.playerName,
-              "es"
-            );
+        detected.sort((a, b) => {
+          if (a.teamSide !== b.teamSide) {
+            return a.teamSide === "home" ? -1 : 1;
           }
-        );
 
-        if (
-          detected.length ===
-          0
-        ) {
+          if (
+            a.shirtNumber !== null &&
+            b.shirtNumber !== null
+          ) {
+            return a.shirtNumber - b.shirtNumber;
+          }
+
+          if (a.shirtNumber !== null) return -1;
+          if (b.shirtNumber !== null) return 1;
+
+          return a.playerName.localeCompare(
+            b.playerName,
+            "es"
+          );
+        });
+
+        if (detected.length === 0) {
           throw new Error(
-            "No se han podido identificar jugadores de las plantillas registradas."
+            "No se han podido cargar las plantillas registradas para este partido."
           );
         }
 
-        setDetectedPlayers(
-          detected
-        );
+        setDetectedPlayers(detected);
+
+        const recognizedCount = detected.filter(
+          (player) => player.confidence > 0
+        ).length;
 
         setMessage(
-          `Se han identificado ${detected.length} jugadores. Revisa los datos antes de guardar.`
+          `Se han cargado ${detected.length} jugadores de las dos plantillas. La IA ha identificado ${recognizedCount}. Revisa y corrige los datos antes de guardar.`
         );
       } catch (err) {
         console.error(
@@ -1140,6 +1083,57 @@ export default function ParticipationImageImportForm({
           )
       );
     };
+
+  /*
+   * ============================================================
+   * CAMBIAR ESTADO DE PARTICIPACIÓN
+   * ============================================================
+   */
+
+  const handleParticipationStateChange = (
+    player: DetectedPlayer,
+    state: DetectedPlayer["participationState"]
+  ) => {
+    if (state === "none") {
+      updateDetectedPlayer(player.playerId, {
+        participationState: "none",
+        isStartingXI: false,
+        substituteInMinute: null,
+        substituteOutMinute: null,
+        captain: false,
+      });
+      return;
+    }
+
+    if (state === "starter") {
+      updateDetectedPlayer(player.playerId, {
+        participationState: "starter",
+        isStartingXI: true,
+        substituteInMinute: null,
+      });
+      return;
+    }
+
+    updateDetectedPlayer(player.playerId, {
+      participationState: "substitute",
+      isStartingXI: false,
+    });
+  };
+
+  /*
+   * ============================================================
+   * CAMBIAR POSICIÓN
+   * ============================================================
+   */
+
+  const handlePositionChange = (
+    playerId: number,
+    value: string
+  ) => {
+    updateDetectedPlayer(playerId, {
+      positionId: value === "" ? null : Number(value),
+    });
+  };
 
   /*
    * ============================================================
@@ -1346,12 +1340,28 @@ export default function ParticipationImageImportForm({
          */
 
         if (
-          !player.positionId ||
-          player.positionId <= 0
+          player.participationState !== "none" &&
+          (!player.positionId || player.positionId <= 0)
         ) {
           validationErrors.push(
-            `${player.playerName}: no tiene una posición registrada en la plantilla.`
+            `${player.playerName}: no tiene una posición registrada.`
           );
+        }
+
+        /*
+         * Jugadores que no participan no pueden tener datos
+         * de entrada, salida o capitán.
+         */
+        if (player.participationState === "none") {
+          if (
+            player.substituteInMinute !== null ||
+            player.substituteOutMinute !== null ||
+            player.captain
+          ) {
+            validationErrors.push(
+              `${player.playerName}: un jugador que no participa no puede tener entrada, salida o ser capitán.`
+            );
+          }
         }
 
         /*
@@ -1598,340 +1608,328 @@ export default function ParticipationImageImportForm({
       teamId: number,
       teamName: string
     ) => {
-      const teamPlayers =
-        detectedPlayers
-          .filter(
-            (player) =>
-              player.teamId ===
-              teamId
-          )
-          .slice()
-          .sort(
-            (a, b) => {
-              if (
-                a.shirtNumber !==
-                  null &&
-                b.shirtNumber !==
-                  null
-              ) {
-                return (
-                  a.shirtNumber -
-                  b.shirtNumber
-                );
-              }
+      const teamPlayers = detectedPlayers
+        .filter((player) => player.teamId === teamId)
+        .slice()
+        .sort((a, b) => {
+          if (
+            a.shirtNumber !== null &&
+            b.shirtNumber !== null
+          ) {
+            return a.shirtNumber - b.shirtNumber;
+          }
 
-              if (
-                a.shirtNumber !==
-                null
-              ) {
-                return -1;
-              }
+          if (a.shirtNumber !== null) return -1;
+          if (b.shirtNumber !== null) return 1;
 
-              if (
-                b.shirtNumber !==
-                null
-              ) {
-                return 1;
-              }
+          return a.playerName.localeCompare(b.playerName, "es");
+        });
 
-              return a.playerName.localeCompare(
-                b.playerName,
-                "es"
-              );
-            }
-          );
-
-      if (
-        teamPlayers.length ===
-        0
-      ) {
-        return (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
-            <h3 className="font-bold text-slate-800">
-              {teamName}
-            </h3>
-
-            <p className="mt-2 text-sm text-slate-500">
-              No se han identificado
-              jugadores de este equipo.
-            </p>
-          </div>
-        );
-      }
+      const participatingCount = teamPlayers.filter(
+        (player) => player.participationState !== "none"
+      ).length;
 
       return (
         <div className="overflow-hidden rounded-lg border border-slate-200">
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-            <h3 className="font-bold text-slate-800">
-              {teamName}
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-slate-800">
+                  {teamName}
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {teamPlayers.length} jugadores en plantilla · {participatingCount} con participación
+                </p>
+              </div>
 
-            <p className="mt-1 text-xs text-slate-500">
-              {teamPlayers.length} jugadores
-              identificados
-            </p>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                Plantilla completa
+              </span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1180px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-white text-left">
-                  <th className="px-4 py-3 font-semibold text-slate-600">
+                  <th className="px-3 py-3 font-semibold text-slate-600">
                     Dorsal
                   </th>
-
-                  <th className="px-4 py-3 font-semibold text-slate-600">
+                  <th className="px-3 py-3 font-semibold text-slate-600">
                     Jugador
                   </th>
-
-                  <th className="px-4 py-3 font-semibold text-slate-600">
+                  <th className="px-3 py-3 font-semibold text-slate-600">
+                    Posición
+                  </th>
+                  <th className="px-3 py-3 font-semibold text-slate-600">
                     Estado
                   </th>
-
-                  <th className="px-4 py-3 font-semibold text-slate-600">
+                  <th className="px-3 py-3 font-semibold text-slate-600">
                     Entrada
                   </th>
-
-                  <th className="px-4 py-3 font-semibold text-slate-600">
+                  <th className="px-3 py-3 font-semibold text-slate-600">
                     Salida
                   </th>
-
-                  <th className="px-4 py-3 font-semibold text-slate-600">
+                  <th className="px-3 py-3 font-semibold text-slate-600">
                     Minutos
                   </th>
-
-                  <th className="px-4 py-3 text-center font-semibold text-slate-600">
+                  <th className="px-3 py-3 text-center font-semibold text-slate-600">
                     Capitán
                   </th>
-
-                  <th className="px-4 py-3 text-center font-semibold text-slate-600">
-                    Conf.
+                  <th className="px-3 py-3 text-center font-semibold text-slate-600">
+                    Conf. IA
                   </th>
-
-                  <th className="px-4 py-3 text-center font-semibold text-slate-600">
+                  <th className="px-3 py-3 text-center font-semibold text-slate-600">
                     Acción
                   </th>
                 </tr>
               </thead>
 
               <tbody>
-                {teamPlayers.map(
-                  (player) => {
-                    const minutes =
-                      calculateMinutes(
-                        player
-                      );
+                {teamPlayers.map((player) => {
+                  const minutes = calculateMinutes(player);
+                  const notParticipating =
+                    player.participationState === "none";
 
-                    return (
-                      <tr
-                        key={
-                          player.playerId
-                        }
-                        className="border-b border-slate-100 last:border-b-0"
-                      >
-                        {/* DORSAL */}
+                  return (
+                    <tr
+                      key={player.playerId}
+                      className={
+                        `border-b border-slate-100 last:border-b-0 ${
+                          notParticipating ? "bg-slate-50/70" : "bg-white"
+                        }`
+                      }
+                    >
+                      {/* DORSAL */}
+                      <td className="px-3 py-3">
+                        <input
+                          type="number"
+                          min={1}
+                          max={99}
+                          value={player.shirtNumber ?? ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            updateDetectedPlayer(player.playerId, {
+                              shirtNumber:
+                                value === "" ? null : Number(value),
+                            });
+                          }}
+                          disabled={saving}
+                          className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100"
+                        />
+                      </td>
 
-                        <td className="px-4 py-3 font-semibold text-slate-700">
-                          {player.shirtNumber ??
-                            "—"}
-                        </td>
-
-                        {/* JUGADOR */}
-
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-slate-800">
-                            {player.playerName}
+                      {/* JUGADOR */}
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-800">
+                          {player.playerName}
+                        </div>
+                        {player.shortName !== player.playerName && (
+                          <div className="text-xs text-slate-400">
+                            {player.shortName}
                           </div>
+                        )}
+                      </td>
 
-                          {player.shortName !==
-                            player.playerName && (
-                            <div className="text-xs text-slate-400">
-                              {player.shortName}
-                            </div>
-                          )}
-                        </td>
+                      {/* POSICIÓN */}
+                      <td className="px-3 py-3">
+                        <select
+                          value={player.positionId ?? ""}
+                          onChange={(event) =>
+                            handlePositionChange(
+                              player.playerId,
+                              event.target.value
+                            )
+                          }
+                          disabled={saving}
+                          className="w-44 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100"
+                        >
+                          <option value="">
+                            Seleccionar
+                          </option>
+                          {positions
+                            .slice()
+                            .sort((a, b) => {
+                              if (a.displayOrder !== b.displayOrder) {
+                                return a.displayOrder - b.displayOrder;
+                              }
+                              return a.name.localeCompare(b.name, "es");
+                            })
+                            .map((position) => (
+                              <option
+                                key={position.id}
+                                value={position.id}
+                              >
+                                {position.name}
+                              </option>
+                            ))}
+                        </select>
+                      </td>
 
-                        {/* ESTADO */}
+                      {/* ESTADO */}
+                      <td className="px-3 py-3">
+                        <select
+                          value={player.participationState}
+                          onChange={(event) =>
+                            handleParticipationStateChange(
+                              player,
+                              event.target.value as DetectedPlayer["participationState"]
+                            )
+                          }
+                          disabled={saving}
+                          className={
+                            `w-36 rounded-md border px-2 py-1.5 text-sm font-semibold outline-none focus:border-slate-500 disabled:bg-slate-100 ${
+                              player.participationState === "starter"
+                                ? "border-green-200 bg-green-50 text-green-700"
+                                : player.participationState === "substitute"
+                                ? "border-blue-200 bg-blue-50 text-blue-700"
+                                : "border-slate-200 bg-slate-100 text-slate-500"
+                            }`
+                          }
+                        >
+                          <option value="starter">
+                            Titular
+                          </option>
+                          <option value="substitute">
+                            Suplente
+                          </option>
+                          <option value="none">
+                            No participó
+                          </option>
+                        </select>
+                      </td>
 
-                        <td className="px-4 py-3">
-                          {player.isStartingXI ? (
-                            <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
-                              Titular
-                            </span>
-                          ) : (
-                            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                              Suplente
-                            </span>
-                          )}
-                        </td>
+                      {/* ENTRADA */}
+                      <td className="px-3 py-3">
+                        <input
+                          type="number"
+                          min={0}
+                          max={matchDuration}
+                          value={player.substituteInMinute ?? ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            updateDetectedPlayer(player.playerId, {
+                              substituteInMinute:
+                                value === "" ? null : Number(value),
+                            });
+                          }}
+                          disabled={
+                            saving ||
+                            player.participationState !== "substitute"
+                          }
+                          className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 disabled:text-slate-400"
+                        />
+                      </td>
 
-                        {/* ENTRADA */}
+                      {/* SALIDA */}
+                      <td className="px-3 py-3">
+                        <input
+                          type="number"
+                          min={0}
+                          max={matchDuration}
+                          value={player.substituteOutMinute ?? ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            updateDetectedPlayer(player.playerId, {
+                              substituteOutMinute:
+                                value === "" ? null : Number(value),
+                            });
+                          }}
+                          disabled={
+                            saving ||
+                            player.participationState === "none"
+                          }
+                          className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 disabled:text-slate-400"
+                        />
+                      </td>
 
-                        <td className="px-4 py-3">
+                      {/* MINUTOS */}
+                      <td className="px-3 py-3">
+                        <span
+                          className={
+                            `font-semibold ${
+                              notParticipating
+                                ? "text-slate-400"
+                                : "text-slate-800"
+                            }`
+                          }
+                        >
+                          {minutes}
+                        </span>
+                      </td>
+
+                      {/* CAPITÁN */}
+                      <td className="px-3 py-3 text-center">
+                        <div className="flex flex-col items-center gap-1">
                           <input
-                            type="number"
-                            min={0}
-                            max={
-                              matchDuration
+                            type="checkbox"
+                            checked={player.captain}
+                            onChange={() =>
+                              handleCaptainChange(player)
                             }
-                            value={
-                              player.substituteInMinute ??
-                              ""
-                            }
-                            onChange={(
-                              event
-                            ) => {
-                              const value =
-                                event
-                                  .target
-                                  .value;
-
-                              updateDetectedPlayer(
-                                player.playerId,
-                                {
-                                  substituteInMinute:
-                                    value ===
-                                    ""
-                                      ? null
-                                      : Number(
-                                          value
-                                        ),
-                                }
-                              );
-                            }}
                             disabled={
-                              player.isStartingXI &&
-                              player.substituteInMinute ===
-                                null
+                              saving ||
+                              player.participationState === "none"
                             }
-                            className="w-20 rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-slate-500"
+                            className="h-4 w-4 cursor-pointer disabled:cursor-not-allowed"
                           />
-                        </td>
-
-                        {/* SALIDA */}
-
-                        <td className="px-4 py-3">
-                          <input
-                            type="number"
-                            min={0}
-                            max={
-                              matchDuration
-                            }
-                            value={
-                              player.substituteOutMinute ??
-                              ""
-                            }
-                            onChange={(
-                              event
-                            ) => {
-                              const value =
-                                event
-                                  .target
-                                  .value;
-
-                              updateDetectedPlayer(
-                                player.playerId,
-                                {
-                                  substituteOutMinute:
-                                    value ===
-                                    ""
-                                      ? null
-                                      : Number(
-                                          value
-                                        ),
+                          {player.captain &&
+                            player.captainConfidence > 0 && (
+                              <span
+                                className={
+                                  player.captainConfidence >= 0.9
+                                    ? "text-[10px] font-semibold text-green-600"
+                                    : player.captainConfidence >= 0.7
+                                    ? "text-[10px] font-semibold text-amber-600"
+                                    : "text-[10px] font-semibold text-red-600"
                                 }
-                              );
-                            }}
-                            className="w-20 rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-slate-500"
-                          />
-                        </td>
+                                title="Confianza de la detección automática del capitán"
+                              >
+                                IA {Math.round(
+                                  player.captainConfidence * 100
+                                )}%
+                              </span>
+                            )}
+                        </div>
+                      </td>
 
-                        {/* MINUTOS */}
-
-                        <td className="px-4 py-3">
-                          <span className="font-semibold text-slate-800">
-                            {minutes}
-                          </span>
-                        </td>
-
-                        {/* CAPITÁN */}
-
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex flex-col items-center gap-1">
-                            <input
-                              type="checkbox"
-                              checked={
-                                player.captain
-                              }
-                              onChange={() =>
-                                handleCaptainChange(
-                                  player
-                                )
-                              }
-                              className="h-4 w-4 cursor-pointer"
-                            />
-
-                            {player.captain &&
-                              player.captainConfidence > 0 && (
-                                <span
-                                  className={
-                                    player.captainConfidence >= 0.9
-                                      ? "text-[10px] font-semibold text-green-600"
-                                      : player.captainConfidence >= 0.7
-                                      ? "text-[10px] font-semibold text-amber-600"
-                                      : "text-[10px] font-semibold text-red-600"
-                                  }
-                                  title="Confianza de la detección automática del capitán"
-                                >
-                                  IA {Math.round(
-                                    player.captainConfidence * 100
-                                  )}%
-                                </span>
-                              )}
-                          </div>
-                        </td>
-
-                        {/* CONFIANZA */}
-
-                        <td className="px-4 py-3 text-center">
+                      {/* CONFIANZA IA */}
+                      <td className="px-3 py-3 text-center">
+                        {player.confidence > 0 ? (
                           <span
                             className={
-                              player.confidence >=
-                              0.9
+                              player.confidence >= 0.9
                                 ? "font-semibold text-green-600"
-                                : player.confidence >=
-                                  0.7
+                                : player.confidence >= 0.7
                                 ? "font-semibold text-amber-600"
                                 : "font-semibold text-red-600"
                             }
                           >
-                            {Math.round(
-                              player.confidence *
-                                100
-                            )}
-                            %
+                            {Math.round(player.confidence * 100)}%
                           </span>
-                        </td>
+                        ) : (
+                          <span className="text-xs font-medium text-slate-400">
+                            No detectado
+                          </span>
+                        )}
+                      </td>
 
-                        {/* ELIMINAR */}
-
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeDetectedPlayer(
-                                player.playerId
-                              )
-                            }
-                            className="rounded-md px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
-                          >
-                            Quitar
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  }
-                )}
+                      {/* QUITAR */}
+                      <td className="px-3 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeDetectedPlayer(player.playerId)
+                          }
+                          disabled={saving}
+                          className="rounded-md px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Quitar
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -2314,12 +2312,12 @@ export default function ParticipationImageImportForm({
             </p>
 
             <p className="mt-1 text-sm text-amber-700">
-              Comprueba titulares, suplentes,
-              minutos de entrada y salida. La IA
-              también intentará detectar el capitán
-              cuando aparezca la marca <strong>(c)</strong>
-              antes de su nombre. Puedes corregirlo
-              manualmente antes de guardar.
+              La plantilla completa de ambos equipos aparece en la revisión.
+              Los jugadores que no hayan sido reconocidos quedan como
+              <strong> No participó</strong>. Comprueba titulares, suplentes,
+              posiciones, dorsales, minutos de entrada y salida y capitán.
+              La IA también intentará detectar el capitán cuando aparezca
+              la marca <strong>(c)</strong> antes de su nombre.
             </p>
 
           </div>
@@ -2344,6 +2342,15 @@ export default function ParticipationImageImportForm({
 
           </div>
 
+        </div>
+      )}
+
+      {detectedPlayers.length > 0 && (
+        <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+          <strong className="font-semibold text-slate-700">Importante:</strong>{" "}
+          los jugadores marcados como <strong>No participó</strong> se muestran
+          para completar la revisión, pero no se guardan como participaciones.
+          Solo se guardan los jugadores con minutos jugados.
         </div>
       )}
 

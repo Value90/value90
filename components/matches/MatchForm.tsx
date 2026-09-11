@@ -22,6 +22,11 @@ import {
   type Team,
 } from "@/services/team.service";
 
+import {
+  getTeamCompetitionsBySeason,
+  type TeamCompetition,
+} from "@/services/team-competition.service";
+
 import type { Match } from "@/services/match.service";
 
 interface MatchFormProps {
@@ -52,6 +57,9 @@ export default function MatchForm({
 
   const [teams, setTeams] =
     useState<Team[]>([]);
+
+  const [teamCompetitions, setTeamCompetitions] =
+    useState<TeamCompetition[]>([]);
 
   const [dataLoading, setDataLoading] =
     useState(true);
@@ -154,6 +162,40 @@ export default function MatchForm({
       match?.seasonId?.toString() ?? ""
     );
 
+  /*
+   * ============================================================
+   * CARGAR RELACIÓN EQUIPO ↔ COMPETICIÓN POR TEMPORADA
+   * ============================================================
+   */
+
+  useEffect(() => {
+    const loadTeamCompetitions = async () => {
+      if (!seasonId) {
+        setTeamCompetitions([]);
+        return;
+      }
+
+      try {
+        const data =
+          await getTeamCompetitionsBySeason(
+            Number(seasonId)
+          );
+
+        setTeamCompetitions(data);
+      } catch (error) {
+        console.error(
+          "Error obteniendo las competiciones de los equipos:",
+          error
+        );
+
+        setTeamCompetitions([]);
+      }
+    };
+
+    loadTeamCompetitions();
+  }, [seasonId]);
+
+
   const [stageId, setStageId] =
     useState(
       match?.stageId?.toString() ?? ""
@@ -250,107 +292,88 @@ export default function MatchForm({
    */
 
   const filteredTeams = [...teams]
-    .filter(
-      (team) => {
-        if (!selectedCompetition) {
-          return false;
-        }
+    .filter((team) => {
+      if (!selectedCompetition || !seasonId) {
+        return false;
+      }
 
-        /*
-         * ========================================================
-         * COMPETICIONES DE SELECCIONES
-         * ========================================================
-         */
+      /*
+       * ========================================================
+       * COMPETICIONES DE SELECCIONES
+       * ========================================================
+       */
 
+      if (
+        selectedCompetition.competitionType ===
+        "National Team"
+      ) {
         if (
-          selectedCompetition.competitionType ===
-          "National Team"
+          selectedCompetition.confederation ===
+          "FIFA"
         ) {
-          /*
-           * Competición FIFA:
-           * cualquier selección.
-           */
-
-          if (
-            selectedCompetition.confederation ===
-            "FIFA"
-          ) {
-            return (
-              team.type === "Selección"
-            );
-          }
-
-          /*
-           * Competición de una confederación.
-           */
-
-          return (
-            team.type === "Selección" &&
-            team.confederation ===
-              selectedCompetition.confederation
-          );
+          return team.type === "Selección";
         }
-
-        /*
-         * ========================================================
-         * COMPETICIONES DE CLUBES
-         * ========================================================
-         */
-
-        /*
-         * Sin countryId =
-         * competición internacional.
-         */
-
-        if (
-          selectedCompetition.countryId ===
-          null
-        ) {
-          /*
-           * Competición internacional FIFA:
-           * cualquier club.
-           */
-
-          if (
-            selectedCompetition.confederation ===
-            "FIFA"
-          ) {
-            return (
-              team.type === "Club"
-            );
-          }
-
-          /*
-           * Competición internacional
-           * de una confederación.
-           */
-
-          return (
-            team.type === "Club" &&
-            team.confederation ===
-              selectedCompetition.confederation
-          );
-        }
-
-        /*
-         * ========================================================
-         * COMPETICIÓN NACIONAL DE CLUBES
-         * ========================================================
-         */
 
         return (
-          team.type === "Club" &&
-          team.countryId ===
-            selectedCompetition.countryId
+          team.type === "Selección" &&
+          team.confederation ===
+            selectedCompetition.confederation
         );
       }
-    )
+
+      /*
+       * ========================================================
+       * COMPETICIONES DE CLUBES
+       * ========================================================
+       *
+       * Un club solo aparece si está relacionado
+       * explícitamente con la competición Y temporada
+       * seleccionadas en hist_team_competitions.
+       *
+       * Ya NO usamos:
+       *
+       *   team.competitionId
+       *
+       * porque ese campo solo representa la competición
+       * principal/histórica del equipo y no permite modelar
+       * correctamente una participación simultánea como:
+       *
+       *   Real Madrid → LaLiga + Champions
+       */
+
+      const isRegisteredForCompetition =
+        teamCompetitions.some(
+          (relation) =>
+            relation.active &&
+            relation.teamId === team.id &&
+            relation.competitionId ===
+              Number(competitionId) &&
+            relation.seasonId === Number(seasonId)
+        );
+
+      /*
+       * Al editar un partido existente, conservamos
+       * temporalmente sus equipos aunque la relación histórica
+       * todavía no esté registrada, para no romper partidos
+       * ya existentes.
+       */
+
+      const isCurrentEditedTeam =
+        !!match &&
+        (team.id === match.homeTeamId ||
+          team.id === match.awayTeamId);
+
+      return (
+        team.type === "Club" &&
+        (isRegisteredForCompetition ||
+          isCurrentEditedTeam)
+      );
+    })
     .sort((a, b) =>
       a.shortName.localeCompare(b.shortName, "es", {
         sensitivity: "base",
       })
     );
-
   /*
    * ============================================================
    * JORNADAS / FASES DISPONIBLES
