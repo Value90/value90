@@ -304,21 +304,21 @@ export default function MatchesPage(
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-6 flex flex-col gap-5 sm:mb-8 sm:gap-6 md:flex-row md:items-start md:justify-between">
 
-        <div>
+        <div className="min-w-0">
 
-          <h1 className="text-3xl font-bold">
+          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
             Partidos
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
             Gestión de partidos de Value90
           </p>
 
@@ -329,7 +329,7 @@ export default function MatchesPage(
             type="button"
             onClick={handleNewMatch}
             disabled={saving}
-            className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             + Nuevo partido
           </button>
@@ -342,7 +342,7 @@ export default function MatchesPage(
           ====================================================== */}
 
       {matchesError && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-5 text-red-700 sm:mb-6">
           {matchesError}
         </div>
       )}
@@ -352,36 +352,42 @@ export default function MatchesPage(
           ====================================================== */}
 
       {!showForm && (
-        <p className="mb-6 text-slate-700">
+        <div className="mb-5 sm:mb-6">
 
-          Total de partidos:{" "}
+          <p className="text-sm text-slate-700 sm:text-base">
+            Total de partidos:{" "}
 
-          <span className="font-semibold">
-            {matchesLoading
-              ? "Cargando..."
-              : matches.length}
-          </span>
+            <span className="font-semibold">
+              {matchesLoading
+                ? "Cargando..."
+                : matches.length}
+            </span>
+          </p>
 
-        </p>
+        </div>
       )}
 
       {/* ======================================================
           FORMULARIO / TABLA
           ====================================================== */}
 
-      {showForm ? (
-        <MatchForm
-          match={editingMatch}
-          onCancel={handleCancelForm}
-          onSaved={handleSaved}
-        />
-      ) : (
-        <MatchesTable
-          key={refreshKey}
-          onEdit={handleEditMatch}
-          onDelete={handleDeleteMatch}
-        />
-      )}
+      <div className="w-full min-w-0">
+
+        {showForm ? (
+          <MatchForm
+            match={editingMatch}
+            onCancel={handleCancelForm}
+            onSaved={handleSaved}
+          />
+        ) : (
+          <MatchesTable
+            key={refreshKey}
+            onEdit={handleEditMatch}
+            onDelete={handleDeleteMatch}
+          />
+        )}
+
+      </div>
 
       {/* ======================================================
           DIÁLOGO DE ELIMINACIÓN

@@ -193,6 +193,7 @@ export default function TeamForm({
          * reciente. Esto permite gestionar las competiciones
          * del equipo nada más abrir el formulario.
          */
+
         const activeSeasons = seasonsData
           .filter((season) => season.active)
           .sort((a, b) =>
@@ -281,6 +282,7 @@ export default function TeamForm({
           competitionId ? [competitionId] : []
         );
       }
+
       return;
     }
 
@@ -313,6 +315,7 @@ export default function TeamForm({
            * existe una relación en hist_team_competitions, usamos
            * la competición principal guardada en teams.
            */
+
           setSelectedCompetitionIds([
             team!.competitionId,
           ]);
@@ -449,15 +452,6 @@ export default function TeamForm({
   /*
    * ============================================================
    * CAMBIO DE TIPO
-   * ============================================================
-   *
-   * Si cambiamos de Club a Selección:
-   *
-   * - No debe existir una liga asociada.
-   *
-   * Si volvemos a Club:
-   *
-   * - Se podrá seleccionar una liga.
    * ============================================================
    */
 
@@ -727,14 +721,6 @@ export default function TeamForm({
        * ========================================================
        * GUARDAR COMPETICIONES DE LA TEMPORADA
        * ========================================================
-       *
-       * Primero eliminamos las relaciones existentes de esta
-       * temporada que ya no estén seleccionadas y después hacemos
-       * upsert de las seleccionadas.
-       *
-       * Esto permite marcar y desmarcar competiciones sin crear
-       * duplicados gracias a la restricción UNIQUE de la tabla.
-       * ========================================================
        */
 
       const existingRelations =
@@ -822,15 +808,15 @@ export default function TeamForm({
    */
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow">
+    <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-5 md:p-6">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-6">
+      <div className="mb-5 sm:mb-6">
 
-        <h2 className="text-xl font-bold text-slate-800">
+        <h2 className="text-xl font-bold text-slate-800 sm:text-2xl">
           {team
             ? "Editar equipo"
             : "Nuevo equipo"}
@@ -849,7 +835,7 @@ export default function TeamForm({
           ====================================================== */}
 
       {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
           {error}
         </div>
       )}
@@ -860,14 +846,14 @@ export default function TeamForm({
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-6"
+        className="min-w-0 space-y-5 sm:space-y-6"
       >
 
         {/* ====================================================
             NOMBRE
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
 
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Nombre
@@ -882,7 +868,7 @@ export default function TeamForm({
               )
             }
             placeholder="Ej. Real Madrid"
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
           />
 
         </div>
@@ -891,7 +877,7 @@ export default function TeamForm({
             ABREVIATURA
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
 
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Abreviatura
@@ -906,7 +892,7 @@ export default function TeamForm({
               )
             }
             placeholder="Ej. RMA"
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
           />
 
         </div>
@@ -915,7 +901,7 @@ export default function TeamForm({
             PAÍS
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
 
           <label className="mb-2 block text-sm font-medium text-slate-700">
             País
@@ -931,7 +917,7 @@ export default function TeamForm({
               )
             }
             disabled={loadingData}
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 sm:px-4"
           >
 
             <option value={0}>
@@ -959,7 +945,7 @@ export default function TeamForm({
             LIGA
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
 
           <label
             htmlFor="team-competition"
@@ -986,7 +972,7 @@ export default function TeamForm({
               loadingData ||
               type === "Selección"
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:px-4"
           >
 
             <option value="">
@@ -1033,19 +1019,22 @@ export default function TeamForm({
             COMPETICIONES POR TEMPORADA
             ==================================================== */}
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
 
           <div className="mb-4">
+
             <h3 className="text-sm font-semibold text-slate-800">
               Competiciones por temporada
             </h3>
 
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs leading-5 text-slate-500">
               Un equipo puede participar en varias competiciones durante una misma temporada.
             </p>
+
           </div>
 
-          <div className="mb-4">
+          <div className="mb-4 min-w-0">
+
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Temporada
             </label>
@@ -1062,27 +1051,34 @@ export default function TeamForm({
                 saving ||
                 loadingTeamCompetitions
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100 sm:px-4"
             >
+
               <option value={0}>
                 {loadingData
                   ? "Cargando temporadas..."
                   : "Selecciona una temporada"}
               </option>
 
-              {availableSeasons.map((season) => (
-                <option
-                  key={season.id}
-                  value={season.id}
-                >
-                  {season.name}
-                </option>
-              ))}
+              {availableSeasons.map(
+                (season) => (
+                  <option
+                    key={season.id}
+                    value={season.id}
+                  >
+                    {season.name}
+                  </option>
+                )
+              )}
+
             </select>
+
           </div>
 
-          <div>
-            <div className="mb-2 flex items-center justify-between">
+          <div className="min-w-0">
+
+            <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+
               <label className="text-sm font-medium text-slate-700">
                 Competiciones
               </label>
@@ -1092,14 +1088,15 @@ export default function TeamForm({
                   Cargando...
                 </span>
               )}
+
             </div>
 
             {availableSeasonCompetitions.length === 0 ? (
-              <p className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-500">
+              <p className="rounded-lg border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-500">
                 No hay competiciones activas disponibles.
               </p>
             ) : (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                 {availableSeasonCompetitions.map(
                   (competition) => {
                     const checked =
@@ -1110,12 +1107,13 @@ export default function TeamForm({
                     return (
                       <label
                         key={competition.id}
-                        className={`flex cursor-pointer items-center gap-3 rounded-lg border bg-white px-3 py-2.5 text-sm transition ${
+                        className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border bg-white px-3 py-2.5 text-sm transition ${
                           checked
                             ? "border-slate-400 bg-slate-100"
                             : "border-slate-200 hover:bg-slate-50"
                         }`}
                       >
+
                         <input
                           type="checkbox"
                           checked={checked}
@@ -1129,18 +1127,20 @@ export default function TeamForm({
                             saving ||
                             loadingTeamCompetitions
                           }
-                          className="h-4 w-4"
+                          className="mt-0.5 h-4 w-4 shrink-0"
                         />
 
-                        <span className="text-slate-700">
+                        <span className="min-w-0 break-words text-slate-700">
                           {competition.name}
                         </span>
+
                       </label>
                     );
                   }
                 )}
               </div>
             )}
+
           </div>
 
         </div>
@@ -1149,7 +1149,7 @@ export default function TeamForm({
             CONFEDERACIÓN
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
 
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Confederación
@@ -1162,7 +1162,7 @@ export default function TeamForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
           >
 
             <option value="">
@@ -1201,7 +1201,7 @@ export default function TeamForm({
             CIUDAD
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
 
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Ciudad
@@ -1216,7 +1216,7 @@ export default function TeamForm({
               )
             }
             placeholder="Ej. Madrid"
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
           />
 
         </div>
@@ -1225,7 +1225,7 @@ export default function TeamForm({
             ESTADIO
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
 
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Estadio
@@ -1240,7 +1240,7 @@ export default function TeamForm({
               )
             }
             placeholder="Ej. Santiago Bernabéu"
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
           />
 
         </div>
@@ -1249,7 +1249,7 @@ export default function TeamForm({
             TIPO
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
 
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Tipo
@@ -1264,7 +1264,7 @@ export default function TeamForm({
                   | "Selección"
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
           >
 
             <option value="Club">
@@ -1284,7 +1284,7 @@ export default function TeamForm({
             ==================================================== */}
 
         {team && (
-          <div>
+          <div className="min-w-0">
 
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Orden de visualización
@@ -1301,7 +1301,7 @@ export default function TeamForm({
                   )
                 )
               }
-              className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+              className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
             />
 
             <p className="mt-1 text-xs text-slate-500">
@@ -1312,7 +1312,7 @@ export default function TeamForm({
         )}
 
         {!team && (
-          <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="rounded-lg bg-slate-50 p-3 text-sm leading-5 text-slate-600 sm:p-4">
             El orden de visualización se asignará automáticamente.
           </div>
         )}
@@ -1332,7 +1332,7 @@ export default function TeamForm({
                 event.target.checked
               )
             }
-            className="h-4 w-4"
+            className="h-4 w-4 shrink-0"
           />
 
           <label
@@ -1348,13 +1348,13 @@ export default function TeamForm({
             BOTONES
             ==================================================== */}
 
-        <div className="flex justify-end gap-3 border-t pt-6">
+        <div className="flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:justify-end sm:pt-6">
 
           <button
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             Cancelar
           </button>
@@ -1366,7 +1366,7 @@ export default function TeamForm({
               loadingData ||
               loadingTeamCompetitions
             }
-            className="rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {saving
               ? "Guardando..."
@@ -1378,7 +1378,6 @@ export default function TeamForm({
         </div>
 
       </form>
-
     </div>
   );
 }

@@ -55,7 +55,13 @@ export default function CompetitionForm({
         const data = await getCountries();
 
         if (mounted) {
-          setCountries(data);
+          const sortedCountries = [...data].sort((a, b) =>
+            a.name.localeCompare(b.name, "es", {
+              sensitivity: "base",
+            })
+          );
+
+          setCountries(sortedCountries);
         }
       } catch (error) {
         console.error(
@@ -229,15 +235,15 @@ export default function CompetitionForm({
    */
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow">
+    <div className="w-full rounded-xl border bg-white p-4 shadow sm:p-5 md:p-6">
 
       {/* CABECERA */}
 
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-5 flex items-start justify-between gap-4 sm:mb-6">
 
         <div>
 
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
             {isEditing
               ? "Editar competición"
               : "Nueva competición"}
@@ -254,7 +260,8 @@ export default function CompetitionForm({
         <button
           type="button"
           onClick={onClose}
-          className="text-slate-500 hover:text-slate-900"
+          aria-label="Cerrar formulario"
+          className="shrink-0 rounded-lg p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
         >
           ✕
         </button>
@@ -279,7 +286,7 @@ export default function CompetitionForm({
 
       <form
         onSubmit={handleSubmit}
-        className="grid grid-cols-1 gap-5 md:grid-cols-2"
+        className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2"
       >
 
         {/* NOMBRE */}
@@ -296,7 +303,7 @@ export default function CompetitionForm({
             onChange={(event) =>
               setName(event.target.value)
             }
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-slate-500 sm:px-4"
             placeholder="LaLiga"
           />
 
@@ -316,7 +323,7 @@ export default function CompetitionForm({
             onChange={(event) =>
               setShortName(event.target.value)
             }
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 uppercase outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm uppercase outline-none transition focus:border-slate-500 sm:px-4"
             placeholder="LL"
           />
 
@@ -340,7 +347,7 @@ export default function CompetitionForm({
               )
             }
             disabled={countriesLoading}
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
           >
 
             <option value="">
@@ -475,19 +482,19 @@ export default function CompetitionForm({
 
         {/* BOTONES */}
 
-        <div className="flex justify-end gap-3 md:col-span-2">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end md:col-span-2">
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-300 px-5 py-2.5 font-medium hover:bg-slate-100"
+            className="w-full rounded-lg border border-slate-300 px-5 py-2.5 font-medium transition hover:bg-slate-100 sm:w-auto"
           >
             Cancelar
           </button>
 
           <button
             type="submit"
-            className="rounded-lg bg-slate-800 px-5 py-2.5 font-medium text-white hover:bg-slate-700"
+            className="w-full rounded-lg bg-slate-800 px-5 py-2.5 font-medium text-white transition hover:bg-slate-700 sm:w-auto"
           >
             {isEditing
               ? "Guardar cambios"

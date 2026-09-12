@@ -1630,9 +1630,9 @@ export default function ParticipationImageImportForm({
       ).length;
 
       return (
-        <div className="overflow-hidden rounded-lg border border-slate-200">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="w-full min-w-0 overflow-hidden rounded-lg border border-slate-200">
+          <div className="border-b border-slate-200 bg-slate-50 p-3 sm:px-4 sm:py-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div>
                 <h3 className="font-bold text-slate-800">
                   {teamName}
@@ -1648,8 +1648,8 @@ export default function ParticipationImageImportForm({
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] text-sm">
+          <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
+            <table className="w-full min-w-[1080px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-white text-left">
                   <th className="px-3 py-3 font-semibold text-slate-600">
@@ -1701,7 +1701,7 @@ export default function ParticipationImageImportForm({
                       }
                     >
                       {/* DORSAL */}
-                      <td className="px-3 py-3">
+                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
                         <input
                           type="number"
                           min={1}
@@ -1720,7 +1720,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* JUGADOR */}
-                      <td className="px-3 py-3">
+                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
                         <div className="font-medium text-slate-800">
                           {player.playerName}
                         </div>
@@ -1732,7 +1732,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* POSICIÓN */}
-                      <td className="px-3 py-3">
+                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
                         <select
                           value={player.positionId ?? ""}
                           onChange={(event) =>
@@ -1767,7 +1767,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* ESTADO */}
-                      <td className="px-3 py-3">
+                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
                         <select
                           value={player.participationState}
                           onChange={(event) =>
@@ -1800,7 +1800,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* ENTRADA */}
-                      <td className="px-3 py-3">
+                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
                         <input
                           type="number"
                           min={0}
@@ -1822,7 +1822,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* SALIDA */}
-                      <td className="px-3 py-3">
+                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
                         <input
                           type="number"
                           min={0}
@@ -1844,7 +1844,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* MINUTOS */}
-                      <td className="px-3 py-3">
+                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
                         <span
                           className={
                             `font-semibold ${
@@ -1859,7 +1859,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* CAPITÁN */}
-                      <td className="px-3 py-3 text-center">
+                      <td className="whitespace-nowrap px-2 py-3 text-center sm:px-3">
                         <div className="flex flex-col items-center gap-1">
                           <input
                             type="checkbox"
@@ -1894,7 +1894,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* CONFIANZA IA */}
-                      <td className="px-3 py-3 text-center">
+                      <td className="whitespace-nowrap px-2 py-3 text-center sm:px-3">
                         {player.confidence > 0 ? (
                           <span
                             className={
@@ -1915,7 +1915,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* QUITAR */}
-                      <td className="px-3 py-3 text-center">
+                      <td className="whitespace-nowrap px-2 py-3 text-center sm:px-3">
                         <button
                           type="button"
                           onClick={() =>
@@ -1945,12 +1945,12 @@ export default function ParticipationImageImportForm({
 
   if (loading) {
     return (
-      <div className="rounded-xl border bg-white p-6 shadow">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-4 md:p-6">
+        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
           Importar participaciones
         </h2>
 
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mt-2 text-sm leading-6 text-slate-500">
           Cargando datos...
         </p>
       </div>
@@ -1964,14 +1964,14 @@ export default function ParticipationImageImportForm({
    */
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow">
+    <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-4 md:p-6">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="mb-5 sm:mb-6">
+        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
           Importar participaciones desde imagen
         </h2>
 
@@ -1988,7 +1988,7 @@ export default function ParticipationImageImportForm({
           ====================================================== */}
 
       {error && (
-        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:p-4">
           <strong className="font-semibold">
             Revisa los siguientes errores:
           </strong>
@@ -2000,7 +2000,7 @@ export default function ParticipationImageImportForm({
       )}
 
       {message && (
-        <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+        <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 sm:p-4">
           {message}
         </div>
       )}
@@ -2009,13 +2009,13 @@ export default function ParticipationImageImportForm({
           SELECCIÓN DEL PARTIDO
           ====================================================== */}
 
-      <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-5">
+      <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:mb-6 sm:p-5">
 
         <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
           Partido
         </h3>
 
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
 
           {/* TEMPORADA */}
 
@@ -2029,7 +2029,7 @@ export default function ParticipationImageImportForm({
               onChange={
                 handleSeasonChange
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500"
             >
               <option value={0}>
                 Seleccionar temporada
@@ -2063,7 +2063,7 @@ export default function ParticipationImageImportForm({
                 handleCompetitionChange
               }
               disabled={!seasonId}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:bg-slate-100 focus:border-slate-500"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:bg-slate-100 focus:border-slate-500"
             >
               <option value={0}>
                 Seleccionar competición
@@ -2097,7 +2097,7 @@ export default function ParticipationImageImportForm({
               value={stageId}
               onChange={handleStageChange}
               disabled={!competitionId}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:bg-slate-100 focus:border-slate-500"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:bg-slate-100 focus:border-slate-500"
             >
               <option value={0}>
                 {!competitionId
@@ -2128,7 +2128,7 @@ export default function ParticipationImageImportForm({
               disabled={
                 !stageId
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:bg-slate-100 focus:border-slate-500"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:bg-slate-100 focus:border-slate-500"
             >
               <option value={0}>
                 {!stageId
@@ -2182,9 +2182,9 @@ export default function ParticipationImageImportForm({
         {/* INFORMACIÓN DEL PARTIDO */}
 
         {selectedMatch && (
-          <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3 sm:mt-5 sm:p-4">
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 sm:gap-4">
 
               <div>
                 <span className="block text-xs font-medium uppercase tracking-wide text-slate-400">
@@ -2231,13 +2231,13 @@ export default function ParticipationImageImportForm({
           IMAGEN
           ====================================================== */}
 
-      <div className="mb-6 rounded-xl border border-slate-200 p-5">
+      <div className="mb-5 rounded-xl border border-slate-200 p-3 sm:mb-6 sm:p-5">
 
         <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-700">
           Imagen de alineaciones
         </h3>
 
-        <p className="mb-4 text-sm text-slate-500">
+        <p className="mb-4 text-sm leading-6 text-slate-500">
           Sube una captura donde aparezcan las
           alineaciones y las sustituciones.
         </p>
@@ -2249,7 +2249,7 @@ export default function ParticipationImageImportForm({
             handleImageChange
           }
           disabled={analyzing || saving}
-          className="block w-full cursor-pointer rounded-lg border border-slate-300 bg-white text-sm text-slate-600 file:mr-4 file:border-0 file:bg-slate-100 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+          className="block w-full min-w-0 cursor-pointer rounded-lg border border-slate-300 bg-white text-sm text-slate-600 file:mr-2 file:border-0 file:bg-slate-100 file:px-3 file:py-2.5 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-200 sm:file:mr-4 sm:file:px-4"
         />
 
         {imagePreview && (
@@ -2259,20 +2259,20 @@ export default function ParticipationImageImportForm({
               Vista previa
             </p>
 
-            <div className="max-h-[600px] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="max-h-[600px] w-full overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 sm:p-3">
               <img
                 src={
                   imagePreview
                 }
                 alt="Vista previa de la alineación"
-                className="mx-auto max-h-[560px] w-auto rounded-md object-contain"
+                className="mx-auto max-h-[560px] max-w-full w-auto rounded-md object-contain"
               />
             </div>
 
           </div>
         )}
 
-        <div className="mt-5 flex justify-end">
+        <div className="mt-4 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:justify-end">
 
           <button
             type="button"
@@ -2286,7 +2286,7 @@ export default function ParticipationImageImportForm({
               !matchId ||
               !imageDataUrl
             }
-            className="rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {analyzing
               ? "Analizando imagen..."
@@ -2303,15 +2303,15 @@ export default function ParticipationImageImportForm({
 
       {detectedPlayers.length >
         0 && (
-        <div className="mb-6">
+        <div className="mb-5 sm:mb-6">
 
-          <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4">
 
             <p className="text-sm font-semibold text-amber-800">
               Revisión antes de guardar
             </p>
 
-            <p className="mt-1 text-sm text-amber-700">
+            <p className="mt-1 text-sm leading-6 text-amber-700">
               La plantilla completa de ambos equipos aparece en la revisión.
               Los jugadores que no hayan sido reconocidos quedan como
               <strong> No participó</strong>. Comprueba titulares, suplentes,
@@ -2322,7 +2322,7 @@ export default function ParticipationImageImportForm({
 
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-5 sm:space-y-6">
 
             {homeTeam &&
               renderTeamTable(
@@ -2346,7 +2346,7 @@ export default function ParticipationImageImportForm({
       )}
 
       {detectedPlayers.length > 0 && (
-        <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+        <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600 sm:mb-6 sm:p-4">
           <strong className="font-semibold text-slate-700">Importante:</strong>{" "}
           los jugadores marcados como <strong>No participó</strong> se muestran
           para completar la revisión, pero no se guardan como participaciones.
@@ -2358,13 +2358,13 @@ export default function ParticipationImageImportForm({
           BOTONES
           ====================================================== */}
 
-      <div className="flex items-center justify-between border-t border-slate-200 pt-6">
+      <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between sm:pt-6">
 
         <button
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           Volver
         </button>
@@ -2380,7 +2380,7 @@ export default function ParticipationImageImportForm({
               saving ||
               analyzing
             }
-            className="rounded-lg bg-green-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-green-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {saving
               ? "Guardando..."

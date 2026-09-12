@@ -1860,14 +1860,14 @@ export default function PlayerMatchStatForm({
     }[]
   ) => {
     return (
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+      <section className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-3 sm:px-5 sm:py-4">
           <h4 className="text-base font-semibold text-slate-800">
             {title}
           </h4>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-5 lg:grid-cols-3 xl:grid-cols-4">
           {fields.map(
             ({
               field,
@@ -1875,7 +1875,7 @@ export default function PlayerMatchStatForm({
             }) => (
               <div
                 key={field}
-                className="rounded-lg border border-slate-200 bg-white p-4"
+                className="min-w-0 rounded-lg border border-slate-200 bg-white p-3 sm:p-4"
               >
                 <label
                   htmlFor={`stat-${field}`}
@@ -1901,7 +1901,7 @@ export default function PlayerMatchStatForm({
                         .value
                     )
                   }
-                  className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-right text-base font-medium text-slate-800 outline-none transition focus:border-slate-500 focus:ring-1 focus:ring-slate-300"
+                  className="mt-3 w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-right text-base font-medium text-slate-800 outline-none transition focus:border-slate-500 focus:ring-1 focus:ring-slate-300 sm:py-2.5"
                 />
               </div>
             )
@@ -1919,8 +1919,8 @@ export default function PlayerMatchStatForm({
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 md:p-6">
+        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
           {isEditing
             ? "Editar estadística"
             : "Carga de estadísticas"}
@@ -1940,12 +1940,12 @@ export default function PlayerMatchStatForm({
    */
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 md:p-6">
 
       {/* CABECERA */}
 
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="mb-5 sm:mb-6">
+        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
           {isEditing
             ? "Editar estadística"
             : "Carga de estadísticas"}
@@ -1961,7 +1961,7 @@ export default function PlayerMatchStatForm({
       {/* ERROR */}
 
       {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
           {error}
         </div>
       )}
@@ -1975,7 +1975,7 @@ export default function PlayerMatchStatForm({
                 void handleNextPlayer();
               }
         }
-        className="space-y-8"
+        className="space-y-6 sm:space-y-8"
       >
 
         {/* ======================================================
@@ -1983,11 +1983,11 @@ export default function PlayerMatchStatForm({
             ====================================================== */}
 
         <div>
-          <h3 className="mb-4 text-lg font-semibold text-slate-800">
+          <h3 className="mb-3 text-base font-semibold text-slate-800 sm:mb-4 sm:text-lg">
             Contexto del partido
           </h3>
 
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
 
             {/* COMPETICIÓN */}
 
@@ -2010,7 +2010,7 @@ export default function PlayerMatchStatForm({
                     )
                   )
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   Selecciona una competición
@@ -2057,7 +2057,7 @@ export default function PlayerMatchStatForm({
                 disabled={
                   !competitionId
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   Selecciona una temporada
@@ -2102,7 +2102,7 @@ export default function PlayerMatchStatForm({
                 disabled={
                   !seasonId
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   Selecciona una fase o jornada
@@ -2147,7 +2147,7 @@ export default function PlayerMatchStatForm({
                 disabled={
                   !stageId
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   Selecciona un partido
@@ -2216,7 +2216,7 @@ export default function PlayerMatchStatForm({
                 disabled={
                   !matchId
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   Selecciona un equipo
@@ -2252,14 +2252,14 @@ export default function PlayerMatchStatForm({
               0) && (
             <div>
 
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-3 flex flex-col gap-3 sm:mb-4 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="text-lg font-semibold text-slate-800">
                   Jugador
                 </h3>
 
                 {totalParticipations >
                   0 && (
-                  <div className="rounded-lg bg-slate-100 px-4 py-2 text-sm text-slate-600">
+                  <div className="w-fit rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 sm:px-4">
                     Jugador{" "}
                     <strong className="text-slate-800">
                       {
@@ -2277,18 +2277,18 @@ export default function PlayerMatchStatForm({
               </div>
 
               {playersLoading ? (
-                <div className="rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500">
+                <div className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500 sm:p-6">
                   Cargando jugadores...
                 </div>
               ) : !currentItem ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 sm:p-4">
                   No hay jugadores disponibles
                   para este equipo y partido.
                 </div>
               ) : (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-5">
 
-                  <div className="grid gap-4 md:grid-cols-4">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-4">
 
                     <div>
                       <span className="block text-xs font-medium uppercase text-slate-500">
@@ -2400,7 +2400,7 @@ export default function PlayerMatchStatForm({
             0 && (
             <div>
 
-              <div className="mb-2 flex justify-between text-xs text-slate-500">
+              <div className="mb-2 flex items-center justify-between gap-3 text-xs text-slate-500">
                 <span>
                   Progreso
                 </span>
@@ -2446,7 +2446,7 @@ export default function PlayerMatchStatForm({
             BOTONES
             ====================================================== */}
 
-        <div className="flex justify-end gap-3 border-t border-slate-200 pt-6">
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end sm:pt-6">
 
           <button
             type="button"
@@ -2456,7 +2456,7 @@ export default function PlayerMatchStatForm({
             disabled={
               saving
             }
-            className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             Cancelar
           </button>
@@ -2468,7 +2468,7 @@ export default function PlayerMatchStatForm({
                 !currentItem ||
                 saving
               }
-              className="rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               {saving
                 ? "Guardando..."
@@ -2481,7 +2481,7 @@ export default function PlayerMatchStatForm({
                 !currentItem ||
                 saving
               }
-              className="rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               {saving
                 ? "Guardando..."

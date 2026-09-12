@@ -20,20 +20,8 @@ type FormMode =
   | null;
 
 export default function PlayerMatchStatsPage() {
-  /*
-   * ============================================================
-   * ESTADO DEL FORMULARIO
-   * ============================================================
-   */
-
   const [formMode, setFormMode] =
     useState<FormMode>(null);
-
-  /*
-   * ============================================================
-   * ESTADO DE EDICIÓN
-   * ============================================================
-   */
 
   const [
     editingPlayerMatchStat,
@@ -42,24 +30,12 @@ export default function PlayerMatchStatsPage() {
     PlayerMatchStat | undefined
   >(undefined);
 
-  /*
-   * ============================================================
-   * ESTADO DE ELIMINACIÓN
-   * ============================================================
-   */
-
   const [
     playerMatchStatToDelete,
     setPlayerMatchStatToDelete,
   ] = useState<
     PlayerMatchStat | undefined
   >(undefined);
-
-  /*
-   * ============================================================
-   * DATOS
-   * ============================================================
-   */
 
   const [
     playerMatchStats,
@@ -75,12 +51,6 @@ export default function PlayerMatchStatsPage() {
     error,
     setError,
   ] = useState("");
-
-  /*
-   * ============================================================
-   * CARGAR ESTADÍSTICAS DESDE SUPABASE
-   * ============================================================
-   */
 
   const loadPlayerMatchStats =
     async () => {
@@ -108,21 +78,9 @@ export default function PlayerMatchStatsPage() {
       }
     };
 
-  /*
-   * ============================================================
-   * CARGA INICIAL
-   * ============================================================
-   */
-
   useEffect(() => {
     loadPlayerMatchStats();
   }, []);
-
-  /*
-   * ============================================================
-   * NUEVA ESTADÍSTICA
-   * ============================================================
-   */
 
   const handleNewPlayerMatchStat =
     () => {
@@ -134,12 +92,6 @@ export default function PlayerMatchStatsPage() {
         "individual"
       );
     };
-
-  /*
-   * ============================================================
-   * EDITAR
-   * ============================================================
-   */
 
   const handleEditPlayerMatchStat =
     (
@@ -154,12 +106,6 @@ export default function PlayerMatchStatsPage() {
       );
     };
 
-  /*
-   * ============================================================
-   * GUARDADO
-   * ============================================================
-   */
-
   const handleSaved = async () => {
     setEditingPlayerMatchStat(
       undefined
@@ -170,12 +116,6 @@ export default function PlayerMatchStatsPage() {
     await loadPlayerMatchStats();
   };
 
-  /*
-   * ============================================================
-   * ELIMINAR
-   * ============================================================
-   */
-
   const handleDeletePlayerMatchStat =
     (
       playerMatchStat: PlayerMatchStat
@@ -184,12 +124,6 @@ export default function PlayerMatchStatsPage() {
         playerMatchStat
       );
     };
-
-  /*
-   * ============================================================
-   * CONFIRMAR ELIMINACIÓN
-   * ============================================================
-   */
 
   const handleConfirmDelete =
     async () => {
@@ -223,12 +157,6 @@ export default function PlayerMatchStatsPage() {
       }
     };
 
-  /*
-   * ============================================================
-   * CANCELAR FORMULARIO
-   * ============================================================
-   */
-
   const handleCancelForm = () => {
     setEditingPlayerMatchStat(
       undefined
@@ -237,129 +165,83 @@ export default function PlayerMatchStatsPage() {
     setFormMode(null);
   };
 
-  /*
-   * ============================================================
-   * RENDER
-   * ============================================================
-   */
-
   return (
-    <div className="w-full p-8">
+    <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
 
-      {/* ======================================================
-          CABECERA
-          ====================================================== */}
+      <div className="mb-5 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
 
-      <div className="mb-8 flex items-start justify-between">
-
-        <div>
-
-          <h1 className="text-3xl font-bold">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold sm:text-3xl">
             Estadísticas de jugadores
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
             Gestión de estadísticas de jugadores
             por partido de Value90
           </p>
-
         </div>
 
-        {/* ====================================================
-            BOTÓN NUEVA ESTADÍSTICA
-            ==================================================== */}
-
         {formMode === null && (
-
           <button
             type="button"
             onClick={
               handleNewPlayerMatchStat
             }
-            className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
+            className="w-full shrink-0 rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 sm:w-auto"
           >
             + Nueva estadística
           </button>
-
         )}
 
       </div>
 
-      {/* ======================================================
-          ERROR
-          ====================================================== */}
-
       {error && (
-
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 w-full rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
           {error}
         </div>
-
       )}
 
-      {/* ======================================================
-          CONTADOR
-          ====================================================== */}
-
       {formMode === null && (
-
-        <p className="mb-6 text-slate-700">
-
+        <p className="mb-5 text-sm text-slate-700 sm:mb-6 sm:text-base">
           Total de registros:{" "}
-
           <span className="font-semibold">
             {loading
               ? "..."
               : playerMatchStats.length}
           </span>
-
         </p>
-
       )}
-
-      {/* ======================================================
-          FORMULARIO
-          ====================================================== */}
 
       {formMode === "individual" && (
-
-        <PlayerMatchStatForm
-          playerMatchStat={
-            editingPlayerMatchStat
-          }
-          onCancel={
-            handleCancelForm
-          }
-          onSaved={
-            handleSaved
-          }
-        />
-
+        <div className="w-full min-w-0">
+          <PlayerMatchStatForm
+            playerMatchStat={
+              editingPlayerMatchStat
+            }
+            onCancel={
+              handleCancelForm
+            }
+            onSaved={
+              handleSaved
+            }
+          />
+        </div>
       )}
-
-      {/* ======================================================
-          TABLA
-          ====================================================== */}
 
       {formMode === null && (
-
-        <PlayerMatchStatsTable
-          onEdit={
-            handleEditPlayerMatchStat
-          }
-          onDelete={
-            handleDeletePlayerMatchStat
-          }
-        />
-
+        <div className="w-full min-w-0">
+          <PlayerMatchStatsTable
+            onEdit={
+              handleEditPlayerMatchStat
+            }
+            onDelete={
+              handleDeletePlayerMatchStat
+            }
+          />
+        </div>
       )}
 
-      {/* ======================================================
-          DIÁLOGO DE ELIMINACIÓN
-          ====================================================== */}
-
       {playerMatchStatToDelete && (
-
         <DeletePlayerMatchStatDialog
           playerMatchStat={
             playerMatchStatToDelete
@@ -373,7 +255,6 @@ export default function PlayerMatchStatsPage() {
             )
           }
         />
-
       )}
 
     </div>

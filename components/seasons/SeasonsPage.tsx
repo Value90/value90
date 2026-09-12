@@ -165,19 +165,19 @@ export default function SeasonsPage() {
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
 
       {/* CABECERA */}
 
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-5 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
 
-        <div>
+        <div className="min-w-0">
 
-          <h1 className="text-3xl font-bold">
+          <h1 className="text-2xl font-bold sm:text-3xl">
             Temporadas
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
             Gestión de temporadas de Value90
           </p>
 
@@ -187,7 +187,7 @@ export default function SeasonsPage() {
           <button
             type="button"
             onClick={handleNewSeason}
-            className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
+            className="w-full rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 sm:w-auto"
           >
             + Nueva temporada
           </button>
@@ -198,7 +198,7 @@ export default function SeasonsPage() {
       {/* ERROR */}
 
       {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
           {error}
         </div>
       )}
@@ -206,7 +206,7 @@ export default function SeasonsPage() {
       {/* RESUMEN */}
 
       {!showForm && (
-        <p className="mb-6 text-slate-700">
+        <p className="mb-5 text-sm text-slate-700 sm:mb-6 sm:text-base">
           Total de temporadas:{" "}
           <span className="font-semibold">
             {loading
@@ -219,7 +219,7 @@ export default function SeasonsPage() {
       {/* FORMULARIO */}
 
       {showForm && (
-        <div className="mb-8">
+        <div className="mb-6 w-full min-w-0 sm:mb-8">
           <SeasonForm
             season={editingSeason ?? undefined}
             onCancel={handleCloseForm}
@@ -231,11 +231,13 @@ export default function SeasonsPage() {
       {/* TABLA */}
 
       {!showForm && (
-        <SeasonsTable
-          seasons={seasons}
-          onEdit={handleEditSeason}
-          onDelete={handleDeleteSeason}
-        />
+        <div className="w-full min-w-0">
+          <SeasonsTable
+            seasons={seasons}
+            onEdit={handleEditSeason}
+            onDelete={handleDeleteSeason}
+          />
+        </div>
       )}
 
       {/* DIÁLOGO ELIMINAR */}

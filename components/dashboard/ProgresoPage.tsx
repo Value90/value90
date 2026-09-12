@@ -813,15 +813,15 @@ export default function ProgresoPage() {
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full p-4 sm:p-5 md:p-6 lg:p-8">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-8">
+      <div className="mb-7 sm:mb-8">
 
-        <h1 className="text-4xl font-bold text-slate-800">
+        <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl md:text-4xl">
           Progreso
         </h1>
 
@@ -836,7 +836,7 @@ export default function ProgresoPage() {
           FILTROS
           ====================================================== */}
 
-      <div className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:mb-8 sm:p-5">
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
 
@@ -953,14 +953,14 @@ export default function ProgresoPage() {
           TABS
           ====================================================== */}
 
-      <div className="mb-6 flex gap-2 border-b border-slate-200">
+      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200 sm:mb-6 sm:gap-2">
 
         <button
           type="button"
           onClick={() =>
             setActiveTab("teams")
           }
-          className={`px-5 py-3 text-sm font-semibold transition ${
+          className={`shrink-0 px-4 py-3 text-sm font-semibold transition sm:px-5 ${
             activeTab === "teams"
               ? "border-b-2 border-slate-800 text-slate-800"
               : "text-slate-500 hover:text-slate-800"
@@ -974,7 +974,7 @@ export default function ProgresoPage() {
           onClick={() =>
             setActiveTab("stages")
           }
-          className={`px-5 py-3 text-sm font-semibold transition ${
+          className={`shrink-0 px-4 py-3 text-sm font-semibold transition sm:px-5 ${
             activeTab === "stages"
               ? "border-b-2 border-slate-800 text-slate-800"
               : "text-slate-500 hover:text-slate-800"
@@ -991,13 +991,13 @@ export default function ProgresoPage() {
 
       {loading ? (
 
-        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-500 sm:p-8">
           Cargando progreso...
         </div>
 
       ) : selectedSeasonId === "" ? (
 
-        <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-500 sm:p-8">
           Selecciona una temporada para
           consultar el progreso.
         </div>
@@ -1012,9 +1012,9 @@ export default function ProgresoPage() {
 
           {activeTab === "teams" && (
 
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
-              <div className="border-b border-slate-200 px-5 py-4">
+              <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
 
                 <h2 className="text-lg font-bold text-slate-800">
                   Progreso de equipos
@@ -1183,8 +1183,8 @@ export default function ProgresoPage() {
               ================================================== */}
 
           {activeTab === "stages" && (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-5 py-4">
+            <div className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
                 <h2 className="text-lg font-bold text-slate-800">Progreso de jornadas</h2>
                 <p className="mt-1 text-sm text-slate-500">Control de partidos y datos registrados en cada jornada.</p>
               </div>
@@ -1210,7 +1210,7 @@ export default function ProgresoPage() {
                 </div>
               ) : (
                 <div>
-                  <div className="border-b border-slate-100 px-5 py-4">
+                  <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
                     <h3 className="text-base font-bold text-slate-800">{availableStages.find((stage) => stage.id === selectedStageId)?.name ?? "Jornada seleccionada"}</h3>
                   </div>
                   <div className="overflow-x-auto">

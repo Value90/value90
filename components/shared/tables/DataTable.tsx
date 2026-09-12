@@ -12,36 +12,54 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 
-import { useState, type ReactNode } from "react";
+import {
+  useState,
+  type ReactNode,
+} from "react";
 
 interface DataTableProps<TData> {
   data: TData[];
   columns: ColumnDef<TData, any>[];
 
   /*
+   * ============================================================
+   * BUSCADOR
+   * ============================================================
+   *
    * Permite ocultar el buscador únicamente
    * en las tablas que lo necesiten.
    *
    * Por defecto sigue apareciendo.
+   * ============================================================
    */
+
   showSearch?: boolean;
 
   /*
-   * Valor inicial de ordenación.
+   * ============================================================
+   * ORDENACIÓN INICIAL
+   * ============================================================
    */
+
   initialSorting?: SortingState;
 
   /*
+   * ============================================================
+   * ACCIONES ADICIONALES
+   * ============================================================
+   *
    * Controles adicionales que aparecerán
    * junto al buscador.
+   * ============================================================
    */
+
   toolbarActions?: ReactNode;
 }
 
 /*
- * ============================================================
+ * ==============================================================
  * NORMALIZAR TEXTO
- * ============================================================
+ * ==============================================================
  *
  * Elimina tildes y acentos para que la búsqueda no distinga
  * entre:
@@ -52,7 +70,7 @@ interface DataTableProps<TData> {
  * Muñoz / Munoz
  *
  * No modifica los datos originales.
- * ============================================================
+ * ==============================================================
  */
 
 const normalizeText = (
@@ -153,7 +171,9 @@ export default function DataTable<TData>({
     ) => {
       const searchText =
         normalizeText(
-          String(filterValue ?? "")
+          String(
+            filterValue ?? ""
+          )
         );
 
       if (!searchText) {
@@ -184,6 +204,18 @@ export default function DataTable<TData>({
    * ============================================================
    * PAGINACIÓN NUMÉRICA
    * ============================================================
+   *
+   * Ejemplos:
+   *
+   * [1, 2, 3, 4, 5, 6, 7]
+   *
+   * [1, 2, 3, 4, 5, ..., 10]
+   *
+   * [1, ..., 4, 5, 6, ..., 10]
+   *
+   * [1, ..., 6, 7, 8, 9, 10]
+   *
+   * ============================================================
    */
 
   const getPageNumbers = (): (
@@ -198,6 +230,11 @@ export default function DataTable<TData>({
         .pagination
         .pageIndex + 1;
 
+    /*
+     * Si hay pocas páginas,
+     * mostramos todas.
+     */
+
     if (pageCount <= 7) {
       return Array.from(
         { length: pageCount },
@@ -206,10 +243,18 @@ export default function DataTable<TData>({
       );
     }
 
+    /*
+     * Primera página.
+     */
+
     const pages: (
       | number
       | "..."
     )[] = [1];
+
+    /*
+     * Estamos al principio.
+     */
 
     if (currentPage <= 4) {
       pages.push(
@@ -223,6 +268,10 @@ export default function DataTable<TData>({
 
       return pages;
     }
+
+    /*
+     * Estamos al final.
+     */
 
     if (
       currentPage >=
@@ -239,6 +288,10 @@ export default function DataTable<TData>({
 
       return pages;
     }
+
+    /*
+     * Estamos en una página intermedia.
+     */
 
     pages.push(
       "...",
@@ -259,7 +312,7 @@ export default function DataTable<TData>({
    */
 
   return (
-    <div className="space-y-4">
+    <div className="w-full space-y-4">
 
       {/* ======================================================
           BARRA DE HERRAMIENTAS
@@ -268,9 +321,11 @@ export default function DataTable<TData>({
       {(showSearch ||
         toolbarActions) && (
 
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
-          {/* BUSCADOR */}
+          {/* ==================================================
+              BUSCADOR
+              ================================================== */}
 
           {showSearch ? (
             <input
@@ -284,18 +339,25 @@ export default function DataTable<TData>({
                   event.target.value
                 );
 
+                /*
+                 * Cuando buscamos,
+                 * volvemos a la primera página.
+                 */
+
                 table.setPageIndex(0);
               }}
-              className="w-full max-w-sm rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+              className="w-full max-w-sm rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none transition focus:border-slate-500 focus:ring-1 focus:ring-slate-300"
             />
           ) : (
             <div />
           )}
 
-          {/* CONTROLES ADICIONALES */}
+          {/* ==================================================
+              CONTROLES ADICIONALES
+              ================================================== */}
 
           {toolbarActions && (
-            <div className="flex items-center gap-3">
+            <div className="flex w-full items-center gap-3 md:w-auto">
               {toolbarActions}
             </div>
           )}
@@ -304,12 +366,36 @@ export default function DataTable<TData>({
       )}
 
       {/* ======================================================
-          TABLA
+          CONTENEDOR RESPONSIVE DE LA TABLA
           ====================================================== */}
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow">
+      <div
+        className="
+          w-full
+          overflow-x-auto
+          overflow-y-hidden
+          rounded-xl
+          border
+          bg-white
+          shadow
+        "
+      >
 
-        <table className="w-full">
+        {/* ====================================================
+            TABLA
+            ==================================================== */}
+
+        <table
+          className="
+            w-full
+            min-w-max
+            border-collapse
+          "
+        >
+
+          {/* ==================================================
+              CABECERA
+              ================================================== */}
 
           <thead className="bg-slate-100">
 
@@ -332,7 +418,13 @@ export default function DataTable<TData>({
 
                         <th
                           key={`${headerGroup.id}-${header.id}-${headerIndex}`}
-                          className="p-4 text-left font-semibold text-slate-700"
+                          className="
+                            whitespace-nowrap
+                            p-4
+                            text-left
+                            font-semibold
+                            text-slate-700
+                          "
                         >
 
                           {header.isPlaceholder
@@ -341,7 +433,12 @@ export default function DataTable<TData>({
                               <button
                                 type="button"
                                 onClick={header.column.getToggleSortingHandler()}
-                                className="flex items-center gap-2"
+                                className="
+                                  flex
+                                  items-center
+                                  gap-2
+                                  whitespace-nowrap
+                                "
                               >
 
                                 {flexRender(
@@ -370,10 +467,15 @@ export default function DataTable<TData>({
                     )}
 
                   </tr>
+
                 )
               )}
 
           </thead>
+
+          {/* ==================================================
+              CUERPO
+              ================================================== */}
 
           <tbody>
 
@@ -387,7 +489,11 @@ export default function DataTable<TData>({
                   colSpan={
                     columns.length
                   }
-                  className="p-8 text-center text-slate-500"
+                  className="
+                    p-8
+                    text-center
+                    text-slate-500
+                  "
                 >
                   No se encontraron
                   resultados.
@@ -399,12 +505,16 @@ export default function DataTable<TData>({
 
               table
                 .getRowModel()
-                .rows.map(
+                .rows
+                .map(
                   (row) => (
 
                     <tr
                       key={row.id}
-                      className="border-t hover:bg-slate-50"
+                      className="
+                        border-t
+                        hover:bg-slate-50
+                      "
                     >
 
                       {row
@@ -417,7 +527,10 @@ export default function DataTable<TData>({
 
                             <td
                               key={`${row.id}-${cell.id}-${cellIndex}`}
-                              className="p-4"
+                              className="
+                                p-4
+                                align-middle
+                              "
                             >
 
                               {flexRender(
@@ -448,9 +561,31 @@ export default function DataTable<TData>({
             PAGINACIÓN
             ==================================================== */}
 
-        <div className="flex flex-col gap-3 border-t bg-slate-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div
+          className="
+            flex
+            flex-col
+            gap-3
+            border-t
+            bg-slate-50
+            px-4
+            py-3
+            md:flex-row
+            md:items-center
+            md:justify-between
+          "
+        >
 
-          <div className="text-sm text-slate-600">
+          {/* ==================================================
+              INFORMACIÓN DE PÁGINA
+              ================================================== */}
+
+          <div
+            className="
+              text-sm
+              text-slate-600
+            "
+          >
 
             Página{" "}
 
@@ -468,7 +603,23 @@ export default function DataTable<TData>({
 
           </div>
 
-          <div className="flex items-center justify-center gap-1">
+          {/* ==================================================
+              CONTROLES
+              ================================================== */}
+
+          <div
+            className="
+              flex
+              items-center
+              justify-center
+              gap-1
+              overflow-x-auto
+            "
+          >
+
+            {/* ==================================================
+                ANTERIOR
+                ================================================== */}
 
             <button
               type="button"
@@ -478,15 +629,44 @@ export default function DataTable<TData>({
               disabled={
                 !table.getCanPreviousPage()
               }
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              className="
+                shrink-0
+                rounded-lg
+                border
+                border-slate-300
+                bg-white
+                px-3
+                py-2
+                text-sm
+                font-medium
+                text-slate-700
+                transition
+                hover:bg-slate-100
+                disabled:cursor-not-allowed
+                disabled:opacity-40
+              "
             >
               ← Anterior
             </button>
 
-            <div className="flex items-center gap-1">
+            {/* ==================================================
+                NÚMEROS
+                ================================================== */}
+
+            <div
+              className="
+                flex
+                shrink-0
+                items-center
+                gap-1
+              "
+            >
 
               {getPageNumbers().map(
-                (page, index) =>
+                (
+                  page,
+                  index
+                ) =>
                   typeof page ===
                   "number" ? (
 
@@ -498,14 +678,24 @@ export default function DataTable<TData>({
                           page - 1
                         )
                       }
-                      className={`min-w-[40px] rounded-lg border px-3 py-2 text-sm font-medium ${
-                        table.getState()
-                          .pagination
-                          .pageIndex ===
-                        page - 1
-                          ? "border-slate-800 bg-slate-800 text-white"
-                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                      }`}
+                      className={`
+                        min-w-[40px]
+                        rounded-lg
+                        border
+                        px-3
+                        py-2
+                        text-sm
+                        font-medium
+                        transition
+                        ${
+                          table.getState()
+                            .pagination
+                            .pageIndex ===
+                          page - 1
+                            ? "border-slate-800 bg-slate-800 text-white"
+                            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                        }
+                      `}
                     >
                       {page}
                     </button>
@@ -514,7 +704,11 @@ export default function DataTable<TData>({
 
                     <span
                       key={`ellipsis-${index}`}
-                      className="px-2 text-slate-500"
+                      className="
+                        shrink-0
+                        px-2
+                        text-slate-500
+                      "
                     >
                       ...
                     </span>
@@ -524,6 +718,10 @@ export default function DataTable<TData>({
 
             </div>
 
+            {/* ==================================================
+                SIGUIENTE
+                ================================================== */}
+
             <button
               type="button"
               onClick={() =>
@@ -532,7 +730,22 @@ export default function DataTable<TData>({
               disabled={
                 !table.getCanNextPage()
               }
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              className="
+                shrink-0
+                rounded-lg
+                border
+                border-slate-300
+                bg-white
+                px-3
+                py-2
+                text-sm
+                font-medium
+                text-slate-700
+                transition
+                hover:bg-slate-100
+                disabled:cursor-not-allowed
+                disabled:opacity-40
+              "
             >
               Siguiente →
             </button>

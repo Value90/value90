@@ -113,10 +113,12 @@ export default function SeasonForm({
   };
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow">
+    <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-5 md:p-6">
 
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-800">
+      {/* CABECERA */}
+
+      <div className="mb-5 sm:mb-6">
+        <h2 className="text-xl font-bold text-slate-800 sm:text-2xl">
           {season
             ? "Editar temporada"
             : "Nueva temporada"}
@@ -129,20 +131,24 @@ export default function SeasonForm({
         </p>
       </div>
 
+      {/* ERROR */}
+
       {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
           {error}
         </div>
       )}
 
+      {/* FORMULARIO */}
+
       <form
         onSubmit={handleSubmit}
-        className="space-y-6"
+        className="min-w-0 space-y-5 sm:space-y-6"
       >
 
         {/* NOMBRE */}
 
-        <div>
+        <div className="min-w-0">
           <label
             htmlFor="season-name"
             className="mb-2 block text-sm font-medium text-slate-700"
@@ -158,14 +164,14 @@ export default function SeasonForm({
               setName(event.target.value)
             }
             placeholder="Ej. Temporada 2025/26"
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
             required
           />
         </div>
 
         {/* FECHA INICIO */}
 
-        <div>
+        <div className="min-w-0">
           <label
             htmlFor="season-start-date"
             className="mb-2 block text-sm font-medium text-slate-700"
@@ -180,14 +186,14 @@ export default function SeasonForm({
             onChange={(event) =>
               setStartDate(event.target.value)
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
             required
           />
         </div>
 
         {/* FECHA FIN */}
 
-        <div>
+        <div className="min-w-0">
           <label
             htmlFor="season-end-date"
             className="mb-2 block text-sm font-medium text-slate-700"
@@ -202,7 +208,7 @@ export default function SeasonForm({
             onChange={(event) =>
               setEndDate(event.target.value)
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
             required
           />
         </div>
@@ -215,9 +221,11 @@ export default function SeasonForm({
               type="checkbox"
               checked={active}
               onChange={(event) =>
-                setActive(event.target.checked)
+                setActive(
+                  event.target.checked
+                )
               }
-              className="h-4 w-4"
+              className="h-4 w-4 shrink-0"
             />
 
             <span className="text-sm font-medium text-slate-700">
@@ -228,13 +236,13 @@ export default function SeasonForm({
 
         {/* BOTONES */}
 
-        <div className="flex justify-end gap-3 border-t pt-6">
+        <div className="flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:justify-end sm:pt-6">
 
           <button
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="w-full rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 sm:w-auto"
           >
             Cancelar
           </button>
@@ -242,7 +250,7 @@ export default function SeasonForm({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {saving
               ? "Guardando..."

@@ -1158,7 +1158,7 @@ export default function RankingsPage() {
       getVisiblePages(pageCount);
 
     return (
-      <div className="flex w-full items-center justify-end gap-1 border-t border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="flex w-full flex-wrap items-center justify-end gap-1 border-t border-slate-200 bg-slate-50 px-3 py-3 sm:flex-nowrap sm:px-4 sm:py-4">
         <button
           type="button"
           disabled={currentPage === 1}
@@ -1167,7 +1167,7 @@ export default function RankingsPage() {
               Math.max(1, page - 1)
             )
           }
-          className="mr-1 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mr-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 sm:text-sm"
         >
           ← Anterior
         </button>
@@ -1182,7 +1182,7 @@ export default function RankingsPage() {
             return (
               <span
                 key={`${page}-${index}`}
-                className="px-2 text-sm font-medium text-slate-500"
+                className="px-1.5 text-xs font-medium text-slate-500 sm:px-2 sm:text-sm"
               >
                 ...
               </span>
@@ -1220,7 +1220,7 @@ export default function RankingsPage() {
               )
             )
           }
-          className="ml-1 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="ml-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4 sm:text-sm"
         >
           Siguiente →
         </button>
@@ -1321,19 +1321,19 @@ export default function RankingsPage() {
    */
 
   return (
-    <div className="w-full p-6">
+    <div className="w-full min-w-0 p-3 sm:p-5 md:p-6">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-5">
+      <div className="mb-5 sm:mb-6">
 
-        <h1 className="text-3xl font-bold text-slate-800">
+        <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">
           Rankings
         </h1>
 
-        <p className="mt-2 text-slate-600">
+        <p className="mt-1 text-sm text-slate-600 sm:mt-2 sm:text-base">
           Clasificación de jugadores
           basada en sus valoraciones
           de partido.
@@ -1345,7 +1345,7 @@ export default function RankingsPage() {
           FILTROS
           ====================================================== */}
 
-      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center">
+      <div className="mb-5 flex w-full min-w-0 flex-col gap-3 md:flex-row md:items-center">
 
         {/* ====================================================
             BUSCAR
@@ -1360,7 +1360,7 @@ export default function RankingsPage() {
               event.target.value
             )
           }
-          className="w-full max-w-sm rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+          className="w-full min-w-0 max-w-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
         />
 
         {/* ====================================================
@@ -1382,7 +1382,7 @@ export default function RankingsPage() {
                   )
             )
           }
-          className="w-full max-w-xs rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 outline-none focus:border-slate-500"
+          className="w-full min-w-0 max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-500 sm:px-4"
         >
           <option value="">
             Todas las competiciones
@@ -1408,14 +1408,14 @@ export default function RankingsPage() {
             TOTAL / HISTÓRICO
             ==================================================== */}
 
-        <div className="flex overflow-hidden rounded-lg border border-slate-300 bg-white">
+        <div className="flex w-full overflow-hidden rounded-lg border border-slate-300 bg-white sm:w-auto">
 
           <button
             type="button"
             onClick={() =>
               setMode("total")
             }
-            className={`px-5 py-2 text-sm font-medium ${
+            className={`flex-1 px-4 py-2 text-sm font-medium sm:flex-none sm:px-5 ${
               mode === "total"
                 ? "bg-slate-800 text-white"
                 : "text-slate-700 hover:bg-slate-100"
@@ -1431,7 +1431,7 @@ export default function RankingsPage() {
                 "historical"
               )
             }
-            className={`border-l border-slate-300 px-5 py-2 text-sm font-medium ${
+            className={`flex-1 border-l border-slate-300 px-4 py-2 text-sm font-medium sm:flex-none sm:px-5 ${
               mode ===
               "historical"
                 ? "bg-slate-800 text-white"
@@ -1451,7 +1451,7 @@ export default function RankingsPage() {
 
       {loading ? (
 
-        <div className="rounded-xl border bg-white p-8 text-center text-slate-500 shadow">
+        <div className="w-full min-w-0 rounded-xl border bg-white p-5 text-center text-sm text-slate-500 shadow sm:p-8 sm:text-base">
           Cargando rankings...
         </div>
 
@@ -1461,15 +1461,15 @@ export default function RankingsPage() {
            TOTAL
            ==================================================== */
 
-        <div className="overflow-hidden rounded-xl border bg-white shadow">
+        <div className="w-full min-w-0 overflow-hidden rounded-xl border bg-white shadow">
 
-          <table className="w-full table-fixed">
+          <div className="w-full overflow-x-auto overscroll-x-contain"><table className="w-full min-w-[900px] table-fixed">
 
             <thead className="bg-slate-100">
 
               <tr>
 
-                <th className="w-[18%] p-3 text-left text-sm text-slate-700">
+                <th className="w-[18%] whitespace-nowrap p-2 text-left text-xs text-slate-700 sm:p-3 sm:text-sm">
 
                   <SortHeader
                     label="Jugador"
@@ -1487,7 +1487,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[7%] p-3 text-center text-sm text-slate-700">
+                <th className="w-[7%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3 sm:text-sm">
 
                   <SortHeader
                     label="Partidos"
@@ -1505,7 +1505,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[8%] p-3 text-center text-sm text-slate-700">
+                <th className="w-[8%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3 sm:text-sm">
 
                   <SortHeader
                     label="Marca"
@@ -1523,7 +1523,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[8%] p-3 text-center text-sm text-slate-700">
+                <th className="w-[8%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3 sm:text-sm">
 
                   <SortHeader
                     label="AS"
@@ -1541,7 +1541,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[11%] p-3 text-center text-sm text-slate-700">
+                <th className="w-[11%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3 sm:text-sm">
 
                   <SortHeader
                     label="SofaScore"
@@ -1559,7 +1559,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[11%] p-3 text-center text-sm text-slate-700">
+                <th className="w-[11%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3 sm:text-sm">
 
                   <SortHeader
                     label="FlashScore"
@@ -1577,7 +1577,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[13%] p-3 text-center text-sm text-slate-700">
+                <th className="w-[13%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3 sm:text-sm">
 
                   <SortHeader
                     label="Media externa"
@@ -1595,7 +1595,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[10%] p-3 text-center text-sm text-slate-700">
+                <th className="w-[10%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3 sm:text-sm">
 
                   <SortHeader
                     label="V90"
@@ -1613,7 +1613,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[14%] p-3 text-center text-sm text-slate-700">
+                <th className="w-[14%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3 sm:text-sm">
 
                   <SortHeader
                     label="Valoración final"
@@ -1664,51 +1664,51 @@ export default function RankingsPage() {
                       className="border-t hover:bg-slate-50"
                     >
 
-                      <td className="truncate p-3 font-medium text-slate-800">
+                      <td className="truncate whitespace-nowrap p-2 text-sm font-medium text-slate-800 sm:p-3">
                         {row.playerName}
                       </td>
 
-                      <td className="p-3 text-center">
+                      <td className="whitespace-nowrap p-2 text-center text-sm sm:p-3">
                         {row.matches}
                       </td>
 
-                      <td className="p-3 text-center">
+                      <td className="whitespace-nowrap p-2 text-center text-sm sm:p-3">
                         {formatValue(
                           row.marca
                         )}
                       </td>
 
-                      <td className="p-3 text-center">
+                      <td className="whitespace-nowrap p-2 text-center text-sm sm:p-3">
                         {formatValue(
                           row.as
                         )}
                       </td>
 
-                      <td className="p-3 text-center">
+                      <td className="whitespace-nowrap p-2 text-center text-sm sm:p-3">
                         {formatValue(
                           row.sofascore
                         )}
                       </td>
 
-                      <td className="p-3 text-center">
+                      <td className="whitespace-nowrap p-2 text-center text-sm sm:p-3">
                         {formatValue(
                           row.flashscore
                         )}
                       </td>
 
-                      <td className="p-3 text-center font-semibold">
+                      <td className="whitespace-nowrap p-2 text-center text-sm font-semibold sm:p-3">
                         {formatThreeDecimals(
                           row.externalAverage
                         )}
                       </td>
 
-                      <td className="p-3 text-center font-semibold">
+                      <td className="whitespace-nowrap p-2 text-center text-sm font-semibold sm:p-3">
                         {formatThreeDecimals(
                           row.value90MatchRating
                         )}
                       </td>
 
-                      <td className="p-3 text-center font-semibold">
+                      <td className="whitespace-nowrap p-2 text-center text-sm font-semibold sm:p-3">
                         {formatThreeDecimals(
                           row.finalMatchRating
                         )}
@@ -1723,7 +1723,7 @@ export default function RankingsPage() {
 
             </tbody>
 
-          </table>
+          </table></div>
 
           {renderPagination(totalPages)}
 
@@ -1735,15 +1735,15 @@ export default function RankingsPage() {
            HISTÓRICO
            ==================================================== */
 
-        <div className="overflow-hidden rounded-xl border bg-white shadow">
+        <div className="w-full min-w-0 overflow-hidden rounded-xl border bg-white shadow">
 
-          <table className="w-full table-fixed">
+          <div className="w-full overflow-x-auto overscroll-x-contain"><table className="w-full min-w-[900px] table-fixed">
 
             <thead className="bg-slate-100">
 
               <tr>
 
-                <th className="w-[14%] p-2 text-left text-xs text-slate-700">
+                <th className="w-[14%] whitespace-nowrap p-2 text-left text-xs text-slate-700 sm:p-3">
 
                   <SortHeader
                     label="Jugador"
@@ -1761,15 +1761,15 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[20%] p-2 text-left text-xs text-slate-700">
+                <th className="w-[20%] whitespace-nowrap p-2 text-left text-xs text-slate-700 sm:p-3">
                   Partido
                 </th>
 
-                <th className="w-[12%] p-2 text-left text-xs text-slate-700">
+                <th className="w-[12%] whitespace-nowrap p-2 text-left text-xs text-slate-700 sm:p-3">
                   Equipo
                 </th>
 
-                <th className="w-[7%] p-2 text-center text-xs text-slate-700">
+                <th className="w-[7%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3">
 
                   <SortHeader
                     label="Marca"
@@ -1787,7 +1787,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[6%] p-2 text-center text-xs text-slate-700">
+                <th className="w-[6%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3">
 
                   <SortHeader
                     label="AS"
@@ -1805,7 +1805,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[9%] p-2 text-center text-xs text-slate-700">
+                <th className="w-[9%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3">
 
                   <SortHeader
                     label="SofaScore"
@@ -1823,7 +1823,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[9%] p-2 text-center text-xs text-slate-700">
+                <th className="w-[9%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3">
 
                   <SortHeader
                     label="FlashScore"
@@ -1841,7 +1841,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[10%] p-2 text-center text-xs text-slate-700">
+                <th className="w-[10%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3">
 
                   <SortHeader
                     label="Media ext."
@@ -1859,7 +1859,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[6%] p-2 text-center text-xs text-slate-700">
+                <th className="w-[6%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3">
 
                   <SortHeader
                     label="V90"
@@ -1877,7 +1877,7 @@ export default function RankingsPage() {
 
                 </th>
 
-                <th className="w-[7%] p-2 text-center text-xs text-slate-700">
+                <th className="w-[7%] whitespace-nowrap p-2 text-center text-xs text-slate-700 sm:p-3">
 
                   <SortHeader
                     label="Final"
@@ -1926,61 +1926,61 @@ export default function RankingsPage() {
                       className="border-t hover:bg-slate-50"
                     >
 
-                      <td className="truncate p-2 text-sm font-medium text-slate-800">
+                      <td className="truncate whitespace-nowrap p-2 text-xs font-medium text-slate-800 sm:text-sm">
                         {row.playerName}
                       </td>
 
                       <td
-                        className="truncate p-2 text-sm"
+                        className="truncate whitespace-nowrap p-2 text-xs sm:text-sm"
                         title={row.match}
                       >
                         {row.match}
                       </td>
 
                       <td
-                        className="truncate p-2 text-sm"
+                        className="truncate whitespace-nowrap p-2 text-xs sm:text-sm"
                         title={row.team}
                       >
                         {row.team}
                       </td>
 
-                      <td className="p-2 text-center text-sm">
+                      <td className="whitespace-nowrap p-2 text-center text-xs sm:text-sm">
                         {formatValue(
                           row.marca
                         )}
                       </td>
 
-                      <td className="p-2 text-center text-sm">
+                      <td className="whitespace-nowrap p-2 text-center text-xs sm:text-sm">
                         {formatValue(
                           row.as
                         )}
                       </td>
 
-                      <td className="p-2 text-center text-sm">
+                      <td className="whitespace-nowrap p-2 text-center text-xs sm:text-sm">
                         {formatValue(
                           row.sofascore
                         )}
                       </td>
 
-                      <td className="p-2 text-center text-sm">
+                      <td className="whitespace-nowrap p-2 text-center text-xs sm:text-sm">
                         {formatValue(
                           row.flashscore
                         )}
                       </td>
 
-                      <td className="p-2 text-center text-sm font-semibold">
+                      <td className="whitespace-nowrap p-2 text-center text-xs font-semibold sm:text-sm">
                         {formatThreeDecimals(
                           row.externalAverage
                         )}
                       </td>
 
-                      <td className="p-2 text-center text-sm font-semibold">
+                      <td className="whitespace-nowrap p-2 text-center text-xs font-semibold sm:text-sm">
                         {formatThreeDecimals(
                           row.value90MatchRating
                         )}
                       </td>
 
-                      <td className="p-2 text-center text-sm font-semibold">
+                      <td className="whitespace-nowrap p-2 text-center text-xs font-semibold sm:text-sm">
                         {formatThreeDecimals(
                           row.finalMatchRating
                         )}
@@ -1995,7 +1995,7 @@ export default function RankingsPage() {
 
             </tbody>
 
-          </table>
+          </table></div>
 
           {renderPagination(
             historicalTotalPages

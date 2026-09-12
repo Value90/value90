@@ -444,19 +444,19 @@ export default function Dashboard() {
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full p-4 sm:p-5 md:p-6 lg:p-8">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-10">
+      <div className="mb-7 sm:mb-8 md:mb-10">
 
-        <h1 className="text-4xl font-bold text-slate-800">
+        <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl md:text-4xl">
           Bienvenido a Value90
         </h1>
 
-        <p className="mt-2 text-slate-600">
+        <p className="mt-1.5 text-sm text-slate-600 sm:mt-2">
           Panel de administración
         </p>
 
@@ -466,11 +466,11 @@ export default function Dashboard() {
           1. MOTOR V90
           ====================================================== */}
 
-      <section className="mb-10">
+      <section className="mb-8 sm:mb-9 md:mb-10">
 
-        <div className="mb-5">
+        <div className="mb-4 sm:mb-5">
 
-          <h2 className="text-xl font-bold text-slate-800">
+          <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
             Motor V90
           </h2>
 
@@ -481,7 +481,7 @@ export default function Dashboard() {
 
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-5">
 
           {/* ==================================================
               1. MATCH RATINGS
@@ -542,11 +542,11 @@ export default function Dashboard() {
           2. DATOS DEPORTIVOS
           ====================================================== */}
 
-      <section className="mb-10">
+      <section className="mb-8 sm:mb-9 md:mb-10">
 
-        <div className="mb-5">
+        <div className="mb-4 sm:mb-5">
 
-          <h2 className="text-xl font-bold text-slate-800">
+          <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
             Datos deportivos
           </h2>
 
@@ -557,7 +557,7 @@ export default function Dashboard() {
 
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-5">
 
           <StatCard
             title="Jugadores"
@@ -614,9 +614,9 @@ export default function Dashboard() {
 
       <section>
 
-        <div className="mb-5">
+        <div className="mb-4 sm:mb-5">
 
-          <h2 className="text-xl font-bold text-slate-800">
+          <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
             Datos maestros
           </h2>
 
@@ -627,7 +627,7 @@ export default function Dashboard() {
 
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-4">
 
           <StatCard
             title="Competiciones"

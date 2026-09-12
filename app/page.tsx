@@ -134,7 +134,7 @@ export default function Home() {
             CONTENIDO
             ==================================================== */}
 
-        <main className="min-h-0 flex-1 overflow-y-auto bg-slate-100">
+        <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-slate-100">
 
           <AdminContent
             page={page}

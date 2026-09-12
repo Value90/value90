@@ -1612,18 +1612,18 @@ export default function ParticipationForm({
     historyLoading
   ) {
     return (
-      <div className="rounded-xl border bg-white p-6 shadow">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-4 md:p-6">
+        <h2 className="text-lg font-bold leading-tight text-slate-800 sm:text-xl">
           {participation
             ? "Editar participación"
             : "Cargar participaciones"}
         </h2>
 
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm leading-5 text-slate-500">
           Cargando datos...
         </p>
 
-        <div className="mt-6 rounded-lg bg-slate-50 p-5 text-sm text-slate-500">
+        <div className="mt-5 rounded-lg bg-slate-50 p-3 text-sm text-slate-500 sm:mt-6 sm:p-5">
           Cargando competiciones,
           temporadas, jornadas,
           partidos, equipos,
@@ -1641,12 +1641,12 @@ export default function ParticipationForm({
 
   if (dataError) {
     return (
-      <div className="rounded-xl border bg-white p-6 shadow">
+      <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-4 md:p-6">
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {dataError}
         </div>
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:mt-6 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onCancel}
@@ -1666,16 +1666,16 @@ export default function ParticipationForm({
    */
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow">
+    <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-4 md:p-6">
 
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="mb-5 sm:mb-6">
+        <h2 className="text-lg font-bold leading-tight text-slate-800 sm:text-xl">
           {participation
             ? "Editar participación"
             : "Cargar participaciones"}
         </h2>
 
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm leading-5 text-slate-500">
           {participation
             ? "Modifica los datos de la participación."
             : "Selecciona el partido y el equipo. Los jugadores aparecerán automáticamente."}
@@ -1683,23 +1683,23 @@ export default function ParticipationForm({
       </div>
 
       {teamsError && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
           {teamsError}
         </div>
       )}
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-6"
+        className="space-y-4 sm:space-y-6"
       >
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-5">
 
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700 sm:mb-4">
             Partido
           </h3>
 
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 md:gap-5">
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -1723,7 +1723,7 @@ export default function ParticipationForm({
                     participation
                   )
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:bg-slate-100"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 sm:px-4"
               >
                 <option value="">
                   Seleccionar competición
@@ -1769,7 +1769,7 @@ export default function ParticipationForm({
                   ) ||
                   !competitionId
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:bg-slate-100"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 sm:px-4"
               >
                 <option value="">
                   {!competitionId
@@ -1813,7 +1813,7 @@ export default function ParticipationForm({
                   ) ||
                   !seasonId
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:bg-slate-100"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 sm:px-4"
               >
                 <option value="">
                   {!seasonId
@@ -1836,7 +1836,7 @@ export default function ParticipationForm({
 
           </div>
 
-          <div className="mt-5">
+          <div className="mt-4 sm:mt-5">
 
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Partido
@@ -1860,7 +1860,7 @@ export default function ParticipationForm({
                 ) ||
                 !stageId
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:bg-slate-100"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 sm:px-4"
             >
               <option value="">
                 {!stageId
@@ -1885,7 +1885,7 @@ export default function ParticipationForm({
             </select>
 
             {selectedMatch && (
-              <p className="mt-2 text-xs font-medium text-slate-500">
+              <p className="mt-2 text-xs leading-5 font-medium text-slate-500">
                 Duración del partido: {selectedMatch.matchDuration ?? 90} minutos
               </p>
             )}
@@ -1893,9 +1893,9 @@ export default function ParticipationForm({
 
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 sm:p-5">
 
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-700 sm:mb-4">
             Equipo
           </h3>
 
@@ -1917,7 +1917,7 @@ export default function ParticipationForm({
                 participation
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:bg-slate-100"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 sm:px-4"
           >
             <option value="">
               {!matchId
@@ -1940,7 +1940,7 @@ export default function ParticipationForm({
 
           {teamId &&
             playerRows.length > 0 && (
-              <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 sm:mt-4 sm:p-4">
                 <p className="text-sm font-semibold text-blue-900">
                   {playerRows.length} jugadores
                   cargados
@@ -1957,16 +1957,16 @@ export default function ParticipationForm({
         </div>
 
         {teamId && (
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 sm:p-5">
 
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-center sm:justify-between">
 
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">
                   Jugadores
                 </h3>
 
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm leading-5 text-slate-500">
                   Introduce los datos de cada
                   jugador y guarda todo el equipo
                   de una sola vez.
@@ -1974,7 +1974,7 @@ export default function ParticipationForm({
               </div>
 
               {playerRows.length > 0 && (
-                <div className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700">
+                <div className="self-start rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 sm:self-auto sm:px-4">
                   {playerRows.length} jugadores
                 </div>
               )}
@@ -1988,42 +1988,42 @@ export default function ParticipationForm({
                 seleccionada.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
 
-                <table className="w-full min-w-[1100px] border-collapse text-sm">
+                <table className="w-full min-w-[980px] border-collapse text-sm">
 
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-left">
 
-                      <th className="px-3 py-3 font-semibold text-slate-600">
+                      <th className="whitespace-nowrap px-3 py-3 font-semibold text-slate-600">
                         Dorsal
                       </th>
 
-                      <th className="px-3 py-3 font-semibold text-slate-600">
+                      <th className="whitespace-nowrap px-3 py-3 font-semibold text-slate-600">
                         Jugador
                       </th>
 
-                      <th className="px-3 py-3 font-semibold text-slate-600">
+                      <th className="whitespace-nowrap px-3 py-3 font-semibold text-slate-600">
                         Posición
                       </th>
 
-                      <th className="px-3 py-3 text-center font-semibold text-slate-600">
+                      <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-slate-600">
                         Titular
                       </th>
 
-                      <th className="px-3 py-3 text-center font-semibold text-slate-600">
+                      <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-slate-600">
                         Capitán
                       </th>
 
-                      <th className="px-3 py-3 font-semibold text-slate-600">
+                      <th className="whitespace-nowrap px-3 py-3 font-semibold text-slate-600">
                         Entrada
                       </th>
 
-                      <th className="px-3 py-3 font-semibold text-slate-600">
+                      <th className="whitespace-nowrap px-3 py-3 font-semibold text-slate-600">
                         Salida
                       </th>
 
-                      <th className="px-3 py-3 font-semibold text-slate-600">
+                      <th className="whitespace-nowrap px-3 py-3 font-semibold text-slate-600">
                         Minutos
                       </th>
 
@@ -2049,7 +2049,7 @@ export default function ParticipationForm({
                             className="border-b border-slate-100 hover:bg-slate-50"
                           >
 
-                            <td className="px-3 py-3">
+                            <td className="whitespace-nowrap px-3 py-3">
                               <span className="font-semibold text-slate-700">
                                 {row.shirtNumber >
                                 0
@@ -2058,14 +2058,14 @@ export default function ParticipationForm({
                               </span>
                             </td>
 
-                            <td className="px-3 py-3">
+                            <td className="whitespace-nowrap px-3 py-3">
                               <span className="font-semibold text-slate-800">
                                 {player?.name ??
                                   "Jugador desconocido"}
                               </span>
                             </td>
 
-                            <td className="px-3 py-3">
+                            <td className="whitespace-nowrap px-3 py-3">
                               <span className="text-slate-600">
                                 {row.positionId >
                                 0
@@ -2074,7 +2074,7 @@ export default function ParticipationForm({
                               </span>
                             </td>
 
-                            <td className="px-3 py-3 text-center">
+                            <td className="whitespace-nowrap px-3 py-3 text-center">
 
                               <input
                                 type="checkbox"
@@ -2095,7 +2095,7 @@ export default function ParticipationForm({
 
                             </td>
 
-                            <td className="px-3 py-3 text-center">
+                            <td className="whitespace-nowrap px-3 py-3 text-center">
 
                               <input
                                 type="checkbox"
@@ -2123,7 +2123,7 @@ export default function ParticipationForm({
 
                             </td>
 
-                            <td className="px-3 py-3">
+                            <td className="whitespace-nowrap px-3 py-3">
 
                               <input
                                 type="number"
@@ -2142,12 +2142,12 @@ export default function ParticipationForm({
                                   )
                                 }
                                 placeholder="—"
-                                className="w-24 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                                className="w-20 rounded-lg border border-slate-300 px-2.5 py-2 text-sm outline-none focus:border-slate-500 sm:w-24 sm:px-3"
                               />
 
                             </td>
 
-                            <td className="px-3 py-3">
+                            <td className="whitespace-nowrap px-3 py-3">
 
                               <input
                                 type="number"
@@ -2166,12 +2166,12 @@ export default function ParticipationForm({
                                   )
                                 }
                                 placeholder="—"
-                                className="w-24 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                                className="w-20 rounded-lg border border-slate-300 px-2.5 py-2 text-sm outline-none focus:border-slate-500 sm:w-24 sm:px-3"
                               />
 
                             </td>
 
-                            <td className="px-3 py-3">
+                            <td className="whitespace-nowrap px-3 py-3">
                               <span className="font-bold text-slate-800">
                                 {row.minutesPlayed >
                                 0
@@ -2197,7 +2197,7 @@ export default function ParticipationForm({
 
         {teamId &&
           playerRows.length > 0 && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm leading-5 text-blue-800 sm:p-4">
 
               <p className="font-semibold">
                 Carga masiva de participaciones
@@ -2232,13 +2232,13 @@ export default function ParticipationForm({
             </div>
           )}
 
-        <div className="flex justify-end gap-3 border-t border-slate-200 pt-6">
+        <div className="flex flex-col-reverse gap-2.5 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end sm:gap-3 sm:pt-6">
 
           <button
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             Cancelar
           </button>
@@ -2249,7 +2249,7 @@ export default function ParticipationForm({
               saving ||
               playerRows.length === 0
             }
-            className="rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {saving
               ? "Guardando..."

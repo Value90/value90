@@ -149,16 +149,16 @@ export default function CountriesPage() {
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
       {/* CABECERA */}
 
-      <div className="mb-8 flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">
+      <div className="mb-6 flex min-w-0 flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold sm:text-3xl">
             Países
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-sm leading-6 text-slate-600 sm:text-base">
             Gestión de países de Value90
           </p>
         </div>
@@ -170,7 +170,7 @@ export default function CountriesPage() {
               setEditingCountry(undefined);
               setShowForm(true);
             }}
-            className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
+            className="w-full rounded-lg bg-slate-800 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700 sm:w-auto sm:px-5"
           >
             + Nuevo país
           </button>
@@ -178,16 +178,18 @@ export default function CountriesPage() {
       </div>
 
       {showForm ? (
-        <CountryForm
-          country={editingCountry}
-          onCancel={handleCancel}
-          onSave={handleSave}
-        />
+        <div className="w-full min-w-0">
+          <CountryForm
+            country={editingCountry}
+            onCancel={handleCancel}
+            onSave={handleSave}
+          />
+        </div>
       ) : (
         <>
           {/* RESUMEN */}
 
-          <p className="mb-6 text-slate-700">
+          <p className="mb-5 text-sm text-slate-700 sm:mb-6 sm:text-base">
             Total de países:{" "}
 
             <span className="font-semibold">
@@ -199,11 +201,13 @@ export default function CountriesPage() {
 
           {/* TABLA */}
 
-          <CountriesTable
-            countries={countries}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
+          <div className="w-full min-w-0">
+            <CountriesTable
+              countries={countries}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          </div>
         </>
       )}
     </div>

@@ -215,29 +215,31 @@ export default function StagesPage() {
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-5 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
 
-        <div>
-          <h1 className="text-3xl font-bold">
+        <div className="min-w-0">
+
+          <h1 className="text-2xl font-bold sm:text-3xl">
             Jornadas / Fases
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
             Gestión de jornadas y fases de Value90
           </p>
+
         </div>
 
         {!showForm && (
           <button
             type="button"
             onClick={handleNewStage}
-            className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
+            className="w-full rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 sm:w-auto"
           >
             + Nueva jornada / fase
           </button>
@@ -250,7 +252,7 @@ export default function StagesPage() {
           ====================================================== */}
 
       {stagesError && !showForm && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
           {stagesError}
         </div>
       )}
@@ -260,7 +262,7 @@ export default function StagesPage() {
           ====================================================== */}
 
       {!showForm && (
-        <p className="mb-6 text-slate-700">
+        <p className="mb-5 text-sm text-slate-700 sm:mb-6 sm:text-base">
           Total de fases y jornadas:{" "}
 
           <span className="font-semibold">
@@ -276,17 +278,21 @@ export default function StagesPage() {
           ====================================================== */}
 
       {showForm ? (
-        <StageForm
-          stage={editingStage}
-          onCancel={handleCancelForm}
-          onSaved={handleSaved}
-        />
+        <div className="w-full min-w-0">
+          <StageForm
+            stage={editingStage}
+            onCancel={handleCancelForm}
+            onSaved={handleSaved}
+          />
+        </div>
       ) : (
-        <StagesTable
-          key={refreshKey}
-          onEdit={handleEditStage}
-          onDelete={handleDeleteStage}
-        />
+        <div className="w-full min-w-0">
+          <StagesTable
+            key={refreshKey}
+            onEdit={handleEditStage}
+            onDelete={handleDeleteStage}
+          />
+        </div>
       )}
 
       {/* ======================================================

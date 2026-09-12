@@ -297,13 +297,13 @@ export default function StageForm({
    */
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow">
+    <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-5 md:p-6">
 
       {/* CABECERA */}
 
-      <div className="mb-6">
+      <div className="mb-5 sm:mb-6">
 
-        <h2 className="text-xl font-bold text-slate-800">
+        <h2 className="text-xl font-bold text-slate-800 sm:text-2xl">
           {stage
             ? "Editar jornada/fase"
             : "Nueva jornada/fase"}
@@ -320,19 +320,19 @@ export default function StageForm({
       {/* ERROR */}
 
       {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
           {error}
         </div>
       )}
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-6"
+        className="min-w-0 space-y-5 sm:space-y-6"
       >
 
         {/* NOMBRE */}
 
-        <div>
+        <div className="min-w-0">
 
           <label
             htmlFor="stage-name"
@@ -351,7 +351,7 @@ export default function StageForm({
               )
             }
             placeholder="Ej. Jornada 1"
-            className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
             required
           />
 
@@ -359,7 +359,7 @@ export default function StageForm({
 
         {/* TEMPORADA */}
 
-        <div>
+        <div className="min-w-0">
 
           <label
             htmlFor="stage-season"
@@ -379,7 +379,7 @@ export default function StageForm({
               )
             }
             disabled={seasonsLoading}
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
             required
           >
 
@@ -420,7 +420,7 @@ export default function StageForm({
                   event.target.checked
                 )
               }
-              className="h-4 w-4"
+              className="h-4 w-4 shrink-0"
             />
 
             <span className="text-sm font-medium text-slate-700">
@@ -433,12 +433,12 @@ export default function StageForm({
 
         {/* BOTONES */}
 
-        <div className="flex justify-end gap-3 border-t pt-6">
+        <div className="flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:justify-end sm:pt-6">
 
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            className="w-full rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 sm:w-auto"
           >
             Cancelar
           </button>
@@ -449,7 +449,7 @@ export default function StageForm({
               seasonsLoading ||
               availableSeasons.length === 0
             }
-            className="rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {stage
               ? "Guardar cambios"

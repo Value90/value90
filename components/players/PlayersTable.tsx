@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import DataTable from "@/components/shared/tables/DataTable";
 
@@ -9,7 +13,9 @@ import {
   type Player,
 } from "@/services/player.service";
 
-import { getCountries } from "@/services/country.service";
+import {
+  getCountries,
+} from "@/services/country.service";
 
 interface PlayersTableProps {
   onEdit: (player: Player) => void;
@@ -26,11 +32,15 @@ export default function PlayersTable({
    * ============================================================
    */
 
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [players, setPlayers] =
+    useState<Player[]>([]);
 
-  const [countries, setCountries] = useState<
-    Awaited<ReturnType<typeof getCountries>>
-  >([]);
+  const [countries, setCountries] =
+    useState<
+      Awaited<
+        ReturnType<typeof getCountries>
+      >
+    >([]);
 
   /*
    * ============================================================
@@ -39,6 +49,8 @@ export default function PlayersTable({
    */
 
   useEffect(() => {
+    let mounted = true;
+
     async function loadData() {
       try {
         const [
@@ -49,6 +61,10 @@ export default function PlayersTable({
           getCountries(),
         ]);
 
+        if (!mounted) {
+          return;
+        }
+
         setPlayers(playersData);
         setCountries(countriesData);
       } catch (error) {
@@ -56,10 +72,21 @@ export default function PlayersTable({
           "Error cargando datos de jugadores:",
           error
         );
+
+        if (!mounted) {
+          return;
+        }
+
+        setPlayers([]);
+        setCountries([]);
       }
     }
 
     loadData();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   /*
@@ -105,13 +132,16 @@ export default function PlayersTable({
         cell: ({
           row,
         }: {
-          row: { original: Player };
+          row: {
+            original: Player;
+          };
         }) => {
-          const country = countries.find(
-            (item) =>
-              item.id ===
-              row.original.countryId
-          );
+          const country =
+            countries.find(
+              (item) =>
+                item.id ===
+                row.original.countryId
+            );
 
           return (
             country?.name ??
@@ -144,7 +174,9 @@ export default function PlayersTable({
         cell: ({
           row,
         }: {
-          row: { original: Player };
+          row: {
+            original: Player;
+          };
         }) =>
           row.original.active
             ? "Sí"
@@ -160,20 +192,23 @@ export default function PlayersTable({
       {
         id: "actions",
         header: "Acciones",
+        enableSorting: false,
 
         cell: ({
           row,
         }: {
-          row: { original: Player };
+          row: {
+            original: Player;
+          };
         }) => (
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1 whitespace-nowrap sm:gap-2">
 
             <button
               type="button"
               onClick={() =>
                 onEdit(row.original)
               }
-              className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+              className="rounded-md bg-slate-100 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 sm:rounded-lg sm:px-3 sm:py-2 sm:text-sm"
             >
               Editar
             </button>
@@ -183,7 +218,7 @@ export default function PlayersTable({
               onClick={() =>
                 onDelete(row.original)
               }
-              className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+              className="rounded-md bg-red-50 px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 sm:rounded-lg sm:px-3 sm:py-2 sm:text-sm"
             >
               Eliminar
             </button>
@@ -206,9 +241,26 @@ export default function PlayersTable({
    */
 
   return (
-    <DataTable
-      columns={columns}
-      data={players}
-    />
+    <div
+      className="
+        w-full
+        min-w-0
+        overflow-hidden
+        [&_table]:min-w-[700px]
+        [&_th]:whitespace-nowrap
+        [&_td]:whitespace-nowrap
+        [&_th]:px-3
+        [&_td]:px-3
+        [&_th]:py-3
+        [&_td]:py-3
+        sm:[&_th]:px-4
+        sm:[&_td]:px-4
+      "
+    >
+      <DataTable
+        columns={columns}
+        data={players}
+      />
+    </div>
   );
 }

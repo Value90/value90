@@ -672,13 +672,13 @@ export default function MatchRatingsTable({
    */
 
   return (
-    <div className="space-y-4">
+    <div className="w-full min-w-0 space-y-4">
 
       {/* ======================================================
           BUSCADOR
           ====================================================== */}
 
-      <div className="flex items-center justify-between">
+      <div className="flex w-full min-w-0 items-center justify-between">
 
         <input
           type="text"
@@ -689,7 +689,7 @@ export default function MatchRatingsTable({
               event.target.value
             )
           }
-          className="w-full max-w-sm rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm outline-none focus:border-slate-500"
+          className="w-full min-w-0 max-w-sm rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
         />
 
       </div>
@@ -698,7 +698,7 @@ export default function MatchRatingsTable({
           TABLA
           ====================================================== */}
 
-      <div className="[&_th]:whitespace-nowrap [&_th]:px-2 [&_th]:py-3 [&_th]:text-xs [&_td]:px-2 [&_td]:py-3">
+      <div className="w-full min-w-0 overflow-hidden [&_th]:whitespace-nowrap [&_th]:px-2 [&_th]:py-2.5 [&_th]:text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-2.5 sm:[&_th]:px-3 sm:[&_th]:py-3 sm:[&_td]:px-3 sm:[&_td]:py-3">
         <DataTable
           columns={columns}
           data={filteredMatchRatings}

@@ -777,21 +777,21 @@ export default function MatchForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm"
+      className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:p-6 lg:p-8"
     >
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-8">
+      <div className="mb-6 sm:mb-8">
 
-        <h2 className="text-2xl font-bold">
+        <h2 className="text-xl font-bold sm:text-2xl">
           {match
             ? "Editar partido"
             : "Nuevo partido"}
         </h2>
 
-        <p className="mt-2 text-slate-600">
+        <p className="mt-2 text-sm text-slate-600 sm:text-base">
           {match
             ? "Modifica los datos del partido."
             : "Introduce los datos del nuevo partido."}
@@ -803,7 +803,7 @@ export default function MatchForm({
           FORMULARIO
           ====================================================== */}
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 md:gap-6">
 
         {/* ====================================================
             COMPETICIÓN
@@ -821,7 +821,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={dataLoading}
           >
@@ -865,7 +865,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={dataLoading}
           >
@@ -909,7 +909,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={
               dataLoading ||
@@ -961,7 +961,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
           />
         </div>
@@ -982,7 +982,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={
               !competitionId ||
@@ -1036,7 +1036,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={
               !competitionId ||
@@ -1085,7 +1085,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
           />
         </div>
 
@@ -1107,7 +1107,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
           />
         </div>
 
@@ -1115,7 +1115,7 @@ export default function MatchForm({
             ESTADIO
             ==================================================== */}
 
-        <div className="col-span-2">
+        <div className="md:col-span-2">
 
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Estadio
@@ -1135,7 +1135,7 @@ export default function MatchForm({
                 ? "Estadio del club"
                 : "Introduce el estadio"
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
           />
 
           {selectedHomeTeam?.type ===
@@ -1175,7 +1175,7 @@ export default function MatchForm({
                 event.target.value as Match["status"]
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
           >
             <option value="Programado">
               Programado
@@ -1207,7 +1207,7 @@ export default function MatchForm({
                 Number(event.target.value)
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
           >
             <option value={90}>
@@ -1229,7 +1229,7 @@ export default function MatchForm({
             PENALTIS
             ==================================================== */}
 
-        <div className="col-span-2">
+        <div className="md:col-span-2">
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-300 bg-white px-4 py-3 hover:bg-slate-50">
             <input
               type="checkbox"
@@ -1247,7 +1247,7 @@ export default function MatchForm({
         </div>
 
         {hasPenalties && (
-          <div className="col-span-2 grid grid-cols-2 gap-6 rounded-lg border border-slate-200 bg-slate-50 p-5">
+          <div className="md:col-span-2 grid grid-cols-1 gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 sm:gap-5 sm:p-5">
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 {selectedHomeTeam?.name ?? "Equipo local"}
@@ -1262,7 +1262,7 @@ export default function MatchForm({
                     event.target.value
                   )
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
               />
             </div>
 
@@ -1283,7 +1283,7 @@ export default function MatchForm({
                     event.target.value
                   )
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
               />
             </div>
           </div>
@@ -1295,12 +1295,12 @@ export default function MatchForm({
           BOTONES
           ====================================================== */}
 
-      <div className="mt-8 flex justify-end gap-3">
+      <div className="mt-6 flex flex-col-reverse gap-3 sm:mt-8 sm:flex-row sm:justify-end">
 
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="w-full rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:w-auto"
         >
           Cancelar
         </button>
@@ -1311,7 +1311,7 @@ export default function MatchForm({
             dataLoading ||
             teamsLoading
           }
-          className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           {match
             ? "Guardar cambios"

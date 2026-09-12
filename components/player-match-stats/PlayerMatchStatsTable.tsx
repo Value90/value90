@@ -394,7 +394,7 @@ export default function PlayerMatchStatsTable({
           original: PlayerMatchStat;
         };
       }) => (
-        <div className="flex justify-center gap-2">
+        <div className="flex flex-wrap justify-center gap-1.5 sm:flex-nowrap sm:gap-2">
           <button
             type="button"
             onClick={() =>
@@ -402,7 +402,7 @@ export default function PlayerMatchStatsTable({
                 row.original
               )
             }
-            className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+            className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 sm:px-3 sm:py-2 sm:text-sm"
           >
             Editar
           </button>
@@ -414,7 +414,7 @@ export default function PlayerMatchStatsTable({
                 row.original
               )
             }
-            className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+            className="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 sm:px-3 sm:py-2 sm:text-sm"
           >
             Eliminar
           </button>
@@ -450,18 +450,18 @@ export default function PlayerMatchStatsTable({
    */
 
   return (
-    <div>
+    <div className="w-full min-w-0 space-y-4">
 
       {/* CATEGORÍAS */}
 
-      <div className="mb-5 flex flex-wrap gap-2">
+      <div className="mb-4 flex w-full flex-col gap-2 sm:mb-5 sm:flex-row sm:flex-wrap">
 
         <button
           type="button"
           onClick={() =>
             setCategory("Ofensivas")
           }
-          className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${
+          className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold transition sm:w-auto sm:px-5 ${
             category ===
             "Ofensivas"
               ? "bg-slate-800 text-white shadow-sm"
@@ -476,7 +476,7 @@ export default function PlayerMatchStatsTable({
           onClick={() =>
             setCategory("Defensivas")
           }
-          className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${
+          className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold transition sm:w-auto sm:px-5 ${
             category ===
             "Defensivas"
               ? "bg-slate-800 text-white shadow-sm"
@@ -493,7 +493,7 @@ export default function PlayerMatchStatsTable({
               "Distribución"
             )
           }
-          className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${
+          className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold transition sm:w-auto sm:px-5 ${
             category ===
             "Distribución"
               ? "bg-slate-800 text-white shadow-sm"

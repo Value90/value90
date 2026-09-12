@@ -102,13 +102,6 @@ export default function TeamsPage({
    * ============================================================
    * HISTORIAL DE EQUIPOS
    * ============================================================
-   *
-   * Navegamos a la página existente:
-   *
-   * hist-player-teams
-   *
-   * El Sidebar escucha este evento y cambia la página.
-   * ============================================================
    */
 
   const handleTeamHistory = () => {
@@ -152,35 +145,35 @@ export default function TeamsPage({
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-5 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
 
-        <div>
+        <div className="min-w-0">
 
-          <h1 className="text-3xl font-bold">
+          <h1 className="text-2xl font-bold sm:text-3xl">
             Equipos
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
             Gestión de equipos de Value90
           </p>
 
         </div>
 
         {!showForm && (
-          <div className="flex items-center gap-3">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
 
             {/* NUEVO EQUIPO */}
 
             <button
               type="button"
               onClick={handleNewTeam}
-              className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
+              className="w-full rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700 sm:w-auto"
             >
               + Nuevo equipo
             </button>
@@ -190,7 +183,7 @@ export default function TeamsPage({
             <button
               type="button"
               onClick={handleTeamHistory}
-              className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              className="w-full rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 sm:w-auto"
             >
               Historial equipos
             </button>
@@ -205,7 +198,7 @@ export default function TeamsPage({
           ====================================================== */}
 
       {!showForm && (
-        <p className="mb-6 text-slate-700">
+        <p className="mb-5 text-sm text-slate-700 sm:mb-6 sm:text-base">
           Total de equipos:{" "}
 
           <span className="font-semibold">
@@ -218,17 +211,21 @@ export default function TeamsPage({
           FORMULARIO / TABLA
           ====================================================== */}
 
-      {showForm ? (
-        <TeamForm
-          team={editingTeam}
-          onCancel={handleCloseForm}
-        />
-      ) : (
-        <TeamsTable
-          onEdit={handleEditTeam}
-          onDelete={setTeamToDelete}
-        />
-      )}
+      <div className="w-full min-w-0">
+
+        {showForm ? (
+          <TeamForm
+            team={editingTeam}
+            onCancel={handleCloseForm}
+          />
+        ) : (
+          <TeamsTable
+            onEdit={handleEditTeam}
+            onDelete={setTeamToDelete}
+          />
+        )}
+
+      </div>
 
       {/* ======================================================
           DIÁLOGO DE ELIMINACIÓN

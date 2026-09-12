@@ -185,15 +185,6 @@ export default function StagesTable({
    * 1. Temporada más reciente
    * 2. Jornada más alta
    *
-   * Ejemplo:
-   *
-   * Jornada 3 - 2026/27
-   * Jornada 2 - 2026/27
-   * Jornada 1 - 2026/27
-   * Jornada 3 - 2025/26
-   * Jornada 2 - 2025/26
-   * Jornada 1 - 2025/26
-   *
    * ============================================================
    */
 
@@ -257,9 +248,7 @@ export default function StagesTable({
            *
            * NO utilizamos displayOrder.
            *
-           * Utilizamos el número que aparece en el nombre:
-           *
-           * Jornada 3 > Jornada 2 > Jornada 1
+           * Utilizamos el número que aparece en el nombre.
            *
            * ==================================================
            */
@@ -298,13 +287,6 @@ export default function StagesTable({
            *
            * Para fases que no tengan un número en el nombre
            * utilizamos displayOrder como criterio secundario.
-           *
-           * Esto permite seguir funcionando con nombres como:
-           *
-           * Octavos de final
-           * Cuartos de final
-           * Semifinal
-           * Final
            *
            * ==================================================
            */
@@ -431,7 +413,7 @@ export default function StagesTable({
             original: Stage;
           };
         }) => (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:flex-nowrap sm:gap-2">
 
             <button
               type="button"
@@ -440,7 +422,7 @@ export default function StagesTable({
                   row.original
                 )
               }
-              className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+              className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 sm:px-3 sm:py-2 sm:text-sm"
             >
               Editar
             </button>
@@ -452,7 +434,7 @@ export default function StagesTable({
                   row.original
                 )
               }
-              className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+              className="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 sm:px-3 sm:py-2 sm:text-sm"
             >
               Eliminar
             </button>
@@ -476,8 +458,8 @@ export default function StagesTable({
 
   if (loading) {
     return (
-      <div className="rounded-xl border bg-white p-6 shadow">
-        <p className="text-sm text-slate-500">
+      <div className="w-full min-w-0 rounded-xl border bg-white p-5 shadow sm:p-6">
+        <p className="text-sm text-slate-500 sm:text-base">
           Cargando jornadas / fases...
         </p>
       </div>
@@ -491,10 +473,12 @@ export default function StagesTable({
    */
 
   return (
-    <DataTable
-      columns={columns}
-      data={sortedStages}
-      initialSorting={[]}
-    />
+    <div className="w-full min-w-0 overflow-hidden [&_table]:min-w-[650px] [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap [&_th]:px-3 [&_td]:px-3 sm:[&_th]:px-4 sm:[&_td]:px-4">
+      <DataTable
+        columns={columns}
+        data={sortedStages}
+        initialSorting={[]}
+      />
+    </div>
   );
 }

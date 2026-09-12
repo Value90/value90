@@ -1184,8 +1184,8 @@ export default function HistPlayerTeamForm({
 
   if (loading) {
     return (
-      <div className="rounded-xl border bg-white p-6 shadow">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-5 md:p-6">
+        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
           Historial de plantilla
         </h2>
 
@@ -1203,10 +1203,10 @@ export default function HistPlayerTeamForm({
    */
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow">
+    <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-5 md:p-6">
 
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="mb-5 sm:mb-6">
+        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
           Historial de plantilla
         </h2>
 
@@ -1218,7 +1218,7 @@ export default function HistPlayerTeamForm({
       </div>
 
       {error && (
-        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-5 sm:p-4">
           <strong className="font-semibold">
             Revisa los siguientes errores:
           </strong>
@@ -1230,27 +1230,27 @@ export default function HistPlayerTeamForm({
       )}
 
       {success && (
-        <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 sm:mb-5 sm:p-4">
           {success}
         </div>
       )}
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-6"
+        className="space-y-5 sm:space-y-6"
       >
 
         {/* ==================================================
             TEMPORADA / COMPETICIÓN / EQUIPO
             ================================================== */}
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-5">
 
           <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
             Datos de la plantilla
           </h3>
 
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 md:gap-5">
 
             {/* TEMPORADA */}
 
@@ -1268,7 +1268,7 @@ export default function HistPlayerTeamForm({
                     )
                   )
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   Seleccionar temporada
@@ -1307,7 +1307,7 @@ export default function HistPlayerTeamForm({
                   )
                 }
                 disabled={!seasonId}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:bg-slate-100"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 sm:px-4"
               >
                 <option value={0}>
                   {!seasonId
@@ -1355,7 +1355,7 @@ export default function HistPlayerTeamForm({
                   !seasonId ||
                   !competitionId
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500 disabled:bg-slate-100"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 sm:px-4"
               >
                 <option value={0}>
                   {!seasonId
@@ -1402,13 +1402,13 @@ export default function HistPlayerTeamForm({
 
         {teamId > 0 &&
           seasonId > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white">
+            <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-white">
 
               {/* CABECERA */}
 
-              <div className="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-3 sm:gap-4 sm:p-4">
 
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
                   <div>
                     <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">
@@ -1480,9 +1480,9 @@ export default function HistPlayerTeamForm({
 
                 {/* BUSCADOR */}
 
-                <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
 
-                  <div className="relative w-full md:max-w-md">
+                  <div className="relative w-full min-w-0 md:max-w-md">
 
                     <input
                       type="text"
@@ -1502,7 +1502,7 @@ export default function HistPlayerTeamForm({
                         loadingSquad ||
                         rows.length === 0
                       }
-                      className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 pl-10 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100"
+                      className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 pl-10 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100 sm:px-4"
                     />
 
                     <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -1532,7 +1532,7 @@ export default function HistPlayerTeamForm({
 
                 {/* INFORMACIÓN */}
 
-                <div className="flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
 
                   <span>
                     Mostrando{" "}
@@ -1588,16 +1588,16 @@ export default function HistPlayerTeamForm({
               {/* TABLA */}
 
               {loadingSquad ? (
-                <div className="p-6 text-center text-sm text-slate-500">
+                <div className="p-4 text-center text-sm text-slate-500 sm:p-6">
                   Cargando plantilla...
                 </div>
               ) : rows.length === 0 ? (
-                <div className="p-6 text-center text-sm text-slate-500">
+                <div className="p-4 text-center text-sm text-slate-500 sm:p-6">
                   No hay jugadores registrados.
                 </div>
               ) : filteredPlayers.length ===
                 0 ? (
-                <div className="p-8 text-center">
+                <div className="p-6 text-center sm:p-8">
 
                   <p className="text-sm font-medium text-slate-600">
                     {showSelectedOnly
@@ -1631,27 +1631,27 @@ export default function HistPlayerTeamForm({
                 </div>
               ) : (
                 <>
-                  <div className="overflow-x-auto">
+                  <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
 
-                    <table className="w-full text-sm">
+                    <table className="min-w-[760px] text-sm whitespace-nowrap">
 
                       <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
 
                         <tr>
 
-                          <th className="px-4 py-3">
+                          <th className="px-3 py-3 sm:px-4">
                             Incluir
                           </th>
 
-                          <th className="px-4 py-3">
+                          <th className="px-3 py-3 sm:px-4">
                             Jugador
                           </th>
 
-                          <th className="px-4 py-3">
+                          <th className="px-3 py-3 sm:px-4">
                             Dorsal
                           </th>
 
-                          <th className="px-4 py-3">
+                          <th className="px-3 py-3 sm:px-4">
                             Posición
                           </th>
 
@@ -1696,7 +1696,7 @@ export default function HistPlayerTeamForm({
                                 }
                               >
 
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-3 sm:px-4">
 
                                   <input
                                     type="checkbox"
@@ -1736,7 +1736,7 @@ export default function HistPlayerTeamForm({
                                   )}
                                 </td>
 
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-3 sm:px-4">
 
                                   <input
                                     type="number"
@@ -1768,7 +1768,7 @@ export default function HistPlayerTeamForm({
 
                                 </td>
 
-                                <td className="px-4 py-3">
+                                <td className="px-3 py-3 sm:px-4">
 
                                   <select
                                     value={
@@ -1835,7 +1835,7 @@ export default function HistPlayerTeamForm({
                   </div>
 
                   {totalPages > 1 && (
-                    <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 px-4 py-4 sm:flex-row">
+                    <div className="flex flex-col items-stretch justify-between gap-3 border-t border-slate-200 px-3 py-4 sm:flex-row sm:items-center sm:px-4">
 
                       <button
                         type="button"
@@ -1854,7 +1854,7 @@ export default function HistPlayerTeamForm({
                         Anterior
                       </button>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex flex-wrap items-center justify-center gap-1">
 
                         {pageNumbers.map(
                           (page) => (
@@ -1912,14 +1912,14 @@ export default function HistPlayerTeamForm({
             BOTONES
             ================================================== */}
 
-        <div className="flex justify-end gap-3 border-t border-slate-200 pt-6">
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end sm:pt-6">
 
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
               disabled={saving}
-              className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              className="w-full rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 sm:w-auto"
             >
               Cancelar
             </button>
@@ -1935,7 +1935,7 @@ export default function HistPlayerTeamForm({
               !seasonId ||
               rows.length === 0
             }
-            className="rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {saving
               ? "Guardando plantilla..."

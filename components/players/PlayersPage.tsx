@@ -16,56 +16,16 @@ import {
 } from "@/services/player.service";
 
 export default function PlayersPage() {
-  /*
-   * ============================================================
-   * ESTADO DEL FORMULARIO
-   * ============================================================
-   */
-
-  const [showForm, setShowForm] =
-    useState(false);
+  const [showForm, setShowForm] = useState(false);
 
   const [editingPlayer, setEditingPlayer] =
-    useState<Player | undefined>(
-      undefined
-    );
+    useState<Player | undefined>(undefined);
 
   const [playerToDelete, setPlayerToDelete] =
-    useState<Player | undefined>(
-      undefined
-    );
-
-  /*
-   * ============================================================
-   * REFRESH
-   * ============================================================
-   *
-   * Se utiliza para forzar la recarga de PlayersTable
-   * después de crear, editar o eliminar.
-   * ============================================================
-   */
+    useState<Player | undefined>(undefined);
 
   const [refreshKey, setRefreshKey] =
     useState(0);
-
-  /*
-   * ============================================================
-   * JUGADORES
-   * ============================================================
-   *
-   * getPlayers() devuelve Promise<Player[]> porque
-   * trabaja con Supabase.
-   *
-   * Por eso NO podemos hacer:
-   *
-   * const players = getPlayers();
-   *
-   * y después:
-   *
-   * players.length
-   *
-   * ============================================================
-   */
 
   const [players, setPlayers] =
     useState<Player[]>([]);
@@ -152,7 +112,7 @@ export default function PlayersPage() {
 
   /*
    * ============================================================
-   * GUARDAR JUGADOR
+   * JUGADOR GUARDADO
    * ============================================================
    */
 
@@ -167,7 +127,7 @@ export default function PlayersPage() {
 
   /*
    * ============================================================
-   * PREPARAR ELIMINACIÓN
+   * ELIMINAR JUGADOR
    * ============================================================
    */
 
@@ -183,31 +143,28 @@ export default function PlayersPage() {
    * ============================================================
    */
 
-  const handleConfirmDelete =
-    async () => {
-      if (!playerToDelete) {
-        return;
-      }
+  const handleConfirmDelete = async () => {
+    if (!playerToDelete) {
+      return;
+    }
 
-      try {
-        await deletePlayer(
-          playerToDelete.id
-        );
+    try {
+      await deletePlayer(
+        playerToDelete.id
+      );
 
-        setPlayerToDelete(
-          undefined
-        );
+      setPlayerToDelete(undefined);
 
-        setRefreshKey(
-          (value) => value + 1
-        );
-      } catch (error) {
-        console.error(
-          "Error eliminando jugador:",
-          error
-        );
-      }
-    };
+      setRefreshKey(
+        (value) => value + 1
+      );
+    } catch (error) {
+      console.error(
+        "Error eliminando jugador:",
+        error
+      );
+    }
+  };
 
   /*
    * ============================================================
@@ -227,20 +184,20 @@ export default function PlayersPage() {
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-5 flex min-w-0 flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
 
-        <div>
-          <h1 className="text-3xl font-bold">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold sm:text-3xl">
             Jugadores
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
             Gestión de jugadores de Value90
           </p>
         </div>
@@ -249,20 +206,19 @@ export default function PlayersPage() {
           <button
             type="button"
             onClick={handleNewPlayer}
-            className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
+            className="w-full shrink-0 rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 sm:w-auto sm:px-5 sm:py-3"
           >
             + Nuevo jugador
           </button>
         )}
-
       </div>
 
       {/* ======================================================
-          ERROR
+          ERROR DE CARGA
           ====================================================== */}
 
       {playersError && !showForm && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 w-full rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
           {playersError}
         </div>
       )}
@@ -272,16 +228,13 @@ export default function PlayersPage() {
           ====================================================== */}
 
       {!showForm && (
-        <p className="mb-6 text-slate-700">
-
+        <p className="mb-5 text-sm text-slate-700 sm:mb-6 sm:text-base">
           Total de jugadores:{" "}
-
           <span className="font-semibold">
             {playersLoading
               ? "Cargando..."
               : players.length}
           </span>
-
         </p>
       )}
 
@@ -289,19 +242,33 @@ export default function PlayersPage() {
           FORMULARIO / TABLA
           ====================================================== */}
 
-      {showForm ? (
-        <PlayerForm
-          player={editingPlayer}
-          onCancel={handleCancelForm}
-          onSaved={handleSaved}
-        />
-      ) : (
-        <PlayersTable
-          key={refreshKey}
-          onEdit={handleEditPlayer}
-          onDelete={handleDeletePlayer}
-        />
-      )}
+      <div className="w-full min-w-0">
+
+        {showForm ? (
+
+          /*
+           * IMPORTANTE:
+           * PlayerForm necesita estos tres props.
+           * No dejar <PlayerForm /> vacío.
+           */
+
+          <PlayerForm
+            player={editingPlayer}
+            onCancel={handleCancelForm}
+            onSaved={handleSaved}
+          />
+
+        ) : (
+
+          <PlayersTable
+            key={refreshKey}
+            onEdit={handleEditPlayer}
+            onDelete={handleDeletePlayer}
+          />
+
+        )}
+
+      </div>
 
       {/* ======================================================
           DIÁLOGO DE ELIMINACIÓN
@@ -312,9 +279,7 @@ export default function PlayersPage() {
           player={playerToDelete}
           onConfirm={handleConfirmDelete}
           onCancel={() =>
-            setPlayerToDelete(
-              undefined
-            )
+            setPlayerToDelete(undefined)
           }
         />
       )}

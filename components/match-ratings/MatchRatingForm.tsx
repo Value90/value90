@@ -2391,10 +2391,10 @@ export default function MatchRatingForm({
    */
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow">
+    <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-4 md:p-6">
 
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
           {matchRating
             ? "Editar valoración del partido"
             : "Valoraciones de partidos"}
@@ -2407,7 +2407,7 @@ export default function MatchRatingForm({
       </div>
 
       {!matchRating && (
-        <div className="mb-6 grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+        <div className="mb-5 grid grid-cols-1 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:grid-cols-2">
           <button
             type="button"
             onClick={() => {
@@ -2444,23 +2444,23 @@ export default function MatchRatingForm({
       {inputMode === "import" && !matchRating ? (
         <div className="space-y-6">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:p-4">
               {error}
             </div>
           )}
 
           {importMessage && (
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 sm:p-4">
               {importMessage}
             </div>
           )}
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4 md:p-5">
             <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
               1. Selección de la importación
             </h3>
 
-            <div className="grid gap-5 md:grid-cols-4">
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700">
                   Temporada
@@ -2475,7 +2475,7 @@ export default function MatchRatingForm({
                   disabled={
                     seasonsLoading
                   }
-                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                  className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
                 >
                   <option value={0}>
                     {seasonsLoading
@@ -2505,7 +2505,7 @@ export default function MatchRatingForm({
                     )
                   }
                   disabled={competitionsLoading}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                  className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
                 >
                   <option value={0}>
                     {competitionsLoading
@@ -2535,7 +2535,7 @@ export default function MatchRatingForm({
                     )
                   }
                   disabled={!seasonId || !competitionId || teamsLoading}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                  className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
                 >
                   <option value={0}>
                     {!seasonId
@@ -2573,7 +2573,7 @@ export default function MatchRatingForm({
                     );
                     resetImport();
                   }}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+                  className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
                 >
                   <option value="Marca">Marca</option>
                   <option value="AS">AS</option>
@@ -2591,7 +2591,7 @@ export default function MatchRatingForm({
             </p>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 sm:p-4 md:p-5">
             <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-700">
               2. Pegar datos de Google Sheets
             </h3>
@@ -2621,15 +2621,15 @@ J1 | J2 | J3 | 16 | 8 | 4 | 2 | 1
 Los números 16, 8, 4, 2 y 1 se interpretan como
 Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
               rows={13}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3 font-mono text-xs outline-none focus:border-slate-500"
+              className="min-h-[220px] w-full min-w-0 rounded-lg border border-slate-300 px-3 py-3 font-mono text-xs outline-none focus:border-slate-500 sm:min-h-[260px] sm:px-4"
             />
 
-            <div className="mt-4 flex justify-end gap-3">
+            <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={resetImport}
                 disabled={importing}
-                className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                className="w-full rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 sm:w-auto"
               >
                 Limpiar
               </button>
@@ -2644,7 +2644,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                   !teamId ||
                   !importText.trim()
                 }
-                className="rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 Analizar datos
               </button>
@@ -2652,7 +2652,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
           </div>
 
           {importAnalyzed && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 sm:p-4 md:p-5">
               <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">
@@ -2672,8 +2672,8 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                 </span>
               </div>
 
-              <div className="max-h-[520px] overflow-auto rounded-lg border border-slate-200">
-                <table className="min-w-full text-sm">
+              <div className="max-h-[520px] w-full max-w-full overflow-auto rounded-lg border border-slate-200">
+                <table className="min-w-[720px] text-sm">
                   <thead className="sticky top-0 bg-slate-100">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold text-slate-700">
@@ -2758,12 +2758,12 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                 </div>
               )}
 
-              <div className="mt-5 flex justify-end gap-3">
+              <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={resetImport}
                   disabled={importing}
-                  className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                  className="w-full rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 sm:w-auto"
                 >
                   Volver a pegar
                 </button>
@@ -2777,7 +2777,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                       (row) => row.status === "ok"
                     )
                   }
-                  className="rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   {importing
                     ? "Guardando..."
@@ -2787,12 +2787,12 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
             </div>
           )}
 
-          <div className="flex justify-end border-t pt-6">
+          <div className="flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:justify-end sm:pt-6">
             <button
               type="button"
               onClick={onCancel}
               disabled={importing}
-              className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              className="w-full rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 sm:w-auto"
             >
               Cancelar
             </button>
@@ -2819,13 +2819,13 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
             FILTROS
             ==================================================== */}
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4 md:p-5">
 
           <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
             Selección del partido
           </h3>
 
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-3">
 
             {/* TEMPORADA */}
 
@@ -2842,7 +2842,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                   )
                 }
                 disabled={seasonsLoading}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   {seasonsLoading
@@ -2872,7 +2872,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                   )
                 }
                 disabled={competitionsLoading || !seasonId}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   {!seasonId
@@ -2904,7 +2904,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                   )
                 }
                 disabled={stagesLoading || !competitionId}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   {!competitionId
@@ -2924,7 +2924,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
 
           {/* PARTIDO Y EQUIPO */}
 
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-5 sm:grid-cols-2 sm:gap-5">
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 Partido
@@ -2938,7 +2938,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                   )
                 }
                 disabled={!seasonId || !competitionId || !stageId}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   {!seasonId
@@ -2981,7 +2981,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                   )
                 }
                 disabled={!matchId || teamsLoading}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
               >
                 <option value={0}>
                   {!matchId
@@ -3010,9 +3010,9 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
             ==================================================== */}
 
         {teamId > 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 sm:p-4 md:p-5">
 
-            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="mb-4 flex min-w-0 flex-col gap-3 sm:mb-5 sm:flex-row sm:items-center sm:justify-between">
 
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">
@@ -3035,7 +3035,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
               </div>
 
               {currentItem && (
-                <div className="rounded-lg bg-slate-100 px-4 py-2 text-right">
+                <div className="w-full rounded-lg bg-slate-100 px-3 py-2 text-left sm:w-auto sm:px-4 sm:text-right">
 
                   <p className="text-xs uppercase tracking-wide text-slate-500">
                     Posición
@@ -3055,12 +3055,12 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
             {historyLoading ||
             participationsLoading ||
             matchRatingsLoading ? (
-              <div className="rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500">
+              <div className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500 sm:p-6">
                 Cargando jugadores...
               </div>
             ) : orderedParticipations.length ===
               0 ? (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+              <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 sm:p-4">
                 {matchRating
                   ? "No se ha encontrado la participación correspondiente a esta valoración."
                   : "Todos los jugadores de este equipo ya tienen una valoración registrada para este partido."}
@@ -3070,7 +3070,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
 
                 {/* DATOS DEL JUGADOR */}
 
-                <div className="mb-6 grid gap-4 rounded-lg bg-slate-50 p-5 md:grid-cols-4">
+                <div className="mb-5 grid grid-cols-1 gap-4 rounded-lg bg-slate-50 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-4">
 
                   <div>
                     <span className="block text-xs font-medium uppercase text-slate-500">
@@ -3122,7 +3122,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
 
                 {/* NOTAS */}
 
-                <div className="grid gap-5 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
 
                   {/* MARCA */}
 
@@ -3143,7 +3143,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                         )
                       }
                       placeholder="0 - 3"
-                      className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+                      className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
                     />
 
                     <p className="mt-1 text-xs text-slate-500">
@@ -3170,7 +3170,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                         )
                       }
                       placeholder="0 - 4"
-                      className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+                      className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
                     />
 
                     <p className="mt-1 text-xs text-slate-500">
@@ -3199,7 +3199,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                         )
                       }
                       placeholder="0 - 10"
-                      className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+                      className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
                     />
 
                     <p className="mt-1 text-xs text-slate-500">
@@ -3228,7 +3228,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                         )
                       }
                       placeholder="0 - 10"
-                      className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+                      className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
                     />
 
                     <p className="mt-1 text-xs text-slate-500">
@@ -3242,9 +3242,9 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                     PROGRESO
                     ================================================= */}
 
-                <div className="mt-6">
+                <div className="mt-5 sm:mt-6">
 
-                  <div className="mb-2 flex justify-between text-xs text-slate-500">
+                  <div className="mb-2 flex items-center justify-between gap-3 text-xs text-slate-500">
 
                     <span>
                       Progreso
@@ -3283,7 +3283,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
         {teamId > 0 &&
           orderedParticipations.length >
             0 && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800 sm:p-4">
 
               <p className="font-semibold">
                 Carga secuencial
@@ -3312,13 +3312,13 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
             BOTONES
             ==================================================== */}
 
-        <div className="flex justify-end gap-3 border-t pt-6">
+        <div className="flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:justify-end sm:pt-6">
 
           <button
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             Cancelar
           </button>
@@ -3335,7 +3335,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                   matchRatingsLoading ||
                   !currentParticipation
                 }
-                className="rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 {saving
                   ? "Guardando..."
@@ -3354,7 +3354,7 @@ Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
                 saving ||
                 !currentParticipation
               }
-              className="rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               {saving
                 ? "Guardando..."

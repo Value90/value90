@@ -2233,8 +2233,8 @@ export default function PlayerSquadImportForm({
 
   if (loading) {
     return (
-      <div className="rounded-xl border bg-white p-6 shadow">
-        <h2 className="text-xl font-bold text-slate-800">
+      <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-5 md:p-6">
+        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
           Importar plantilla
         </h2>
 
@@ -2252,14 +2252,14 @@ export default function PlayerSquadImportForm({
    */
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow">
+    <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-5 md:p-6">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-800">
+        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
           Importar plantilla
         </h2>
 
@@ -2275,7 +2275,7 @@ export default function PlayerSquadImportForm({
           ====================================================== */}
 
       {error && (
-        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:p-4">
           <strong className="font-semibold">
             Revisa los siguientes errores:
           </strong>
@@ -2287,7 +2287,7 @@ export default function PlayerSquadImportForm({
       )}
 
       {success && (
-        <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+        <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 sm:p-4">
           {success}
         </div>
       )}
@@ -2296,13 +2296,13 @@ export default function PlayerSquadImportForm({
           DATOS DE LA PLANTILLA
           ====================================================== */}
 
-      <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-5">
+      <div className="mb-5 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:mb-6 sm:p-5">
 
         <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
           Datos de la plantilla
         </h3>
 
-        <div className="grid gap-5 md:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-5">
 
           {/* TEMPORADA */}
 
@@ -2320,7 +2320,7 @@ export default function PlayerSquadImportForm({
                   )
                 )
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm sm:px-4"
             >
               <option value={0}>
                 Selecciona temporada
@@ -2358,7 +2358,7 @@ export default function PlayerSquadImportForm({
               disabled={
                 !seasonId
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100 sm:px-4"
             >
               <option value={0}>
                 Selecciona competición
@@ -2404,7 +2404,7 @@ export default function PlayerSquadImportForm({
               disabled={
                 !competitionId
               }
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100 sm:px-4"
             >
               <option value={0}>
                 Selecciona equipo
@@ -2427,7 +2427,7 @@ export default function PlayerSquadImportForm({
 
           {selectedCompetition?.competitionType ===
             "National Team" && (
-            <div className="md:col-span-1">
+            <div className="min-w-0 lg:col-span-1">
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 País para todos
               </label>
@@ -2457,7 +2457,7 @@ export default function PlayerSquadImportForm({
                       Number(event.target.value)
                     )
                   }
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm sm:px-4"
                 >
                   <option value={0}>
                     Selecciona país
@@ -2588,7 +2588,7 @@ Pedro Porro`}
 
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
 
                 <table className="w-full text-sm">
 
@@ -2799,7 +2799,7 @@ Pedro Porro`}
               </p>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
 
               <table className="w-full text-sm">
 

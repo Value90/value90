@@ -179,13 +179,13 @@ export default function CompetitionsTable({
             row.original;
 
           return (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 sm:flex-nowrap">
               <button
                 type="button"
                 onClick={() =>
                   onEdit(competition)
                 }
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium hover:bg-slate-100 sm:px-3 sm:text-sm"
               >
                 Editar
               </button>
@@ -195,7 +195,7 @@ export default function CompetitionsTable({
                 onClick={() =>
                   onDelete(competition)
                 }
-                className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 sm:px-3 sm:text-sm"
               >
                 Eliminar
               </button>
@@ -213,7 +213,7 @@ export default function CompetitionsTable({
 
   if (loading) {
     return (
-      <div className="rounded-xl border bg-white p-6 text-sm text-slate-500">
+      <div className="w-full min-w-0 rounded-xl border bg-white p-4 text-sm text-slate-500 sm:p-6">
         Cargando competiciones...
       </div>
     );
@@ -221,16 +221,18 @@ export default function CompetitionsTable({
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div className="w-full min-w-0 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:p-4">
         {error}
       </div>
     );
   }
 
   return (
-    <DataTable
-      data={competitions}
-      columns={columns}
-    />
+    <div className="w-full min-w-0">
+      <DataTable
+        data={competitions}
+        columns={columns}
+      />
+    </div>
   );
 }

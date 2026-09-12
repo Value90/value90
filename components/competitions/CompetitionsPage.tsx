@@ -1,165 +1,312 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-import CompetitionsTable from "@/components/competitions/CompetitionsTable";
-import CompetitionForm from "@/components/competitions/CompetitionForm";
-import DeleteCompetitionDialog from "@/components/competitions/DeleteCompetitionDialog";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
-  getCompetitions,
-  deleteCompetition,
-  type Competition,
-} from "@/services/competition.service";
+  getMatchRatings,
+  type MatchRating,
+} from "@/services/match-rating.service";
 
-export default function CompetitionsPage() {
-  const [competitions, setCompetitions] =
-    useState<Competition[]>([]);
+import {
+  getPlayers,
+  type Player,
+} from "@/services/player.service";
 
-  const [loading, setLoading] =
-    useState(true);
+import StatCard from "@/components/dashboard/StatCard";
 
-  const [error, setError] =
-    useState("");
-
-  const [showForm, setShowForm] =
-    useState(false);
-
-  const [
-    editingCompetition,
-    setEditingCompetition,
-  ] = useState<Competition | null>(null);
-
-  const [
-    deletingCompetition,
-    setDeletingCompetition,
-  ] = useState<Competition | null>(null);
-
+export default function DatosV90Page() {
   /*
    * ============================================================
-   * CARGAR COMPETICIONES
+   * DATOS
    * ============================================================
    */
 
-  const loadCompetitions = async () => {
-    try {
-      setLoading(true);
-      setError("");
+  const [matchRatings, setMatchRatings] =
+    useState<MatchRating[]>([]);
 
-      const data = await getCompetitions();
+  const [matchRatingsLoading, setMatchRatingsLoading] =
+    useState(true);
 
-      setCompetitions(data);
-    } catch (error) {
-      console.error(
-        "Error cargando competiciones:",
-        error
-      );
+  /*
+   * ============================================================
+   * JUGADORES
+   *
+   * getPlayers() trabaja con Supabase y devuelve
+   * Promise<Player[]>.
+   * ============================================================
+   */
 
-      setCompetitions([]);
+  const [players, setPlayers] =
+    useState<Player[]>([]);
 
-      setError(
-        "No se han podido cargar las competiciones."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [playersLoading, setPlayersLoading] =
+    useState(true);
+
+  /*
+   * ============================================================
+   * CARGAR VALORACIONES DESDE SUPABASE
+   * ============================================================
+   */
 
   useEffect(() => {
-    loadCompetitions();
+    let mounted = true;
+
+    async function loadMatchRatings() {
+      try {
+        setMatchRatingsLoading(true);
+
+        const data = await getMatchRatings();
+
+        if (!mounted) {
+          return;
+        }
+
+        setMatchRatings(data);
+      } catch (error) {
+        console.error(
+          "Error cargando valoraciones para Datos V90:",
+          error
+        );
+
+        if (mounted) {
+          setMatchRatings([]);
+        }
+      } finally {
+        if (mounted) {
+          setMatchRatingsLoading(false);
+        }
+      }
+    }
+
+    loadMatchRatings();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   /*
    * ============================================================
-   * NUEVA COMPETICIÓN
+   * CARGAR JUGADORES DESDE SUPABASE
    * ============================================================
    */
 
-  const handleNewCompetition = () => {
-    setEditingCompetition(null);
-    setShowForm(true);
-  };
+  useEffect(() => {
+    let mounted = true;
 
-  /*
-   * ============================================================
-   * EDITAR
-   * ============================================================
-   */
+    async function loadPlayers() {
+      try {
+        setPlayersLoading(true);
 
-  const handleEdit = (
-    competition: Competition
-  ) => {
-    setEditingCompetition(competition);
-    setShowForm(true);
-  };
+        const data = await getPlayers();
 
-  /*
-   * ============================================================
-   * ELIMINAR
-   * ============================================================
-   */
+        if (!mounted) {
+          return;
+        }
 
-  const handleDelete = (
-    competition: Competition
-  ) => {
-    setDeletingCompetition(competition);
-  };
+        setPlayers(data);
+      } catch (error) {
+        console.error(
+          "Error cargando jugadores para Datos V90:",
+          error
+        );
 
-  /*
-   * ============================================================
-   * CONFIRMAR ELIMINACIÓN
-   * ============================================================
-   */
-
-  const handleConfirmDelete = async () => {
-    if (!deletingCompetition) {
-      return;
+        if (mounted) {
+          setPlayers([]);
+        }
+      } finally {
+        if (mounted) {
+          setPlayersLoading(false);
+        }
+      }
     }
 
-    try {
-      setError("");
+    loadPlayers();
 
-      await deleteCompetition(
-        deletingCompetition.id
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /*
+   * ============================================================
+   * MÉTRICAS
+   * ============================================================
+   */
+
+  const totalRatings =
+    matchRatings.length;
+
+  const ratingsWithExternalAverage =
+    useMemo(() => {
+      return matchRatings.filter(
+        (rating) =>
+          rating.externalAverage !== null
+      ).length;
+    }, [matchRatings]);
+
+  const ratingsWithV90MatchRating =
+    useMemo(() => {
+      return matchRatings.filter(
+        (rating) =>
+          rating.value90MatchRating !== null
+      ).length;
+    }, [matchRatings]);
+
+  const ratingsWithFinalRating =
+    useMemo(() => {
+      return matchRatings.filter(
+        (rating) =>
+          rating.finalMatchRating !== null
+      ).length;
+    }, [matchRatings]);
+
+  const ratingsWithConfidence =
+    useMemo(() => {
+      return matchRatings.filter(
+        (rating) =>
+          rating.confidence !== null
+      ).length;
+    }, [matchRatings]);
+
+  /*
+   * ============================================================
+   * MEDIAS
+   * ============================================================
+   */
+
+  const externalAverage =
+    useMemo(() => {
+      const values = matchRatings
+        .map(
+          (rating) =>
+            rating.externalAverage
+        )
+        .filter(
+          (value): value is number =>
+            value !== null
+        );
+
+      if (values.length === 0) {
+        return null;
+      }
+
+      const total = values.reduce(
+        (sum, value) =>
+          sum + value,
+        0
       );
 
-      setDeletingCompetition(null);
+      return total / values.length;
+    }, [matchRatings]);
 
-      await loadCompetitions();
-    } catch (error) {
-      console.error(
-        "Error eliminando competición:",
-        error
+  const v90MatchAverage =
+    useMemo(() => {
+      const values = matchRatings
+        .map(
+          (rating) =>
+            rating.value90MatchRating
+        )
+        .filter(
+          (value): value is number =>
+            value !== null
+        );
+
+      if (values.length === 0) {
+        return null;
+      }
+
+      const total = values.reduce(
+        (sum, value) =>
+          sum + value,
+        0
       );
 
-      setError(
-        "No se ha podido eliminar la competición."
+      return total / values.length;
+    }, [matchRatings]);
+
+  const finalRatingAverage =
+    useMemo(() => {
+      const values = matchRatings
+        .map(
+          (rating) =>
+            rating.finalMatchRating
+        )
+        .filter(
+          (value): value is number =>
+            value !== null
+        );
+
+      if (values.length === 0) {
+        return null;
+      }
+
+      const total = values.reduce(
+        (sum, value) =>
+          sum + value,
+        0
       );
+
+      return total / values.length;
+    }, [matchRatings]);
+
+  /*
+   * ============================================================
+   * ÚLTIMAS VALORACIONES
+   * ============================================================
+   */
+
+  const recentRatings =
+    useMemo(() => {
+      return [...matchRatings]
+        .sort(
+          (a, b) =>
+            b.id - a.id
+        )
+        .slice(0, 10);
+    }, [matchRatings]);
+
+  /*
+   * ============================================================
+   * REPRESENTACIÓN DE VALORES
+   * ============================================================
+   */
+
+  const formatValue = (
+    value: number | null,
+    decimals = 2
+  ) => {
+    if (value === null) {
+      return "—";
     }
+
+    return value.toFixed(decimals);
   };
 
   /*
    * ============================================================
-   * CERRAR FORMULARIO
+   * NOMBRE DEL JUGADOR
    * ============================================================
    */
 
-  const handleCloseForm = () => {
-    setShowForm(false);
-    setEditingCompetition(null);
-  };
+  const getPlayerName = (
+    playerId: number
+  ) => {
+    if (playersLoading) {
+      return "Cargando...";
+    }
 
-  /*
-   * ============================================================
-   * GUARDADO
-   * ============================================================
-   */
-
-  const handleSaved = async () => {
-    setShowForm(false);
-    setEditingCompetition(null);
-
-    await loadCompetitions();
+    return (
+      players.find(
+        (player) =>
+          player.id === playerId
+      )?.name ??
+      "Jugador desconocido"
+    );
   };
 
   /*
@@ -169,88 +316,360 @@ export default function CompetitionsPage() {
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
 
-      {/* CABECERA */}
+      {/* ======================================================
+          CABECERA
+          ====================================================== */}
 
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-6 flex min-w-0 flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
 
         <div>
 
-          <h1 className="text-3xl font-bold">
-            Competiciones
+          <h1 className="text-3xl font-bold text-slate-800">
+            Datos V90
           </h1>
 
-          <p className="mt-2 text-slate-600">
-            Gestión de las competiciones registradas
-            en Value90.
+          <p className="mt-2 text-sm leading-6 text-slate-600 sm:text-base">
+            Información generada y calculada por el
+            motor de valoración V90.
           </p>
 
         </div>
 
-        <button
-          type="button"
-          onClick={handleNewCompetition}
-          className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-700"
-        >
-          + Nueva competición
-        </button>
-
       </div>
 
-      {/* ERROR */}
 
-      {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
+      {/* ======================================================
+          1. ESTADO DEL MOTOR
+          ====================================================== */}
+
+      <section className="mb-10">
+
+        <div className="mb-5">
+
+          <h2 className="text-xl font-bold text-slate-800">
+            Estado del motor V90
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Estado actual de los cálculos disponibles
+            a partir de las valoraciones registradas.
+          </p>
+
         </div>
-      )}
 
-      {/* RESUMEN */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
 
-      <p className="mb-6 text-slate-700">
+          <StatCard
+            title="Valoraciones"
+            value={
+              matchRatingsLoading
+                ? "..."
+                : totalRatings.toString()
+            }
+          />
 
-        Total de competiciones:{" "}
+          <StatCard
+            title="Media externa calculada"
+            value={
+              matchRatingsLoading
+                ? "..."
+                : ratingsWithExternalAverage.toString()
+            }
+          />
 
-        <span className="font-semibold">
-          {loading
-            ? "..."
-            : competitions.length}
-        </span>
+          <StatCard
+            title="V90 Match Rating calculado"
+            value={
+              matchRatingsLoading
+                ? "..."
+                : ratingsWithV90MatchRating.toString()
+            }
+          />
 
-      </p>
+          <StatCard
+            title="Valoración final calculada"
+            value={
+              matchRatingsLoading
+                ? "..."
+                : ratingsWithFinalRating.toString()
+            }
+          />
 
-      {/* FORMULARIO / TABLA */}
-
-      {showForm ? (
-
-        <div className="mb-8">
-          <CompetitionForm
-           competition={editingCompetition}
-           onClose={handleCloseForm}
-           onSaved={handleSaved}
-         />
         </div>
-      ) : (
-        <CompetitionsTable
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-        />
-      )}
-      
-      {/* DIÁLOGO ELIMINAR */}
 
-      <DeleteCompetitionDialog
-        competition={
-          deletingCompetition
-        }
-        onConfirm={
-          handleConfirmDelete
-        }
-        onCancel={() =>
-          setDeletingCompetition(null)
-        }
-      />
+      </section>
+
+
+      {/* ======================================================
+          2. MEDIAS V90
+          ====================================================== */}
+
+      <section className="mb-10">
+
+        <div className="mb-5">
+
+          <h2 className="text-xl font-bold text-slate-800">
+            Medias V90
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Valores agregados disponibles actualmente.
+          </p>
+
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+
+          <StatCard
+            title="Media externa"
+            value={
+              matchRatingsLoading
+                ? "..."
+                : externalAverage === null
+                ? "—"
+                : formatValue(
+                    externalAverage
+                  )
+            }
+          />
+
+          <StatCard
+            title="Media V90 Match Rating"
+            value={
+              matchRatingsLoading
+                ? "..."
+                : v90MatchAverage === null
+                ? "—"
+                : formatValue(
+                    v90MatchAverage
+                  )
+            }
+          />
+
+          <StatCard
+            title="Media valoración final"
+            value={
+              matchRatingsLoading
+                ? "..."
+                : finalRatingAverage === null
+                ? "—"
+                : formatValue(
+                    finalRatingAverage
+                  )
+            }
+          />
+
+        </div>
+
+      </section>
+
+
+      {/* ======================================================
+          3. CONFIANZA
+          ====================================================== */}
+
+      <section className="mb-10">
+
+        <div className="mb-5">
+
+          <h2 className="text-xl font-bold text-slate-800">
+            Confianza del cálculo
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Información relacionada con la confianza
+            asignada por el motor V90.
+          </p>
+
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+
+          <StatCard
+            title="Valoraciones con confianza"
+            value={
+              matchRatingsLoading
+                ? "..."
+                : ratingsWithConfidence.toString()
+            }
+          />
+
+          <StatCard
+            title="Pendientes de cálculo"
+            value={
+              matchRatingsLoading
+                ? "..."
+                : Math.max(
+                    totalRatings -
+                      ratingsWithFinalRating,
+                    0
+                  ).toString()
+            }
+          />
+
+        </div>
+
+      </section>
+
+
+      {/* ======================================================
+          4. ÚLTIMAS VALORACIONES
+          ====================================================== */}
+
+      <section>
+
+        <div className="mb-5">
+
+          <h2 className="text-xl font-bold text-slate-800">
+            Últimas valoraciones procesadas
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Últimos registros disponibles en el motor V90.
+          </p>
+
+        </div>
+
+        <div className="overflow-hidden rounded-xl border bg-white shadow">
+
+          <div className="overflow-x-auto">
+
+            <table className="w-full">
+
+              <thead className="bg-slate-100">
+
+                <tr>
+
+                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                    Jugador
+                  </th>
+
+                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                    Match Rating
+                  </th>
+
+                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                    Media externa
+                  </th>
+
+                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                    V90 Match
+                  </th>
+
+                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                    Valoración final
+                  </th>
+
+                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                    Confianza
+                  </th>
+
+                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                    Versión
+                  </th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {matchRatingsLoading ? (
+
+                  <tr>
+
+                    <td
+                      colSpan={7}
+                      className="p-8 text-center text-slate-500"
+                    >
+                      Cargando valoraciones...
+                    </td>
+
+                  </tr>
+
+                ) : recentRatings.length === 0 ? (
+
+                  <tr>
+
+                    <td
+                      colSpan={7}
+                      className="p-8 text-center text-slate-500"
+                    >
+                      Todavía no existen valoraciones
+                      procesadas por el motor V90.
+                    </td>
+
+                  </tr>
+
+                ) : (
+
+                  recentRatings.map(
+                    (rating) => (
+
+                      <tr
+                        key={rating.id}
+                        className="border-t hover:bg-slate-50"
+                      >
+
+                        <td className="p-4 font-medium text-slate-800">
+                          {getPlayerName(
+                            rating.playerId
+                          )}
+                        </td>
+
+                        <td className="p-4 text-slate-700">
+                          {formatValue(
+                            rating.finalMatchRating
+                          )}
+                        </td>
+
+                        <td className="p-4 text-slate-700">
+                          {formatValue(
+                            rating.externalAverage
+                          )}
+                        </td>
+
+                        <td className="p-4 text-slate-700">
+                          {formatValue(
+                            rating.value90MatchRating
+                          )}
+                        </td>
+
+                        <td className="p-4 text-slate-700">
+                          {formatValue(
+                            rating.finalMatchRating
+                          )}
+                        </td>
+
+                        <td className="p-4 text-slate-700">
+                          {formatValue(
+                            rating.confidence
+                          )}
+                        </td>
+
+                        <td className="p-4 text-slate-700">
+                          {rating.calculationVersion ??
+                            "—"}
+                        </td>
+
+                      </tr>
+
+                    )
+                  )
+
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+        </div>
+
+      </section>
 
     </div>
   );

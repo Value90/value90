@@ -316,21 +316,21 @@ export default function DatosV90Page() {
    */
 
   return (
-    <div className="w-full p-8">
+    <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
 
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-6 flex min-w-0 flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
 
         <div>
 
-          <h1 className="text-3xl font-bold text-slate-800">
+          <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">
             Datos V90
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
             Información generada y calculada por el
             motor de valoración V90.
           </p>
@@ -344,22 +344,22 @@ export default function DatosV90Page() {
           1. ESTADO DEL MOTOR
           ====================================================== */}
 
-      <section className="mb-10">
+      <section className="mb-8 sm:mb-10">
 
-        <div className="mb-5">
+        <div className="mb-4 sm:mb-5">
 
-          <h2 className="text-xl font-bold text-slate-800">
+          <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
             Estado del motor V90
           </h2>
 
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm leading-5 text-slate-500">
             Estado actual de los cálculos disponibles
             a partir de las valoraciones registradas.
           </p>
 
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-4">
 
           <StatCard
             title="Valoraciones"
@@ -406,21 +406,21 @@ export default function DatosV90Page() {
           2. MEDIAS V90
           ====================================================== */}
 
-      <section className="mb-10">
+      <section className="mb-8 sm:mb-10">
 
-        <div className="mb-5">
+        <div className="mb-4 sm:mb-5">
 
-          <h2 className="text-xl font-bold text-slate-800">
+          <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
             Medias V90
           </h2>
 
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm leading-5 text-slate-500">
             Valores agregados disponibles actualmente.
           </p>
 
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
 
           <StatCard
             title="Media externa"
@@ -470,22 +470,22 @@ export default function DatosV90Page() {
           3. CONFIANZA
           ====================================================== */}
 
-      <section className="mb-10">
+      <section className="mb-8 sm:mb-10">
 
-        <div className="mb-5">
+        <div className="mb-4 sm:mb-5">
 
-          <h2 className="text-xl font-bold text-slate-800">
+          <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
             Confianza del cálculo
           </h2>
 
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm leading-5 text-slate-500">
             Información relacionada con la confianza
             asignada por el motor V90.
           </p>
 
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
 
           <StatCard
             title="Valoraciones con confianza"
@@ -520,53 +520,53 @@ export default function DatosV90Page() {
 
       <section>
 
-        <div className="mb-5">
+        <div className="mb-4 sm:mb-5">
 
-          <h2 className="text-xl font-bold text-slate-800">
+          <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
             Últimas valoraciones procesadas
           </h2>
 
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm leading-5 text-slate-500">
             Últimos registros disponibles en el motor V90.
           </p>
 
         </div>
 
-        <div className="overflow-hidden rounded-xl border bg-white shadow">
+        <div className="w-full min-w-0 overflow-hidden rounded-xl border bg-white shadow">
 
-          <div className="overflow-x-auto">
+          <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
 
-            <table className="w-full">
+            <table className="w-full min-w-[820px] whitespace-nowrap">
 
               <thead className="bg-slate-100">
 
                 <tr>
 
-                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-4 sm:text-sm">
                     Jugador
                   </th>
 
-                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-4 sm:text-sm">
                     Match Rating
                   </th>
 
-                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-4 sm:text-sm">
                     Media externa
                   </th>
 
-                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-4 sm:text-sm">
                     V90 Match
                   </th>
 
-                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-4 sm:text-sm">
                     Valoración final
                   </th>
 
-                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-4 sm:text-sm">
                     Confianza
                   </th>
 
-                  <th className="p-4 text-left text-sm font-semibold text-slate-700">
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 sm:px-4 sm:py-4 sm:text-sm">
                     Versión
                   </th>
 
@@ -582,7 +582,7 @@ export default function DatosV90Page() {
 
                     <td
                       colSpan={7}
-                      className="p-8 text-center text-slate-500"
+                      className="p-6 text-center text-sm text-slate-500 sm:p-8"
                     >
                       Cargando valoraciones...
                     </td>
@@ -595,7 +595,7 @@ export default function DatosV90Page() {
 
                     <td
                       colSpan={7}
-                      className="p-8 text-center text-slate-500"
+                      className="p-6 text-center text-sm text-slate-500 sm:p-8"
                     >
                       Todavía no existen valoraciones
                       procesadas por el motor V90.
@@ -613,43 +613,43 @@ export default function DatosV90Page() {
                         className="border-t hover:bg-slate-50"
                       >
 
-                        <td className="p-4 font-medium text-slate-800">
+                        <td className="px-3 py-3 font-medium text-sm text-slate-800 sm:px-4 sm:py-4">
                           {getPlayerName(
                             rating.playerId
                           )}
                         </td>
 
-                        <td className="p-4 text-slate-700">
+                        <td className="px-3 py-3 text-sm text-slate-700 sm:px-4 sm:py-4">
                           {formatValue(
                             rating.finalMatchRating
                           )}
                         </td>
 
-                        <td className="p-4 text-slate-700">
+                        <td className="px-3 py-3 text-sm text-slate-700 sm:px-4 sm:py-4">
                           {formatValue(
                             rating.externalAverage
                           )}
                         </td>
 
-                        <td className="p-4 text-slate-700">
+                        <td className="px-3 py-3 text-sm text-slate-700 sm:px-4 sm:py-4">
                           {formatValue(
                             rating.value90MatchRating
                           )}
                         </td>
 
-                        <td className="p-4 text-slate-700">
+                        <td className="px-3 py-3 text-sm text-slate-700 sm:px-4 sm:py-4">
                           {formatValue(
                             rating.finalMatchRating
                           )}
                         </td>
 
-                        <td className="p-4 text-slate-700">
+                        <td className="px-3 py-3 text-sm text-slate-700 sm:px-4 sm:py-4">
                           {formatValue(
                             rating.confidence
                           )}
                         </td>
 
-                        <td className="p-4 text-slate-700">
+                        <td className="px-3 py-3 text-sm text-slate-700 sm:px-4 sm:py-4">
                           {rating.calculationVersion ??
                             "—"}
                         </td>
