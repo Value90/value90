@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import {
   addCompetition,
   updateCompetition,
+  getCompetitionWeight,
+  upsertCompetitionWeight,
   type Competition,
 } from "@/services/competition.service";
 
@@ -118,6 +120,55 @@ export default function CompetitionForm({
 
   /*
    * ============================================================
+   * PESO V90 DE COMPETICIÓN
+   * ============================================================
+   *
+   * Solo estas cinco ligas tienen consideración de Liga 1:
+   *
+   *   LaLiga
+   *   Premier League
+   *   Serie A
+   *   Bundesliga
+   *   Ligue 1
+   *
+   * El resto de ligas se consideran Liga 2.
+   *
+   * Los pesos de competiciones que no son liga se dejan en
+   * 1.00 por defecto y pueden modificarse desde el formulario.
+   * ============================================================
+   */
+
+  const getDefaultV90Weight = (
+    competitionName: string,
+    type: Competition["competitionType"]
+  ): number => {
+    if (type !== "League") {
+      return 1.00;
+    }
+
+    const league1Names = new Set([
+      "laliga",
+      "la liga",
+      "premier league",
+      "serie a",
+      "bundesliga",
+      "ligue 1",
+    ]);
+
+    const normalizedName = competitionName
+      .trim()
+      .toLowerCase();
+
+    return league1Names.has(normalizedName)
+      ? 1.08
+      : 1.05;
+  };
+
+  const [v90Weight, setV90Weight] = useState(1.00);
+  const [weightLoading, setWeightLoading] = useState(false);
+
+  /*
+   * ============================================================
    * CARGAR DATOS DE LA COMPETICIÓN
    * ============================================================
    */
@@ -185,6 +236,16 @@ export default function CompetitionForm({
       return;
     }
 
+    if (
+      !Number.isFinite(v90Weight) ||
+      v90Weight < 0
+    ) {
+      setError(
+        "El peso V90 debe ser un número mayor o igual que 0."
+      );
+      return;
+    }
+
     const competitionData: Omit<
       Competition,
       "id"
@@ -203,16 +264,29 @@ export default function CompetitionForm({
     };
 
     try {
+      let competitionId: number;
+
       if (isEditing && competition) {
         await updateCompetition(
           competition.id,
           competitionData
         );
+
+        competitionId = competition.id;
       } else {
-        await addCompetition(
-          competitionData
-        );
+        const createdCompetition =
+          await addCompetition(
+            competitionData
+          );
+
+        competitionId = createdCompetition.id;
       }
+
+      await upsertCompetitionWeight(
+        competitionId,
+        v90Weight,
+        active
+      );
 
       onSaved?.();
       onClose();
@@ -451,6 +525,32 @@ export default function CompetitionForm({
 
           </select>
 
+        </div>
+
+        {/* PESO V90 */}
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-700">
+            Peso V90 *
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={v90Weight}
+            onChange={(event) =>
+              setV90Weight(
+                Number(event.target.value)
+              )
+            }
+            disabled={weightLoading}
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
+          />
+
+          <p className="mt-1.5 text-xs text-slate-500">
+            Liga 1: 1.08 · Liga 2: 1.05
+          </p>
         </div>
 
         {/* ESTADO */}

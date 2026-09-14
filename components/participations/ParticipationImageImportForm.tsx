@@ -1649,37 +1649,37 @@ export default function ParticipationImageImportForm({
           </div>
 
           <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
-            <table className="w-full min-w-[1080px] text-sm">
+            <table className="w-full min-w-[940px] text-xs sm:text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-white text-left">
-                  <th className="px-3 py-3 font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Dorsal
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Jugador
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Posición
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Estado
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Entrada
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Salida
                   </th>
-                  <th className="px-3 py-3 font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Minutos
                   </th>
-                  <th className="px-3 py-3 text-center font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 text-center font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Capitán
                   </th>
-                  <th className="px-3 py-3 text-center font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 text-center font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Conf. IA
                   </th>
-                  <th className="px-3 py-3 text-center font-semibold text-slate-600">
+                  <th className="px-2 py-2.5 text-center font-semibold text-slate-600 sm:px-3 sm:py-3">
                     Acción
                   </th>
                 </tr>
@@ -1701,7 +1701,7 @@ export default function ParticipationImageImportForm({
                       }
                     >
                       {/* DORSAL */}
-                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         <input
                           type="number"
                           min={1}
@@ -1720,7 +1720,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* JUGADOR */}
-                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         <div className="font-medium text-slate-800">
                           {player.playerName}
                         </div>
@@ -1732,7 +1732,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* POSICIÓN */}
-                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         <select
                           value={player.positionId ?? ""}
                           onChange={(event) =>
@@ -1742,7 +1742,7 @@ export default function ParticipationImageImportForm({
                             )
                           }
                           disabled={saving}
-                          className="w-44 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-slate-500 disabled:bg-slate-100"
+                          className="w-36 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs sm:text-sm outline-none focus:border-slate-500 disabled:bg-slate-100"
                         >
                           <option value="">
                             Seleccionar
@@ -1767,7 +1767,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* ESTADO */}
-                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         <select
                           value={player.participationState}
                           onChange={(event) =>
@@ -1800,7 +1800,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* ENTRADA */}
-                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         <input
                           type="number"
                           min={0}
@@ -1822,7 +1822,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* SALIDA */}
-                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         <input
                           type="number"
                           min={0}
@@ -1844,7 +1844,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* MINUTOS */}
-                      <td className="whitespace-nowrap px-2 py-3 sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 sm:px-3 sm:py-2.5">
                         <span
                           className={
                             `font-semibold ${
@@ -1859,7 +1859,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* CAPITÁN */}
-                      <td className="whitespace-nowrap px-2 py-3 text-center sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 text-center sm:px-3 sm:py-2.5">
                         <div className="flex flex-col items-center gap-1">
                           <input
                             type="checkbox"
@@ -1894,7 +1894,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* CONFIANZA IA */}
-                      <td className="whitespace-nowrap px-2 py-3 text-center sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 text-center sm:px-3 sm:py-2.5">
                         {player.confidence > 0 ? (
                           <span
                             className={
@@ -1915,7 +1915,7 @@ export default function ParticipationImageImportForm({
                       </td>
 
                       {/* QUITAR */}
-                      <td className="whitespace-nowrap px-2 py-3 text-center sm:px-3">
+                      <td className="whitespace-nowrap px-2 py-2 text-center sm:px-3 sm:py-2.5">
                         <button
                           type="button"
                           onClick={() =>
@@ -2259,13 +2259,13 @@ export default function ParticipationImageImportForm({
               Vista previa
             </p>
 
-            <div className="max-h-[600px] w-full overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 sm:p-3">
+            <div className="max-h-[420px] w-full overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 sm:max-h-[520px] sm:p-3">
               <img
                 src={
                   imagePreview
                 }
                 alt="Vista previa de la alineación"
-                className="mx-auto max-h-[560px] max-w-full w-auto rounded-md object-contain"
+                className="mx-auto max-h-[380px] w-auto max-w-full rounded-md object-contain sm:max-h-[480px]"
               />
             </div>
 

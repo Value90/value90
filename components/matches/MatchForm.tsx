@@ -88,17 +88,9 @@ export default function MatchForm({
           getStages(),
         ]);
 
-        setCompetitions(
-          competitionsData
-        );
-
-        setSeasons(
-          seasonsData
-        );
-
-        setStages(
-          stagesData
-        );
+        setCompetitions(competitionsData);
+        setSeasons(seasonsData);
+        setStages(stagesData);
       } catch (error) {
         console.error(
           "Error cargando datos del formulario de partidos:",
@@ -127,8 +119,7 @@ export default function MatchForm({
       try {
         setTeamsLoading(true);
 
-        const data =
-          await getTeams();
+        const data = await getTeams();
 
         setTeams(data);
       } catch (error) {
@@ -194,7 +185,6 @@ export default function MatchForm({
 
     loadTeamCompetitions();
   }, [seasonId]);
-
 
   const [stageId, setStageId] =
     useState(
@@ -268,8 +258,7 @@ export default function MatchForm({
   const selectedCompetition =
     competitions.find(
       (competition) =>
-        competition.id ===
-        Number(competitionId)
+        competition.id === Number(competitionId)
     );
 
   /*
@@ -281,8 +270,49 @@ export default function MatchForm({
   const selectedHomeTeam =
     teams.find(
       (team) =>
-        team.id ===
-        Number(homeTeamId)
+        team.id === Number(homeTeamId)
+    );
+
+  /*
+   * ============================================================
+   * IDs DE EQUIPOS REGISTRADOS EN LA COMPETICIÓN EXACTA
+   * ============================================================
+   *
+   * IMPORTANTE:
+   *
+   * Un equipo puede estar relacionado con varias competiciones
+   * dentro de una misma temporada.
+   *
+   * Ejemplo:
+   *
+   * Real Madrid
+   *   → LaLiga
+   *   → Champions League
+   *
+   * Si seleccionamos LaLiga, únicamente debe utilizarse la
+   * relación:
+   *
+   *   Real Madrid + LaLiga + temporada
+   *
+   * La relación con Champions NO debe influir.
+   *
+   * ============================================================
+   */
+
+  const registeredTeamIds =
+    new Set(
+      teamCompetitions
+        .filter(
+          (relation) =>
+            relation.active === true &&
+            relation.seasonId === Number(seasonId) &&
+            relation.competitionId ===
+              Number(competitionId)
+        )
+        .map(
+          (relation) =>
+            relation.teamId
+        )
     );
 
   /*
@@ -293,7 +323,11 @@ export default function MatchForm({
 
   const filteredTeams = [...teams]
     .filter((team) => {
-      if (!selectedCompetition || !seasonId) {
+      if (
+        !selectedCompetition ||
+        !seasonId ||
+        !competitionId
+      ) {
         return false;
       }
 
@@ -307,12 +341,25 @@ export default function MatchForm({
         selectedCompetition.competitionType ===
         "National Team"
       ) {
+        /*
+         * Competición FIFA:
+         *
+         * cualquier selección nacional.
+         */
+
         if (
           selectedCompetition.confederation ===
           "FIFA"
         ) {
           return team.type === "Selección";
         }
+
+        /*
+         * Competición de una confederación:
+         *
+         * únicamente selecciones pertenecientes
+         * a esa confederación.
+         */
 
         return (
           team.type === "Selección" &&
@@ -326,30 +373,22 @@ export default function MatchForm({
        * COMPETICIONES DE CLUBES
        * ========================================================
        *
-       * Un club solo aparece si está relacionado
-       * explícitamente con la competición Y temporada
-       * seleccionadas en hist_team_competitions.
+       * AQUÍ ESTÁ LA CORRECCIÓN PRINCIPAL.
        *
-       * Ya NO usamos:
+       * El equipo debe estar registrado exactamente en:
        *
-       *   team.competitionId
+       *   - la temporada seleccionada
+       *   - la competición seleccionada
+       *   - relación activa
        *
-       * porque ese campo solo representa la competición
-       * principal/histórica del equipo y no permite modelar
-       * correctamente una participación simultánea como:
+       * No importa que el equipo tenga además otras
+       * competiciones.
        *
-       *   Real Madrid → LaLiga + Champions
+       * ========================================================
        */
 
       const isRegisteredForCompetition =
-        teamCompetitions.some(
-          (relation) =>
-            relation.active &&
-            relation.teamId === team.id &&
-            relation.competitionId ===
-              Number(competitionId) &&
-            relation.seasonId === Number(seasonId)
-        );
+        registeredTeamIds.has(team.id);
 
       /*
        * Al editar un partido existente, conservamos
@@ -360,20 +399,29 @@ export default function MatchForm({
 
       const isCurrentEditedTeam =
         !!match &&
-        (team.id === match.homeTeamId ||
-          team.id === match.awayTeamId);
+        (
+          team.id === match.homeTeamId ||
+          team.id === match.awayTeamId
+        );
 
       return (
         team.type === "Club" &&
-        (isRegisteredForCompetition ||
-          isCurrentEditedTeam)
+        (
+          isRegisteredForCompetition ||
+          isCurrentEditedTeam
+        )
       );
     })
     .sort((a, b) =>
-      a.shortName.localeCompare(b.shortName, "es", {
-        sensitivity: "base",
-      })
+      a.shortName.localeCompare(
+        b.shortName,
+        "es",
+        {
+          sensitivity: "base",
+        }
+      )
     );
+
   /*
    * ============================================================
    * JORNADAS / FASES DISPONIBLES
@@ -480,6 +528,18 @@ export default function MatchForm({
      */
 
     setStageId("");
+
+    /*
+     * La relación equipo ↔ competición también cambia
+     * al cambiar de temporada.
+     *
+     * Limpiamos los equipos para evitar conservar
+     * una selección perteneciente a otra temporada.
+     */
+
+    setHomeTeamId("");
+    setAwayTeamId("");
+    setStadium("");
   };
 
   /*
@@ -505,8 +565,7 @@ export default function MatchForm({
     const selectedTeam =
       teams.find(
         (team) =>
-          team.id ===
-          Number(value)
+          team.id === Number(value)
       );
 
     if (!selectedTeam) {
@@ -652,13 +711,7 @@ export default function MatchForm({
     }
 
     /*
-     * DATOS DEL PARTIDO
-     */
-
-    /*
-     * ============================================================
      * DURACIÓN DEL PARTIDO
-     * ============================================================
      */
 
     if (
@@ -673,9 +726,7 @@ export default function MatchForm({
     }
 
     /*
-     * ============================================================
      * PENALTIS
-     * ============================================================
      */
 
     if (hasPenalties) {
@@ -686,36 +737,47 @@ export default function MatchForm({
         alert(
           "Introduce el resultado de la tanda de penaltis para ambos equipos."
         );
+
         return;
       }
 
-      const homePenalties = Number(homePenaltyScore);
-      const awayPenalties = Number(awayPenaltyScore);
+      const homePenalties =
+        Number(homePenaltyScore);
+
+      const awayPenalties =
+        Number(awayPenaltyScore);
 
       if (
-        !Number.isInteger(homePenalties) ||
-        !Number.isInteger(awayPenalties) ||
+        !Number.isInteger(
+          homePenalties
+        ) ||
+        !Number.isInteger(
+          awayPenalties
+        ) ||
         homePenalties < 0 ||
         awayPenalties < 0
       ) {
         alert(
           "El resultado de los penaltis debe ser un número entero igual o superior a 0."
         );
+
         return;
       }
 
-      if (homePenalties === awayPenalties) {
+      if (
+        homePenalties ===
+        awayPenalties
+      ) {
         alert(
           "La tanda de penaltis no puede terminar empatada."
         );
+
         return;
       }
     }
 
     /*
-     * ============================================================
      * DATOS DEL PARTIDO
-     * ============================================================
      */
 
     const matchData: Omit<
@@ -752,13 +814,15 @@ export default function MatchForm({
 
       matchDuration,
 
-      homePenaltyScore: hasPenalties
-        ? Number(homePenaltyScore)
-        : null,
+      homePenaltyScore:
+        hasPenalties
+          ? Number(homePenaltyScore)
+          : null,
 
-      awayPenaltyScore: hasPenalties
-        ? Number(awayPenaltyScore)
-        : null,
+      awayPenaltyScore:
+        hasPenalties
+          ? Number(awayPenaltyScore)
+          : null,
     };
 
     /*
@@ -777,14 +841,13 @@ export default function MatchForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="w-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:p-6 lg:p-8"
+      className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 md:p-6 lg:p-8"
     >
       {/* ======================================================
           CABECERA
           ====================================================== */}
 
       <div className="mb-6 sm:mb-8">
-
         <h2 className="text-xl font-bold sm:text-2xl">
           {match
             ? "Editar partido"
@@ -796,20 +859,19 @@ export default function MatchForm({
             ? "Modifica los datos del partido."
             : "Introduce los datos del nuevo partido."}
         </p>
-
       </div>
 
       {/* ======================================================
           FORMULARIO
           ====================================================== */}
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 md:gap-6">
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 md:gap-6">
 
         {/* ====================================================
             COMPETICIÓN
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Competición
           </label>
@@ -821,7 +883,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={dataLoading}
           >
@@ -853,7 +915,7 @@ export default function MatchForm({
             TEMPORADA
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Temporada
           </label>
@@ -865,7 +927,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={dataLoading}
           >
@@ -897,7 +959,7 @@ export default function MatchForm({
             FASE / JORNADA
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Fase / Jornada
           </label>
@@ -909,7 +971,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={
               dataLoading ||
@@ -944,7 +1006,7 @@ export default function MatchForm({
             FECHA
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Fecha
           </label>
@@ -961,7 +1023,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
           />
         </div>
@@ -970,7 +1032,7 @@ export default function MatchForm({
             EQUIPO LOCAL
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Equipo local
           </label>
@@ -982,10 +1044,11 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={
               !competitionId ||
+              !seasonId ||
               teamsLoading
             }
           >
@@ -994,10 +1057,12 @@ export default function MatchForm({
                 ? "Cargando equipos..."
                 : !competitionId
                   ? "Selecciona primero una competición"
-                  : filteredTeams.length ===
-                      0
-                    ? "No hay equipos disponibles"
-                    : "Seleccionar equipo local"}
+                  : !seasonId
+                    ? "Selecciona primero una temporada"
+                    : filteredTeams.length ===
+                        0
+                      ? "No hay equipos disponibles"
+                      : "Seleccionar equipo local"}
             </option>
 
             {filteredTeams.map(
@@ -1006,7 +1071,8 @@ export default function MatchForm({
                   key={team.id}
                   value={team.id}
                 >
-                  {team.shortName} - {team.name}
+                  {team.shortName} -{" "}
+                  {team.name}
                 </option>
               )
             )}
@@ -1024,7 +1090,7 @@ export default function MatchForm({
             EQUIPO VISITANTE
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Equipo visitante
           </label>
@@ -1036,10 +1102,11 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
             disabled={
               !competitionId ||
+              !seasonId ||
               teamsLoading
             }
           >
@@ -1048,10 +1115,12 @@ export default function MatchForm({
                 ? "Cargando equipos..."
                 : !competitionId
                   ? "Selecciona primero una competición"
-                  : filteredTeams.length ===
-                      0
-                    ? "No hay equipos disponibles"
-                    : "Seleccionar equipo visitante"}
+                  : !seasonId
+                    ? "Selecciona primero una temporada"
+                    : filteredTeams.length ===
+                        0
+                      ? "No hay equipos disponibles"
+                      : "Seleccionar equipo visitante"}
             </option>
 
             {filteredTeams.map(
@@ -1060,7 +1129,8 @@ export default function MatchForm({
                   key={team.id}
                   value={team.id}
                 >
-                  {team.shortName} - {team.name}
+                  {team.shortName} -{" "}
+                  {team.name}
                 </option>
               )
             )}
@@ -1071,7 +1141,7 @@ export default function MatchForm({
             GOLES LOCAL
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Goles local
           </label>
@@ -1085,7 +1155,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
           />
         </div>
 
@@ -1093,7 +1163,7 @@ export default function MatchForm({
             GOLES VISITANTE
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Goles visitante
           </label>
@@ -1107,7 +1177,7 @@ export default function MatchForm({
                 event.target.value
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
           />
         </div>
 
@@ -1115,8 +1185,7 @@ export default function MatchForm({
             ESTADIO
             ==================================================== */}
 
-        <div className="md:col-span-2">
-
+        <div className="min-w-0 md:col-span-2">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Estadio
           </label>
@@ -1135,7 +1204,7 @@ export default function MatchForm({
                 ? "Estadio del club"
                 : "Introduce el estadio"
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
           />
 
           {selectedHomeTeam?.type ===
@@ -1156,14 +1225,13 @@ export default function MatchForm({
               estadio del partido.
             </p>
           )}
-
         </div>
 
         {/* ====================================================
             ESTADO
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Estado
           </label>
@@ -1175,7 +1243,7 @@ export default function MatchForm({
                 event.target.value as Match["status"]
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
           >
             <option value="Programado">
               Programado
@@ -1195,7 +1263,7 @@ export default function MatchForm({
             DURACIÓN DEL PARTIDO
             ==================================================== */}
 
-        <div>
+        <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Duración
           </label>
@@ -1207,7 +1275,7 @@ export default function MatchForm({
                 Number(event.target.value)
               )
             }
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
             required
           >
             <option value={90}>
@@ -1229,13 +1297,15 @@ export default function MatchForm({
             PENALTIS
             ==================================================== */}
 
-        <div className="md:col-span-2">
+        <div className="min-w-0 md:col-span-2">
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-300 bg-white px-4 py-3 hover:bg-slate-50">
             <input
               type="checkbox"
               checked={hasPenalties}
               onChange={(event) =>
-                setHasPenalties(event.target.checked)
+                setHasPenalties(
+                  event.target.checked
+                )
               }
               className="h-5 w-5 rounded border-slate-300"
             />
@@ -1247,10 +1317,11 @@ export default function MatchForm({
         </div>
 
         {hasPenalties && (
-          <div className="md:col-span-2 grid grid-cols-1 gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 sm:gap-5 sm:p-5">
-            <div>
+          <div className="grid min-w-0 grid-cols-1 gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 sm:gap-5 sm:p-5 md:col-span-2">
+            <div className="min-w-0">
               <label className="mb-2 block text-sm font-semibold text-slate-700">
-                {selectedHomeTeam?.name ?? "Equipo local"}
+                {selectedHomeTeam?.name ??
+                  "Equipo local"}
               </label>
 
               <input
@@ -1262,16 +1333,18 @@ export default function MatchForm({
                     event.target.value
                   )
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 {teams.find(
                   (team) =>
-                    team.id === Number(awayTeamId)
-                )?.name ?? "Equipo visitante"}
+                    team.id ===
+                    Number(awayTeamId)
+                )?.name ??
+                  "Equipo visitante"}
               </label>
 
               <input
@@ -1283,12 +1356,11 @@ export default function MatchForm({
                     event.target.value
                   )
                 }
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
               />
             </div>
           </div>
         )}
-
       </div>
 
       {/* ======================================================
@@ -1319,7 +1391,6 @@ export default function MatchForm({
         </button>
 
       </div>
-
     </form>
   );
 }

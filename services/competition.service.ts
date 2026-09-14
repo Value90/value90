@@ -40,6 +40,72 @@ export async function getCompetitions(): Promise<Competition[]> {
 
 /*
  * ============================================================
+ * OBTENER PESO V90 DE UNA COMPETICIÓN
+ * ============================================================
+ */
+
+export async function getCompetitionWeight(
+  competitionId: number
+): Promise<number | null> {
+  const { data, error } = await supabase
+    .from("competition_weights")
+    .select("competition_id, peso_v90, active")
+    .eq("competition_id", competitionId)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+      "Error obteniendo peso V90 de competición:",
+      JSON.stringify(error, null, 2)
+    );
+
+    throw error;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return Number(data.peso_v90);
+}
+
+/*
+ * ============================================================
+ * GUARDAR / ACTUALIZAR PESO V90 DE UNA COMPETICIÓN
+ * ============================================================
+ */
+
+export async function upsertCompetitionWeight(
+  competitionId: number,
+  pesoV90: number,
+  active = true
+): Promise<void> {
+  const { error } = await supabase
+    .from("competition_weights")
+    .upsert(
+      {
+        competition_id: competitionId,
+        peso_v90: pesoV90,
+        active,
+      },
+      {
+        onConflict: "competition_id",
+      }
+    );
+
+  if (error) {
+    console.error(
+      "Error guardando peso V90 de competición:",
+      JSON.stringify(error, null, 2)
+    );
+
+    throw error;
+  }
+}
+
+/*
+ * ============================================================
  * CREAR COMPETICIÓN
  * ============================================================
  */

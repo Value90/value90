@@ -12,6 +12,11 @@ import { getParticipations } from "@/services/participation.service";
 import { getPlayerMatchStats } from "@/services/player-match-stat.service";
 import { getMatchRatings } from "@/services/match-rating.service";
 
+import {
+  getPlayerV90MatchSummary,
+  type PlayerV90MatchSummary,
+} from "@/services/v90-match.service";
+
 import StatCard from "@/components/dashboard/StatCard";
 
 export default function Dashboard() {
@@ -81,6 +86,19 @@ export default function Dashboard() {
     matchRatingsLoading,
     setMatchRatingsLoading,
   ] = useState(true);
+
+  const [v90Summary, setV90Summary] =
+    useState<PlayerV90MatchSummary>({
+      total: 0,
+      calculated: 0,
+      pending: 0,
+      errors: 0,
+      v90MatchAverage: null,
+      playerV90Average: null,
+    });
+
+  const [v90Loading, setV90Loading] =
+    useState(true);
 
   /*
    * ============================================================
@@ -426,6 +444,54 @@ export default function Dashboard() {
 
   /*
    * ============================================================
+   * CARGAR MOTOR V90
+   * ============================================================
+   */
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadV90 = async () => {
+      try {
+        setV90Loading(true);
+
+        const summary = await getPlayerV90MatchSummary();
+
+        if (mounted) {
+          setV90Summary(summary);
+        }
+      } catch (error) {
+        console.error(
+          "Error obteniendo métricas V90 para el dashboard:",
+          error
+        );
+
+        if (mounted) {
+          setV90Summary({
+            total: 0,
+            calculated: 0,
+            pending: 0,
+            errors: 0,
+            v90MatchAverage: null,
+            playerV90Average: null,
+          });
+        }
+      } finally {
+        if (mounted) {
+          setV90Loading(false);
+        }
+      }
+    };
+
+    loadV90();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /*
+   * ============================================================
    * VALOR A MOSTRAR — MEDIA EXTERNA
    * ============================================================
    */
@@ -475,68 +541,66 @@ export default function Dashboard() {
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Métricas calculadas automáticamente
-            por el motor de valoración V90.
+            Métricas reales generadas por el motor de valoración V90.
           </p>
 
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-5">
 
-          {/* ==================================================
-              1. MATCH RATINGS
-              ================================================== */}
-
           <StatCard
-            title="Match Ratings"
+            title="V90 medio jugadores"
             value={
-              matchRatingsLoading
+              v90Loading
                 ? "..."
-                : matchRatingCount.toString()
+                : v90Summary.playerV90Average !== null
+                  ? v90Summary.playerV90Average.toFixed(2)
+                  : "—"
             }
           />
 
-          {/* ==================================================
-              2. V90 MEDIO
-              ================================================== */}
-
           <StatCard
-            title="V90 Medio"
-            value="—"
-          />
-
-          {/* ==================================================
-              3. MEDIA EXTERNA
-              ================================================== */}
-
-          <StatCard
-            title="Media externa"
+            title="V90 medio partido"
             value={
-              externalAverageDisplay
+              v90Loading
+                ? "..."
+                : v90Summary.v90MatchAverage !== null
+                  ? v90Summary.v90MatchAverage.toFixed(2)
+                  : "—"
             }
           />
 
-          {/* ==================================================
-              4. V90 MATCH RATING
-              ================================================== */}
-
           <StatCard
-            title="V90 Match Rating"
-            value="—"
+            title="Calculados"
+            value={
+              v90Loading
+                ? "..."
+                : v90Summary.calculated.toString()
+            }
           />
 
-          {/* ==================================================
-              5. CONFIANZA
-              ================================================== */}
+          <StatCard
+            title="Pendientes"
+            value={
+              v90Loading
+                ? "..."
+                : v90Summary.pending.toString()
+            }
+          />
 
           <StatCard
-            title="Confianza"
-            value="—"
+            title="Errores"
+            value={
+              v90Loading
+                ? "..."
+                : v90Summary.errors.toString()
+            }
           />
 
         </div>
 
       </section>
+
 
       {/* ======================================================
           2. DATOS DEPORTIVOS

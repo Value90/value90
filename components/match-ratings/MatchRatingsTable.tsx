@@ -26,6 +26,11 @@ import {
   type Participation,
 } from "@/services/participation.service";
 
+import {
+  getPlayerV90MatchFacts,
+  type PlayerV90MatchFact,
+} from "@/services/v90-match.service";
+
 interface MatchRatingsTableProps {
   onEdit: (matchRating: MatchRating) => void;
   onDelete: (matchRating: MatchRating) => void;
@@ -60,6 +65,9 @@ export default function MatchRatingsTable({
   const [participations, setParticipations] =
     useState<Participation[]>([]);
 
+  const [v90Facts, setV90Facts] =
+    useState<PlayerV90MatchFact[]>([]);
+
   const [teamsLoading, setTeamsLoading] =
     useState(true);
 
@@ -89,12 +97,14 @@ export default function MatchRatingsTable({
           playersData,
           teamsData,
           participationsData,
+          v90FactsData,
         ] = await Promise.all([
           getMatchRatings(),
           getMatches(),
           getPlayers(),
           getTeams(),
           getParticipations(),
+          getPlayerV90MatchFacts(),
         ]);
 
         if (!mounted) {
@@ -107,6 +117,10 @@ export default function MatchRatingsTable({
         setTeams(teamsData);
         setParticipations(
           participationsData
+        );
+
+        setV90Facts(
+          v90FactsData
         );
       } catch (error) {
         console.error(
@@ -123,6 +137,7 @@ export default function MatchRatingsTable({
         setPlayers([]);
         setTeams([]);
         setParticipations([]);
+        setV90Facts([]);
       } finally {
         if (mounted) {
           setTeamsLoading(false);
@@ -179,6 +194,29 @@ export default function MatchRatingsTable({
       players,
       playerSearch,
     ]);
+
+  /*
+   * ============================================================
+   * DATOS V90 POR PARTICIPACIÓN
+   * ============================================================
+   */
+
+  const v90ByParticipationId =
+    useMemo(() => {
+      const map = new Map<
+        number,
+        PlayerV90MatchFact
+      >();
+
+      for (const fact of v90Facts) {
+        map.set(
+          fact.participationId,
+          fact
+        );
+      }
+
+      return map;
+    }, [v90Facts]);
 
   /*
    * ============================================================
@@ -509,29 +547,69 @@ export default function MatchRatingsTable({
        */
 
       {
-        accessorKey:
-          "value90MatchRating",
+        id: "v90Match",
 
         header: "V90 partido",
+
+        accessorFn: (
+          matchRating: MatchRating
+        ) => {
+          const fact =
+            v90ByParticipationId.get(
+              matchRating.participationId
+            );
+
+          return fact?.v90Match ?? null;
+        },
 
         cell: ({
           row,
         }: {
           row: { original: MatchRating };
-        }) => (
-          <span className="text-xs">
-            {row.original
-              .value90MatchRating !==
-              null &&
-            row.original
-              .value90MatchRating !==
-              undefined
-              ? row.original.value90MatchRating.toFixed(
-                  2
-                )
-              : "—"}
-          </span>
-        ),
+        }) => {
+          const fact =
+            v90ByParticipationId.get(
+              row.original.participationId
+            );
+
+          if (!fact) {
+            return (
+              <span className="text-xs text-slate-400">
+                Pendiente
+              </span>
+            );
+          }
+
+          if (fact.status === "ERROR") {
+            return (
+              <span
+                className="text-xs font-semibold text-red-600"
+                title={`Error en el cálculo V90 (${fact.calculationVersion})`}
+              >
+                Error
+              </span>
+            );
+          }
+
+          if (fact.status === "PENDING") {
+            return (
+              <span className="text-xs font-medium text-amber-600">
+                Pendiente
+              </span>
+            );
+          }
+
+          return (
+            <span
+              className="text-xs font-bold text-slate-800"
+              title={`Peso total: ${fact.totalWeight.toFixed(
+                3
+              )} · Versión: ${fact.calculationVersion}`}
+            >
+              {fact.v90Match.toFixed(2)}
+            </span>
+          );
+        },
 
         meta: {
           className: "w-[85px]",
@@ -662,6 +740,7 @@ export default function MatchRatingsTable({
       teams,
       participations,
       teamsLoading,
+      v90ByParticipationId,
     ]
   );
 

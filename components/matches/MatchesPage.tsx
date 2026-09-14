@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 
 import MatchesTable from "@/components/matches/MatchesTable";
 import MatchForm from "@/components/matches/MatchForm";
@@ -17,16 +14,10 @@ import {
   type Match,
 } from "@/services/match.service";
 
-interface MatchesPageProps {
-  // Actualmente no necesitamos props.
-}
-
-export default function MatchesPage(
-  _props: MatchesPageProps
-) {
+export default function MatchesPage() {
   /*
    * ============================================================
-   * ESTADO DEL FORMULARIO
+   * ESTADO GENERAL
    * ============================================================
    */
 
@@ -34,44 +25,22 @@ export default function MatchesPage(
     useState(false);
 
   const [editingMatch, setEditingMatch] =
-    useState<Match | undefined>(
-      undefined
-    );
+    useState<Match | undefined>(undefined);
 
   const [matchToDelete, setMatchToDelete] =
-    useState<Match | undefined>(
-      undefined
-    );
-
-  /*
-   * ============================================================
-   * PARTIDOS
-   * ============================================================
-   */
+    useState<Match | undefined>(undefined);
 
   const [matches, setMatches] =
     useState<Match[]>([]);
 
-  const [matchesLoading, setMatchesLoading] =
+  const [loading, setLoading] =
     useState(true);
 
-  const [matchesError, setMatchesError] =
+  const [error, setError] =
     useState("");
-
-  /*
-   * ============================================================
-   * GUARDANDO
-   * ============================================================
-   */
 
   const [saving, setSaving] =
     useState(false);
-
-  /*
-   * ============================================================
-   * REFRESH
-   * ============================================================
-   */
 
   const [refreshKey, setRefreshKey] =
     useState(0);
@@ -85,10 +54,10 @@ export default function MatchesPage(
   useEffect(() => {
     let mounted = true;
 
-    async function loadMatches() {
+    const loadMatches = async () => {
       try {
-        setMatchesLoading(true);
-        setMatchesError("");
+        setLoading(true);
+        setError("");
 
         const data =
           await getMatches();
@@ -98,10 +67,10 @@ export default function MatchesPage(
         }
 
         setMatches(data);
-      } catch (error) {
+      } catch (err) {
         console.error(
           "Error cargando partidos:",
-          error
+          err
         );
 
         if (!mounted) {
@@ -110,15 +79,17 @@ export default function MatchesPage(
 
         setMatches([]);
 
-        setMatchesError(
-          "No se pudieron cargar los partidos."
+        setError(
+          err instanceof Error
+            ? err.message
+            : "No se pudieron cargar los partidos."
         );
       } finally {
         if (mounted) {
-          setMatchesLoading(false);
+          setLoading(false);
         }
       }
-    }
+    };
 
     loadMatches();
 
@@ -133,9 +104,8 @@ export default function MatchesPage(
    * ============================================================
    */
 
-  const handleNewMatch = () => {
-    setMatchesError("");
-
+  const handleNew = () => {
+    setError("");
     setEditingMatch(undefined);
     setShowForm(true);
   };
@@ -146,11 +116,8 @@ export default function MatchesPage(
    * ============================================================
    */
 
-  const handleEditMatch = (
-    match: Match
-  ) => {
-    setMatchesError("");
-
+  const handleEdit = (match: Match) => {
+    setError("");
     setEditingMatch(match);
     setShowForm(true);
   };
@@ -159,30 +126,14 @@ export default function MatchesPage(
    * ============================================================
    * GUARDAR PARTIDO
    * ============================================================
-   *
-   * MatchForm nos devuelve:
-   *
-   * Omit<Match, "id">
-   *
-   * Si estamos editando:
-   *   updateMatch()
-   *
-   * Si estamos creando:
-   *   addMatch()
-   *
-   * ============================================================
    */
 
-  const handleSaved = async (
+  const handleSave = async (
     matchData: Omit<Match, "id">
   ) => {
     try {
       setSaving(true);
-      setMatchesError("");
-
-      /*
-       * EDITAR
-       */
+      setError("");
 
       if (editingMatch) {
         await updateMatch(
@@ -190,41 +141,25 @@ export default function MatchesPage(
           matchData
         );
       } else {
-        /*
-         * CREAR
-         */
-
-        await addMatch(
-          matchData
-        );
+        await addMatch(matchData);
       }
 
-      /*
-       * Volvemos a la tabla.
-       */
-
-      setEditingMatch(
-        undefined
-      );
-
+      setEditingMatch(undefined);
       setShowForm(false);
-
-      /*
-       * Volvemos a cargar los partidos
-       * desde Supabase.
-       */
 
       setRefreshKey(
         (value) => value + 1
       );
-    } catch (error) {
+    } catch (err) {
       console.error(
         "Error guardando partido:",
-        error
+        err
       );
 
-      setMatchesError(
-        "No se pudo guardar el partido. Comprueba los datos e inténtalo de nuevo."
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar el partido."
       );
     } finally {
       setSaving(false);
@@ -233,14 +168,12 @@ export default function MatchesPage(
 
   /*
    * ============================================================
-   * PREPARAR ELIMINACIÓN
+   * SOLICITAR ELIMINACIÓN
    * ============================================================
    */
 
-  const handleDeleteMatch = (
-    match: Match
-  ) => {
-    setMatchesError("");
+  const handleDelete = (match: Match) => {
+    setError("");
     setMatchToDelete(match);
   };
 
@@ -257,28 +190,31 @@ export default function MatchesPage(
       }
 
       try {
-        setMatchesError("");
+        setError("");
+        setSaving(true);
 
         await deleteMatch(
           matchToDelete.id
         );
 
-        setMatchToDelete(
-          undefined
-        );
+        setMatchToDelete(undefined);
 
         setRefreshKey(
           (value) => value + 1
         );
-      } catch (error) {
+      } catch (err) {
         console.error(
           "Error eliminando partido:",
-          error
+          err
         );
 
-        setMatchesError(
-          "No se pudo eliminar el partido."
+        setError(
+          err instanceof Error
+            ? err.message
+            : "No se pudo eliminar el partido."
         );
+      } finally {
+        setSaving(false);
       }
     };
 
@@ -288,13 +224,20 @@ export default function MatchesPage(
    * ============================================================
    */
 
-  const handleCancelForm = () => {
-    if (saving) {
-      return;
-    }
-
+  const handleCancel = () => {
     setEditingMatch(undefined);
     setShowForm(false);
+    setError("");
+  };
+
+  /*
+   * ============================================================
+   * CANCELAR ELIMINACIÓN
+   * ============================================================
+   */
+
+  const handleCancelDelete = () => {
+    setMatchToDelete(undefined);
   };
 
   /*
@@ -304,94 +247,99 @@ export default function MatchesPage(
    */
 
   return (
-    <div className="w-full px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-
-      {/* ======================================================
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden p-3 sm:p-5 md:p-8">
+      {/* ========================================================
           CABECERA
-          ====================================================== */}
+          ======================================================== */}
 
-      <div className="mb-6 flex flex-col gap-5 sm:mb-8 sm:gap-6 md:flex-row md:items-start md:justify-between">
-
-        <div className="min-w-0">
-
+      <div className="mb-6 flex min-w-0 max-w-full flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 max-w-full">
           <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
             Partidos
           </h1>
 
-          <p className="mt-2 text-sm text-slate-600 sm:text-base">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
             Gestión de partidos de Value90
           </p>
-
         </div>
 
         {!showForm && (
           <button
             type="button"
-            onClick={handleNewMatch}
-            disabled={saving}
-            className="w-full rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            onClick={handleNew}
+            className="w-full shrink-0 rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-700 sm:w-auto sm:px-5 sm:py-3"
           >
             + Nuevo partido
           </button>
         )}
-
       </div>
 
-      {/* ======================================================
+      {/* ========================================================
           ERROR
-          ====================================================== */}
+          ======================================================== */}
 
-      {matchesError && (
-        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-5 text-red-700 sm:mb-6">
-          {matchesError}
+      {error && (
+        <div className="mb-5 w-full max-w-full rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:mb-6 sm:p-4">
+          {error}
         </div>
       )}
 
-      {/* ======================================================
-          CONTADOR
-          ====================================================== */}
+      {/* ========================================================
+          RESUMEN
+          ======================================================== */}
+
+      {!showForm && !error && (
+        <p className="mb-5 max-w-full text-sm text-slate-700 sm:mb-6 sm:text-base">
+          Total de partidos:{" "}
+          <span className="font-semibold">
+            {loading
+              ? "..."
+              : matches.length}
+          </span>
+        </p>
+      )}
+
+      {/* ========================================================
+          FORMULARIO
+          ======================================================== */}
+
+      {showForm && (
+        <div className="w-full min-w-0 max-w-full">
+          <MatchForm
+            key={
+              editingMatch?.id ??
+              "nuevo"
+            }
+            match={editingMatch}
+            onCancel={handleCancel}
+            onSaved={handleSave}
+          />
+
+          {saving && (
+            <div className="mt-3 text-sm text-slate-500">
+              Guardando partido...
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================
+          TABLA
+          ======================================================== */}
 
       {!showForm && (
-        <div className="mb-5 sm:mb-6">
-
-          <p className="text-sm text-slate-700 sm:text-base">
-            Total de partidos:{" "}
-
-            <span className="font-semibold">
-              {matchesLoading
-                ? "Cargando..."
-                : matches.length}
-            </span>
-          </p>
-
+        <div className="w-full min-w-0 max-w-full overflow-hidden">
+          <MatchesTable
+            key={refreshKey}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
         </div>
       )}
 
-      {/* ======================================================
-          FORMULARIO / TABLA
-          ====================================================== */}
-
-      <div className="w-full min-w-0">
-
-        {showForm ? (
-          <MatchForm
-            match={editingMatch}
-            onCancel={handleCancelForm}
-            onSaved={handleSaved}
-          />
-        ) : (
-          <MatchesTable
-            key={refreshKey}
-            onEdit={handleEditMatch}
-            onDelete={handleDeleteMatch}
-          />
-        )}
-
-      </div>
-
-      {/* ======================================================
+      {/* ========================================================
           DIÁLOGO DE ELIMINACIÓN
-          ====================================================== */}
+          ======================================================== */}
 
       {matchToDelete && (
         <DeleteMatchDialog
@@ -399,18 +347,11 @@ export default function MatchesPage(
           onConfirm={
             handleConfirmDelete
           }
-          onCancel={() => {
-            if (saving) {
-              return;
-            }
-
-            setMatchToDelete(
-              undefined
-            );
-          }}
+          onCancel={
+            handleCancelDelete
+          }
         />
       )}
-
     </div>
   );
 }

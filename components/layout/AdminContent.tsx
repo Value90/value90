@@ -37,9 +37,6 @@ export default function AdminContent({
      * ============================================================
      */
 
-    case "stages":
-      return <StagesPage />;
-
     case "matches":
       return <MatchesPage />;
 
@@ -81,12 +78,12 @@ export default function AdminContent({
 
     case "market":
       return (
-        <div className="w-full p-8">
-          <h1 className="text-3xl font-bold text-slate-800">
+        <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
+          <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">
             Mercado
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
             Esta sección se desarrollará cuando
             el motor V90 disponga de datos suficientes
             para generar valores de mercado.
@@ -117,6 +114,9 @@ export default function AdminContent({
     case "countries":
       return <CountriesPage />;
 
+    case "stages":
+      return <StagesPage />;
+
     case "competitions":
       return <CompetitionsPage />;
 
@@ -134,12 +134,12 @@ export default function AdminContent({
 
     case "settings":
       return (
-        <div className="w-full p-8">
-          <h1 className="text-3xl font-bold text-slate-800">
+        <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
+          <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">
             Configuración
           </h1>
 
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 sm:text-base">
             Configuración general del panel de administración.
           </p>
         </div>

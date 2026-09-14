@@ -4,6 +4,20 @@ import type { Match } from "@/types/match";
 
 export type { Match } from "@/types/match";
 
+/*
+ * ============================================================
+ * CONFIGURACIÓN
+ * ============================================================
+ */
+
+const PAGE_SIZE = 1000;
+
+/*
+ * ============================================================
+ * SELECT COMÚN
+ * ============================================================
+ */
+
 const matchSelect = `
   id,
   competition_id,
@@ -21,14 +35,20 @@ const matchSelect = `
   match_duration
 `;
 
+/*
+ * ============================================================
+ * MAPEO
+ * ============================================================
+ */
+
 function mapMatch(match: any): Match {
   return {
-    id: match.id,
-    competitionId: match.competition_id,
-    seasonId: match.season_id,
-    stageId: match.stage_id,
-    homeTeamId: match.home_team_id,
-    awayTeamId: match.away_team_id,
+    id: Number(match.id),
+    competitionId: Number(match.competition_id),
+    seasonId: Number(match.season_id),
+    stageId: Number(match.stage_id),
+    homeTeamId: Number(match.home_team_id),
+    awayTeamId: Number(match.away_team_id),
     homeScore: match.home_score,
     awayScore: match.away_score,
     homePenaltyScore: match.home_penalty_score ?? null,
@@ -42,25 +62,169 @@ function mapMatch(match: any): Match {
 
 /*
  * ============================================================
- * OBTENER PARTIDOS
+ * OBTENER TODOS LOS PARTIDOS
+ *
+ * IMPORTANTE:
+ *
+ * Supabase puede limitar las respuestas grandes.
+ * Por eso hacemos paginación explícita.
  * ============================================================
  */
 
 export async function getMatches(): Promise<Match[]> {
-  const { data, error } = await supabase
-    .from("matches")
-    .select(matchSelect)
-    .order("date", { ascending: false });
+  const allMatches: Match[] = [];
 
-  if (error) {
-    console.error(
-      "Error obteniendo partidos:",
-      JSON.stringify(error, null, 2)
-    );
-    throw error;
+  let from = 0;
+
+  while (true) {
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, error } = await supabase
+      .from("matches")
+      .select(matchSelect)
+      .order("date", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      console.error(
+        "Error obteniendo partidos:",
+        JSON.stringify(error, null, 2)
+      );
+
+      throw error;
+    }
+
+    const page = data ?? [];
+
+    allMatches.push(...page.map(mapMatch));
+
+    /*
+     * Si hemos recibido menos de PAGE_SIZE,
+     * ya no quedan más registros.
+     */
+    if (page.length < PAGE_SIZE) {
+      break;
+    }
+
+    from += PAGE_SIZE;
   }
 
-  return (data ?? []).map(mapMatch);
+  return allMatches;
+}
+
+/*
+ * ============================================================
+ * OBTENER PARTIDOS DE UNA TEMPORADA + COMPETICIÓN
+ *
+ * Esta función NO depende de stage_id.
+ *
+ * La utilizamos para que la página pueda comprobar
+ * realmente qué jornadas tienen partidos.
+ * ============================================================
+ */
+
+export async function getMatchesBySeasonCompetition(
+  seasonId: number,
+  competitionId: number
+): Promise<Match[]> {
+  const allMatches: Match[] = [];
+
+  let from = 0;
+
+  while (true) {
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, error } = await supabase
+      .from("matches")
+      .select(matchSelect)
+      .eq("season_id", seasonId)
+      .eq("competition_id", competitionId)
+      .order("date", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      console.error(
+        "Error obteniendo partidos de temporada y competición:",
+        JSON.stringify(error, null, 2)
+      );
+
+      throw error;
+    }
+
+    const page = data ?? [];
+
+    allMatches.push(...page.map(mapMatch));
+
+    if (page.length < PAGE_SIZE) {
+      break;
+    }
+
+    from += PAGE_SIZE;
+  }
+
+  return allMatches;
+}
+
+/*
+ * ============================================================
+ * OBTENER PARTIDOS DE UNA JORNADA
+ *
+ * CONSULTA DIRECTA:
+ *
+ * season_id
+ * competition_id
+ * stage_id
+ *
+ * Además utilizamos paginación explícita.
+ * ============================================================
+ */
+
+export async function getMatchesByStage(
+  seasonId: number,
+  competitionId: number,
+  stageId: number
+): Promise<Match[]> {
+  const allMatches: Match[] = [];
+
+  let from = 0;
+
+  while (true) {
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, error } = await supabase
+      .from("matches")
+      .select(matchSelect)
+      .eq("season_id", seasonId)
+      .eq("competition_id", competitionId)
+      .eq("stage_id", stageId)
+      .order("date", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      console.error(
+        "Error obteniendo partidos de la jornada:",
+        JSON.stringify(error, null, 2)
+      );
+
+      throw error;
+    }
+
+    const page = data ?? [];
+
+    allMatches.push(...page.map(mapMatch));
+
+    if (page.length < PAGE_SIZE) {
+      break;
+    }
+
+    from += PAGE_SIZE;
+  }
+
+  console.log(
+    `[V90] Partidos encontrados para temporada=${seasonId}, competición=${competitionId}, jornada=${stageId}: ${allMatches.length}`
+  );
+
+  return allMatches;
 }
 
 /*
@@ -97,6 +261,7 @@ export async function addMatch(
       "Error creando partido:",
       JSON.stringify(error, null, 2)
     );
+
     throw error;
   }
 
@@ -139,6 +304,7 @@ export async function updateMatch(
       "Error actualizando partido:",
       JSON.stringify(error, null, 2)
     );
+
     throw error;
   }
 
@@ -168,6 +334,7 @@ export async function deleteMatch(
       "Error eliminando partido:",
       JSON.stringify(error, null, 2)
     );
+
     throw error;
   }
 

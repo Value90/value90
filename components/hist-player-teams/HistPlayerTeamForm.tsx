@@ -1124,35 +1124,116 @@ export default function HistPlayerTeamForm({
      * ==========================================================
      */
 
-    const records =
-      selectedRows.map((row) => ({
-        playerId:
-          row.playerId,
-        teamId,
-        seasonId,
-        shirtNumber:
-          row.shirtNumber !== ""
-            ? Number(
-                row.shirtNumber
-              )
-            : null,
-        positionId:
-          row.positionId ||
-          null,
-        startDate: null,
-        endDate: null,
-        active: true,
-      }));
-
     try {
       setSaving(true);
+
+      /*
+       * ==========================================================
+       * SINCRONIZAR PLANTILLA
+       * ==========================================================
+       *
+       * IMPORTANTE:
+       *
+       * La plantilla se comporta como un estado histórico activo.
+       *
+       * - Los jugadores seleccionados se guardan como active = true.
+       * - Los jugadores que existían anteriormente en este equipo,
+       *   temporada y que ahora están desmarcados se guardan como
+       *   active = false.
+       *
+       * NO eliminamos físicamente el registro histórico.
+       *
+       * Esto permite:
+       * - sacar al jugador de la plantilla activa;
+       * - que deje de aparecer en Participaciones;
+       * - liberar su dorsal en ese equipo;
+       * - conservar el histórico del jugador.
+       * ==========================================================
+       */
+
+      const existing =
+        await getHistPlayerTeamsByTeamAndSeason(
+          teamId,
+          seasonId
+        );
+
+      const selectedPlayerIds =
+        new Set(
+          selectedRows.map(
+            (row) => row.playerId
+          )
+        );
+
+      const activeRecords =
+        selectedRows.map((row) => ({
+          playerId:
+            row.playerId,
+          teamId,
+          seasonId,
+          shirtNumber:
+            row.shirtNumber !== ""
+              ? Number(
+                  row.shirtNumber
+                )
+              : null,
+          positionId:
+            row.positionId ||
+            null,
+          startDate: null,
+          endDate: null,
+          active: true,
+        }));
+
+      /*
+       * Jugadores que estaban en la plantilla anterior
+       * pero ya no están seleccionados.
+       *
+       * Solo desactivamos registros existentes.
+       * No creamos registros "inactivos" para jugadores
+       * que nunca pertenecieron a este equipo.
+       */
+      const inactiveRecords =
+        existing
+          .filter(
+            (history) =>
+              history.active === true &&
+              !selectedPlayerIds.has(
+                history.playerId
+              )
+          )
+          .map((history) => ({
+            playerId:
+              history.playerId,
+            teamId:
+              history.teamId,
+            seasonId:
+              history.seasonId,
+            shirtNumber:
+              history.shirtNumber ??
+              null,
+            positionId:
+              history.positionId ??
+              null,
+            startDate:
+              history.startDate ??
+              null,
+            endDate:
+              history.endDate ??
+              null,
+            active: false,
+          }));
+
+      const records = [
+        ...activeRecords,
+        ...inactiveRecords,
+      ];
 
       await saveHistPlayerTeamSquad(
         records
       );
 
       setSuccess(
-        `Plantilla guardada correctamente: ${records.length} jugadores.`
+        `Plantilla guardada correctamente: ${selectedRows.length} jugadores activos.`
       );
 
       setErrorPlayerIds(

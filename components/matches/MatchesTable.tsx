@@ -556,7 +556,7 @@ export default function MatchesTable({
         false,
 
       cell: ({ row }) => (
-        <div className="flex min-w-max items-center gap-2 whitespace-nowrap">
+        <div className="flex w-full min-w-0 items-center gap-1 whitespace-nowrap sm:gap-2">
 
           <button
             type="button"
@@ -565,7 +565,7 @@ export default function MatchesTable({
                 row.original
               )
             }
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+            className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-slate-300 bg-white px-1.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 sm:rounded-lg sm:px-2.5 sm:text-sm"
           >
             Editar
           </button>
@@ -577,7 +577,7 @@ export default function MatchesTable({
                 row.original
               )
             }
-            className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
+            className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-red-200 bg-white px-1.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 sm:rounded-lg sm:px-2.5 sm:text-sm"
           >
             Eliminar
           </button>
@@ -626,7 +626,7 @@ export default function MatchesTable({
    */
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full min-w-0 space-y-4 overflow-hidden">
 
       {/* ======================================================
           FILTRO DE COMPETICIÓN
@@ -645,7 +645,7 @@ export default function MatchesTable({
               )
             );
           }}
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-slate-500 sm:w-auto sm:min-w-[240px]"
+          className="w-full min-w-0 max-w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-500 sm:w-auto sm:min-w-[220px] sm:px-3"
         >
 
           <option value={0}>
@@ -689,7 +689,7 @@ export default function MatchesTable({
           TABLA RESPONSIVE
           ====================================================== */}
 
-      <div className="matches-responsive-table w-full">
+      <div className="matches-responsive-table w-full min-w-0 max-w-full overflow-hidden">
 
         <DataTable
           data={
@@ -709,40 +709,194 @@ export default function MatchesTable({
       <style jsx>{`
         /*
          * ======================================================
+         * TABLA BASE
+         * ======================================================
+         *
+         * El DataTable compartido tiene sus propios contenedores.
+         * Aquí impedimos que la tabla provoque un ancho mayor que
+         * el disponible y dejamos que el contenido se adapte.
+         */
+
+        .matches-responsive-table {
+          width: 100%;
+          min-width: 0;
+          max-width: 100%;
+          overflow: hidden;
+        }
+
+        .matches-responsive-table :global(table) {
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
+          table-layout: fixed;
+        }
+
+        .matches-responsive-table :global(th),
+        .matches-responsive-table :global(td) {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .matches-responsive-table :global(th) {
+          line-height: 1.2;
+        }
+
+        /*
+         * ======================================================
+         * ESCRITORIO
+         * ======================================================
+         */
+
+        @media (min-width: 1024px) {
+          .matches-responsive-table :global(th),
+          .matches-responsive-table :global(td) {
+            padding: 0.75rem 0.65rem;
+            font-size: 0.875rem;
+          }
+
+          /*
+           * Reparto de ancho de las columnas.
+           */
+
+          .matches-responsive-table :global(th:nth-child(1)),
+          .matches-responsive-table :global(td:nth-child(1)) {
+            width: 16%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(2)),
+          .matches-responsive-table :global(td:nth-child(2)) {
+            width: 10%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(3)),
+          .matches-responsive-table :global(td:nth-child(3)) {
+            width: 15%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(4)),
+          .matches-responsive-table :global(td:nth-child(4)) {
+            width: 15%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(5)),
+          .matches-responsive-table :global(td:nth-child(5)) {
+            width: 9%;
+            text-align: center;
+          }
+
+          .matches-responsive-table :global(th:nth-child(6)),
+          .matches-responsive-table :global(td:nth-child(6)) {
+            width: 10%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(7)),
+          .matches-responsive-table :global(td:nth-child(7)) {
+            width: 7%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(8)),
+          .matches-responsive-table :global(td:nth-child(8)) {
+            width: 18%;
+          }
+
+          .matches-responsive-table :global(td:nth-child(8) > div) {
+            justify-content: flex-start;
+          }
+
+          .matches-responsive-table :global(td:nth-child(3)),
+          .matches-responsive-table :global(td:nth-child(4)),
+          .matches-responsive-table :global(td:nth-child(6)) {
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+
+          .matches-responsive-table :global(td:nth-child(8) > div) {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+          }
+        }
+
+        /*
+         * ======================================================
          * TABLET
          * ======================================================
          */
 
         @media (min-width: 768px) and (max-width: 1023px) {
-          .matches-responsive-table
-            :global(table) {
-            width: 100%;
-            table-layout: fixed;
+          .matches-responsive-table :global(table) {
+            width: 100% !important;
+            min-width: 0 !important;
           }
 
-          .matches-responsive-table
-            :global(th),
-          .matches-responsive-table
-            :global(td) {
-            padding: 0.75rem 0.5rem;
-            font-size: 0.8125rem;
+          .matches-responsive-table :global(th),
+          .matches-responsive-table :global(td) {
+            padding: 0.6rem 0.4rem;
+            font-size: 0.75rem;
           }
 
-          .matches-responsive-table
-            :global(th) {
-            line-height: 1.2;
+          .matches-responsive-table :global(th) {
+            white-space: normal;
           }
 
-          .matches-responsive-table
-            :global(td) {
-            overflow-wrap: anywhere;
+          .matches-responsive-table :global(td:nth-child(1)),
+          .matches-responsive-table :global(td:nth-child(3)),
+          .matches-responsive-table :global(td:nth-child(4)),
+          .matches-responsive-table :global(td:nth-child(6)) {
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
 
-          .matches-responsive-table
-            :global(th:last-child),
-          .matches-responsive-table
-            :global(td:last-child) {
-            width: 150px;
+          .matches-responsive-table :global(th:nth-child(1)),
+          .matches-responsive-table :global(td:nth-child(1)) {
+            width: 17%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(2)),
+          .matches-responsive-table :global(td:nth-child(2)) {
+            width: 11%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(3)),
+          .matches-responsive-table :global(td:nth-child(3)) {
+            width: 15%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(4)),
+          .matches-responsive-table :global(td:nth-child(4)) {
+            width: 15%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(5)),
+          .matches-responsive-table :global(td:nth-child(5)) {
+            width: 9%;
+            text-align: center;
+          }
+
+          .matches-responsive-table :global(th:nth-child(6)),
+          .matches-responsive-table :global(td:nth-child(6)) {
+            width: 11%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(7)),
+          .matches-responsive-table :global(td:nth-child(7)) {
+            width: 8%;
+          }
+
+          .matches-responsive-table :global(th:nth-child(8)),
+          .matches-responsive-table :global(td:nth-child(8)) {
+            width: 14%;
+          }
+
+          .matches-responsive-table :global(td:nth-child(8) > div) {
+            gap: 0.25rem;
+          }
+
+          .matches-responsive-table :global(td:nth-child(8) button) {
+            padding: 0.35rem 0.45rem;
+            font-size: 0.7rem;
           }
         }
 
@@ -750,23 +904,27 @@ export default function MatchesTable({
          * ======================================================
          * MÓVIL
          * ======================================================
+         *
+         * En móvil no intentamos meter las 8 columnas.
+         * Ocultamos la información secundaria y dejamos visibles
+         * los datos necesarios para identificar el partido y actuar.
          */
 
         @media (max-width: 767px) {
-          .matches-responsive-table
-            :global(table) {
-            width: 100%;
+          .matches-responsive-table :global(table) {
+            width: 100% !important;
+            min-width: 0 !important;
             table-layout: fixed;
           }
 
           /*
-           * Ocultamos en móvil las columnas menos importantes:
+           * Columnas ocultas:
            *
            * 1 = Competición
            * 6 = Estadio
            * 7 = Estado
            *
-           * Conservamos:
+           * Visibles:
            *
            * 2 = Fecha
            * 3 = Local
@@ -775,149 +933,106 @@ export default function MatchesTable({
            * 8 = Acciones
            */
 
-          .matches-responsive-table
-            :global(th:nth-child(1)),
-          .matches-responsive-table
-            :global(td:nth-child(1)),
-          .matches-responsive-table
-            :global(th:nth-child(6)),
-          .matches-responsive-table
-            :global(td:nth-child(6)),
-          .matches-responsive-table
-            :global(th:nth-child(7)),
-          .matches-responsive-table
-            :global(td:nth-child(7)) {
+          .matches-responsive-table :global(th:nth-child(1)),
+          .matches-responsive-table :global(td:nth-child(1)),
+          .matches-responsive-table :global(th:nth-child(6)),
+          .matches-responsive-table :global(td:nth-child(6)),
+          .matches-responsive-table :global(th:nth-child(7)),
+          .matches-responsive-table :global(td:nth-child(7)) {
             display: none;
           }
 
-          /*
-           * Espaciado compacto.
-           */
-
-          .matches-responsive-table
-            :global(th),
-          .matches-responsive-table
-            :global(td) {
-            padding: 0.7rem 0.35rem;
-            font-size: 0.75rem;
+          .matches-responsive-table :global(th),
+          .matches-responsive-table :global(td) {
+            padding: 0.6rem 0.3rem;
+            font-size: 0.7rem;
           }
 
-          /*
-           * Cabeceras.
-           */
-
-          .matches-responsive-table
-            :global(th) {
+          .matches-responsive-table :global(th) {
             line-height: 1.15;
             white-space: normal;
           }
 
           /*
-           * Distribución de columnas.
-           *
-           * Fecha       16%
-           * Local       22%
-           * Visitante   22%
-           * Resultado   16%
-           * Acciones    24%
+           * Distribución de las 5 columnas visibles.
            */
 
-          .matches-responsive-table
-            :global(th:nth-child(2)),
-          .matches-responsive-table
-            :global(td:nth-child(2)) {
+          .matches-responsive-table :global(th:nth-child(2)),
+          .matches-responsive-table :global(td:nth-child(2)) {
             width: 16%;
           }
 
-          .matches-responsive-table
-            :global(th:nth-child(3)),
-          .matches-responsive-table
-            :global(td:nth-child(3)) {
+          .matches-responsive-table :global(th:nth-child(3)),
+          .matches-responsive-table :global(td:nth-child(3)) {
             width: 22%;
           }
 
-          .matches-responsive-table
-            :global(th:nth-child(4)),
-          .matches-responsive-table
-            :global(td:nth-child(4)) {
+          .matches-responsive-table :global(th:nth-child(4)),
+          .matches-responsive-table :global(td:nth-child(4)) {
             width: 22%;
           }
 
-          .matches-responsive-table
-            :global(th:nth-child(5)),
-          .matches-responsive-table
-            :global(td:nth-child(5)) {
-            width: 16%;
+          .matches-responsive-table :global(th:nth-child(5)),
+          .matches-responsive-table :global(td:nth-child(5)) {
+            width: 15%;
             text-align: center;
           }
 
-          .matches-responsive-table
-            :global(th:nth-child(8)),
-          .matches-responsive-table
-            :global(td:nth-child(8)) {
-            width: 24%;
+          .matches-responsive-table :global(th:nth-child(8)),
+          .matches-responsive-table :global(td:nth-child(8)) {
+            width: 25%;
           }
 
           /*
-           * Equipos y fecha pueden ocupar varias líneas.
+           * Los nombres de los equipos se cortan dentro de su celda.
            */
 
-          .matches-responsive-table
-            :global(td:nth-child(2)),
-          .matches-responsive-table
-            :global(td:nth-child(3)),
-          .matches-responsive-table
-            :global(td:nth-child(4)) {
-            overflow-wrap: anywhere;
-            word-break: break-word;
+          .matches-responsive-table :global(td:nth-child(2)),
+          .matches-responsive-table :global(td:nth-child(3)),
+          .matches-responsive-table :global(td:nth-child(4)) {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
 
           /*
-           * Resultado centrado.
+           * Acciones compactas y siempre dentro de su columna.
            */
 
-          .matches-responsive-table
-            :global(td:nth-child(5)) {
-            text-align: center;
-          }
-
-          /*
-           * Acciones siempre visibles y compactas.
-           */
-
-          .matches-responsive-table
-            :global(td:nth-child(8) > div) {
+          .matches-responsive-table :global(td:nth-child(8) > div) {
+            display: flex;
             flex-direction: column;
             align-items: stretch;
-            gap: 0.35rem;
+            gap: 0.3rem;
             width: 100%;
             min-width: 0;
           }
 
-          .matches-responsive-table
-            :global(td:nth-child(8) button) {
+          .matches-responsive-table :global(td:nth-child(8) button) {
             width: 100%;
-            padding: 0.45rem 0.35rem;
-            font-size: 0.7rem;
+            min-width: 0;
+            padding: 0.35rem 0.2rem;
+            font-size: 0.65rem;
+            line-height: 1.2;
           }
 
           /*
-           * Buscador de DataTable.
+           * Buscador interno del DataTable.
            */
 
-          .matches-responsive-table
-            :global(input) {
+          .matches-responsive-table :global(input) {
             width: 100%;
-            max-width: none;
+            min-width: 0;
+            max-width: 100%;
           }
 
           /*
-           * Paginación.
+           * Evitamos que cualquier elemento interno del DataTable
+           * fuerce el ancho del contenedor.
            */
 
-          .matches-responsive-table
-            :global([class*="border-t"]) {
-            gap: 0.75rem;
+          .matches-responsive-table :global(div) {
+            min-width: 0;
           }
         }
 
@@ -928,54 +1043,41 @@ export default function MatchesTable({
          */
 
         @media (max-width: 380px) {
-          .matches-responsive-table
-            :global(th),
-          .matches-responsive-table
-            :global(td) {
-            padding-left: 0.25rem;
-            padding-right: 0.25rem;
-            font-size: 0.7rem;
+          .matches-responsive-table :global(th),
+          .matches-responsive-table :global(td) {
+            padding-left: 0.2rem;
+            padding-right: 0.2rem;
+            font-size: 0.65rem;
           }
 
-          .matches-responsive-table
-            :global(th:nth-child(2)),
-          .matches-responsive-table
-            :global(td:nth-child(2)) {
-            width: 18%;
+          .matches-responsive-table :global(th:nth-child(2)),
+          .matches-responsive-table :global(td:nth-child(2)) {
+            width: 17%;
           }
 
-          .matches-responsive-table
-            :global(th:nth-child(3)),
-          .matches-responsive-table
-            :global(td:nth-child(3)) {
+          .matches-responsive-table :global(th:nth-child(3)),
+          .matches-responsive-table :global(td:nth-child(3)) {
             width: 21%;
           }
 
-          .matches-responsive-table
-            :global(th:nth-child(4)),
-          .matches-responsive-table
-            :global(td:nth-child(4)) {
+          .matches-responsive-table :global(th:nth-child(4)),
+          .matches-responsive-table :global(td:nth-child(4)) {
             width: 21%;
           }
 
-          .matches-responsive-table
-            :global(th:nth-child(5)),
-          .matches-responsive-table
-            :global(td:nth-child(5)) {
+          .matches-responsive-table :global(th:nth-child(5)),
+          .matches-responsive-table :global(td:nth-child(5)) {
             width: 15%;
           }
 
-          .matches-responsive-table
-            :global(th:nth-child(8)),
-          .matches-responsive-table
-            :global(td:nth-child(8)) {
-            width: 25%;
+          .matches-responsive-table :global(th:nth-child(8)),
+          .matches-responsive-table :global(td:nth-child(8)) {
+            width: 26%;
           }
 
-          .matches-responsive-table
-            :global(td:nth-child(8) button) {
-            font-size: 0.65rem;
-            padding: 0.4rem 0.2rem;
+          .matches-responsive-table :global(td:nth-child(8) button) {
+            padding: 0.3rem 0.15rem;
+            font-size: 0.6rem;
           }
         }
       `}</style>

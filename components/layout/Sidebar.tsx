@@ -147,11 +147,6 @@ export default function Sidebar({
     },
 
     {
-      id: "stages",
-      label: "Jornadas / Fases",
-    },
-
-    {
       id: "matches",
       label: "Partidos",
     },
@@ -199,6 +194,11 @@ export default function Sidebar({
     {
       id: "countries",
       label: "Países",
+    },
+
+    {
+      id: "stages",
+      label: "Jornadas / Fases",
     },
 
     {
