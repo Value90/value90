@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -27,17 +28,35 @@ export default function MatchRatingsPage() {
 
   const [refreshKey, setRefreshKey] = useState(0);
 
+  /*
+   * ============================================================
+   * NUEVA VALORACIÓN
+   * ============================================================
+   */
+
   const handleNewMatchRating = () => {
     setEditingMatchRating(undefined);
     setFormMode("manual");
     setShowForm(true);
   };
 
+  /*
+   * ============================================================
+   * IMPORTAR VALORACIONES DESDE GOOGLE SHEETS
+   * ============================================================
+   */
+
   const handleImportMatchRatings = () => {
     setEditingMatchRating(undefined);
     setFormMode("import");
     setShowForm(true);
   };
+
+  /*
+   * ============================================================
+   * EDITAR VALORACIÓN
+   * ============================================================
+   */
 
   const handleEditMatchRating = (
     matchRating: MatchRating
@@ -47,12 +66,24 @@ export default function MatchRatingsPage() {
     setShowForm(true);
   };
 
+  /*
+   * ============================================================
+   * GUARDAR
+   * ============================================================
+   */
+
   const handleSaved = () => {
     setEditingMatchRating(undefined);
     setShowForm(false);
     setFormMode("manual");
     setRefreshKey((value) => value + 1);
   };
+
+  /*
+   * ============================================================
+   * ELIMINAR VALORACIÓN
+   * ============================================================
+   */
 
   const handleDeleteMatchRating = (
     matchRating: MatchRating
@@ -65,11 +96,24 @@ export default function MatchRatingsPage() {
       return;
     }
 
-    await deleteMatchRating(matchRatingToDelete.id);
+    try {
+      await deleteMatchRating(matchRatingToDelete.id);
 
-    setMatchRatingToDelete(undefined);
-    setRefreshKey((value) => value + 1);
+      setMatchRatingToDelete(undefined);
+      setRefreshKey((value) => value + 1);
+    } catch (error) {
+      console.error(
+        "Error eliminando la valoración:",
+        error
+      );
+    }
   };
+
+  /*
+   * ============================================================
+   * CANCELAR FORMULARIO
+   * ============================================================
+   */
 
   const handleCancelForm = () => {
     setEditingMatchRating(undefined);
@@ -77,30 +121,42 @@ export default function MatchRatingsPage() {
     setFormMode("manual");
   };
 
+  /*
+   * ============================================================
+   * CANCELAR ELIMINACIÓN
+   * ============================================================
+   */
+
   const handleCancelDelete = () => {
     setMatchRatingToDelete(undefined);
   };
 
+  /*
+   * ============================================================
+   * RENDER
+   * ============================================================
+   */
+
   return (
-    <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
-      <div className="mb-5 flex min-w-0 flex-col gap-4 sm:mb-7 sm:gap-5 lg:mb-8 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold leading-tight sm:text-3xl">
+    <div className="w-full p-8">
+      <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">
             Valoraciones de partidos
           </h1>
 
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
+          <p className="mt-2 text-slate-600">
             Gestión de las valoraciones externas de los
-            jugadores en los partidos de Value90
+            jugadores en los partidos de Value90.
           </p>
         </div>
 
         {!showForm && (
-          <div className="flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row sm:flex-wrap sm:gap-3">
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
               onClick={handleNewMatchRating}
-              className="w-full rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 sm:w-auto"
+              className="rounded-lg bg-slate-800 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-700"
             >
               + Crear valoración
             </button>
@@ -108,7 +164,7 @@ export default function MatchRatingsPage() {
             <button
               type="button"
               onClick={handleImportMatchRatings}
-              className="w-full rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 sm:w-auto"
+              className="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
             >
               Importar valoraciones
             </button>
@@ -116,23 +172,21 @@ export default function MatchRatingsPage() {
         )}
       </div>
 
-      <div className="min-w-0">
-        {showForm ? (
-          <MatchRatingForm
-            key={`${formMode}-${editingMatchRating?.id ?? "new"}`}
-            matchRating={editingMatchRating}
-            initialInputMode={formMode}
-            onCancel={handleCancelForm}
-            onSaved={handleSaved}
-          />
-        ) : (
-          <MatchRatingsTable
-            key={refreshKey}
-            onEdit={handleEditMatchRating}
-            onDelete={handleDeleteMatchRating}
-          />
-        )}
-      </div>
+      {showForm ? (
+        <MatchRatingForm
+          key={`${formMode}-${editingMatchRating?.id ?? "new"}`}
+          matchRating={editingMatchRating}
+          initialInputMode={formMode}
+          onCancel={handleCancelForm}
+          onSaved={handleSaved}
+        />
+      ) : (
+        <MatchRatingsTable
+          key={refreshKey}
+          onEdit={handleEditMatchRating}
+          onDelete={handleDeleteMatchRating}
+        />
+      )}
 
       {matchRatingToDelete && (
         <DeleteMatchRatingDialog

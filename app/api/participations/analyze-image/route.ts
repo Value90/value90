@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  createRecognitionResult,
+  getLearningContext,
+} from "@/services/ai.feedback.service";
 
 interface RosterPlayer {
   playerId: number;
@@ -10,6 +14,7 @@ interface RosterPlayer {
 }
 
 interface AnalyzeRequest {
+  matchId?: number | null;
   image?: string;
   matchDuration?: number;
   homeTeamName?: string;
@@ -88,6 +93,13 @@ export async function POST(request: Request) {
     const homeTeamName = body.homeTeamName ?? "Equipo local";
     const awayTeamName = body.awayTeamName ?? "Equipo visitante";
 
+    let learningContext = "";
+    try {
+      learningContext = await getLearningContext("participations");
+    } catch (learningError) {
+      console.error("[participations/analyze-image] No se pudo cargar el contexto de aprendizaje:", learningError);
+    }
+
     const rosterText = body.roster
       .map(
         (player) =>
@@ -105,6 +117,11 @@ PARTIDO:
 
 PLANTILLAS DISPONIBLES:
 ${rosterText}
+
+CONTEXTO DE CORRECCIONES CONFIRMADAS:
+${learningContext || "No hay correcciones confirmadas disponibles."}
+
+Utiliza este contexto únicamente como ayuda para evitar errores repetidos. No copies un valor si no aparece respaldado por la imagen actual.
 
 REGLAS IMPORTANTES:
 
@@ -327,6 +344,29 @@ REGLAS IMPORTANTES:
               : 0,
         };
       });
+
+    let recognitionResultId: number | null = null;
+
+    // Guardamos el resultado bruto/normalizado para poder comparar posteriormente
+    // las correcciones manuales del usuario. Si falla el registro, no bloqueamos
+    // el análisis principal.
+    try {
+      const recognitionResult = await createRecognitionResult({
+        matchId: body.matchId ?? null,
+        recognitionType: "participations",
+        source: "participation-image",
+        rawResponse: { players },
+        requestContext: {
+          homeTeamName,
+          awayTeamName,
+          matchDuration,
+          roster: body.roster,
+        },
+      });
+      recognitionResultId = recognitionResult?.id ?? null;
+    } catch (feedbackError) {
+      console.error("[participations/analyze-image] No se pudo registrar el feedback:", feedbackError);
+    }
 
     // Seguridad adicional: como máximo un capitán por equipo.
     for (const side of ["home", "away"] as const) {

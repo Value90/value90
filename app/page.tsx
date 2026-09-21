@@ -1,153 +1,78 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import Header from "@/components/layout/Header";
 import Sidebar from "@/components/layout/Sidebar";
 import AdminContent from "@/components/layout/AdminContent";
+import { createClient } from "@/lib/supabase/client";
 
 export default function Home() {
-  /*
-   * ============================================================
-   * PÁGINA ACTUAL
-   * ============================================================
-   */
+  const router = useRouter();
+  const supabase = createClient();
 
-  const [page, setPage] =
-    useState("dashboard");
-
-  /*
-   * ============================================================
-   * EQUIPO A EDITAR
-   *
-   * ProgresoPage enviará el ID del equipo mediante
-   * el evento "edit-team".
-   * ============================================================
-   */
-
-  const [editTeamId, setEditTeamId] =
-    useState<number | null>(null);
-
-  /*
-   * ============================================================
-   * ESCUCHAR PETICIÓN DE EDITAR EQUIPO
-   * ============================================================
-   */
+  const [page, setPage] = useState("dashboard");
+  const [editTeamId, setEditTeamId] = useState<number | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    const handleEditTeam = (
-      event: Event
-    ) => {
-      const customEvent =
-        event as CustomEvent<{
-          teamId: number;
-        }>;
+    const handleEditTeam = (event: Event) => {
+      const customEvent = event as CustomEvent<{ teamId: number }>;
+      const teamId = customEvent.detail?.teamId;
 
-      const teamId =
-        customEvent.detail?.teamId;
-
-      if (
-        teamId === undefined ||
-        teamId === null
-      ) {
-        return;
-      }
-
-      /*
-       * Guardamos el equipo que queremos editar.
-       */
+      if (teamId === undefined || teamId === null) return;
 
       setEditTeamId(teamId);
-
-      /*
-       * Cambiamos automáticamente
-       * a la página Equipos.
-       */
-
       setPage("teams");
     };
 
-    window.addEventListener(
-      "edit-team",
-      handleEditTeam
-    );
-
-    return () => {
-      window.removeEventListener(
-        "edit-team",
-        handleEditTeam
-      );
-    };
+    window.addEventListener("edit-team", handleEditTeam);
+    return () => window.removeEventListener("edit-team", handleEditTeam);
   }, []);
-
-  /*
-   * ============================================================
-   * CUANDO TEAMSPAGE HA RECIBIDO EL ID
-   * ============================================================
-   */
 
   const handleEditTeamHandled = () => {
     setEditTeamId(null);
   };
 
-  /*
-   * ============================================================
-   * RENDER
-   * ============================================================
-   */
+  const handleLogout = async () => {
+    setLoggingOut(true);
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error("Error cerrando sesión:", error);
+      setLoggingOut(false);
+      return;
+    }
+
+    router.replace("/login");
+    router.refresh();
+  };
 
   return (
     <div className="flex h-screen flex-col">
-
-      {/* ======================================================
-          CABECERA FIJA
-          ====================================================== */}
-
       <Header />
 
-      {/* ======================================================
-          ZONA INFERIOR
-          ====================================================== */}
-
       <div className="flex min-h-0 flex-1">
-
-        {/* ====================================================
-            SIDEBAR
-            ==================================================== */}
-
         <Sidebar
           page={page}
+          onLogout={handleLogout}
+          loggingOut={loggingOut}
           setPage={(newPage) => {
-            /*
-             * Si el usuario navega manualmente a otra
-             * sección, eliminamos cualquier equipo pendiente
-             * de edición.
-             */
-
             setEditTeamId(null);
-
             setPage(newPage);
           }}
         />
 
-        {/* ====================================================
-            CONTENIDO
-            ==================================================== */}
-
         <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-slate-100">
-
           <AdminContent
             page={page}
             editTeamId={editTeamId}
-            onEditTeamHandled={
-              handleEditTeamHandled
-            }
+            onEditTeamHandled={handleEditTeamHandled}
           />
-
         </main>
-
       </div>
-
     </div>
   );
 }

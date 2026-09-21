@@ -660,6 +660,73 @@ export default function DatosV90Page() {
 
   /*
    * ============================================================
+   * JORNADAS Y PARTIDOS PENDIENTES DE VALORACIÓN V90
+   * ============================================================
+   */
+
+  const ratedMatchIds = useMemo(() => {
+    return new Set(
+      matchRatings
+        .map((rating) => rating.matchId)
+        .filter((matchId): matchId is number => matchId !== null && matchId !== undefined)
+    );
+  }, [matchRatings]);
+
+  const pendingMatchesCount = useMemo(() => {
+    return matches.filter((match) => !ratedMatchIds.has(match.id)).length;
+  }, [matches, ratedMatchIds]);
+
+  const getStageNumber = (stage: Stage) => {
+    return Number(stage.name.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
+  };
+
+  const oldestMissingStageLabel = useMemo(() => {
+    const missingStages = stages
+      .map((stage) => {
+        const stageMatches = matches.filter((match) => match.stageId === stage.id);
+
+        if (stageMatches.length === 0) {
+          return null;
+        }
+
+        const hasRating = stageMatches.some((match) => ratedMatchIds.has(match.id));
+
+        if (hasRating) {
+          return null;
+        }
+
+        const competition = competitions.find(
+          (item) => item.id === stageMatches[0].competitionId
+        );
+
+        return {
+          stage,
+          competitionName: competition?.name ?? "Competición desconocida",
+        };
+      })
+      .filter(
+        (item): item is { stage: Stage; competitionName: string } => item !== null
+      )
+      .sort((a, b) => {
+        const numberDifference = getStageNumber(a.stage) - getStageNumber(b.stage);
+
+        if (numberDifference !== 0) {
+          return numberDifference;
+        }
+
+        return a.stage.name.localeCompare(b.stage.name, "es");
+      });
+
+    if (missingStages.length === 0) {
+      return "—";
+    }
+
+    const oldest = missingStages[0];
+    return `${oldest.stage.name} ${oldest.competitionName}`;
+  }, [competitions, matches, ratedMatchIds, stages]);
+
+  /*
+   * ============================================================
    * MÉTRICAS DEL MOTOR V90
    * ============================================================
    */
@@ -1144,13 +1211,20 @@ export default function DatosV90Page() {
             value={v90Loading ? "..." : v90Calculated.toString()}
           />
           <StatCard
-            title="Pendientes"
-            value={v90Loading ? "..." : v90Pending.toString()}
+            title="Partidos pendientes"
+            value={calculatorLoading ? "..." : pendingMatchesCount.toString()}
           />
-          <StatCard
-            title="Errores"
-            value={v90Loading ? "..." : v90Errors.toString()}
-          />
+          <div className="flex min-w-0 flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <p className="text-sm font-medium text-slate-500">
+              Jornada pendiente
+            </p>
+            <p
+              className="mt-3 min-w-0 break-words text-xs font-bold leading-5 text-slate-800 sm:text-sm"
+              title={calculatorLoading ? "Cargando..." : oldestMissingStageLabel}
+            >
+              {calculatorLoading ? "..." : oldestMissingStageLabel}
+            </p>
+          </div>
         </div>
 
         {v90LoadError && !v90Loading && (

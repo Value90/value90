@@ -1,3 +1,4 @@
+
 import { supabase } from "@/lib/supabase";
 
 import type { Participation } from "@/types/participation";
@@ -15,36 +16,16 @@ function mapParticipation(
 ): Participation {
   return {
     id: participation.id,
-
-    matchId:
-      participation.match_id,
-
-    playerId:
-      participation.player_id,
-
-    teamId:
-      participation.team_id,
-
-    positionId:
-      participation.position_id,
-
-    shirtNumber:
-      participation.shirt_number,
-
-    isStartingXI:
-      participation.is_starting_xi,
-
-    minutesPlayed:
-      participation.minutes_played,
-
-    captain:
-      participation.captain,
-
-    substituteInMinute:
-      participation.substitute_in_minute,
-
-    substituteOutMinute:
-      participation.substitute_out_minute,
+    matchId: participation.match_id,
+    playerId: participation.player_id,
+    teamId: participation.team_id,
+    positionId: participation.position_id,
+    shirtNumber: participation.shirt_number,
+    isStartingXI: participation.is_starting_xi,
+    minutesPlayed: participation.minutes_played,
+    captain: participation.captain,
+    substituteInMinute: participation.substitute_in_minute,
+    substituteOutMinute: participation.substitute_out_minute,
   };
 }
 
@@ -70,14 +51,30 @@ const participationSelect = `
 
 /*
  * ============================================================
+ * CONVERTIR FRONTEND → SUPABASE
+ * ============================================================
+ */
+
+function toSupabaseRow(
+  participation: Omit<Participation, "id">
+) {
+  return {
+    match_id: participation.matchId,
+    player_id: participation.playerId,
+    team_id: participation.teamId,
+    position_id: participation.positionId,
+    shirt_number: participation.shirtNumber,
+    is_starting_xi: participation.isStartingXI,
+    minutes_played: participation.minutesPlayed,
+    captain: participation.captain,
+    substitute_in_minute: participation.substituteInMinute,
+    substitute_out_minute: participation.substituteOutMinute,
+  };
+}
+
+/*
+ * ============================================================
  * OBTENER TODAS LAS PARTICIPACIONES
- *
- * IMPORTANTE:
- *
- * Supabase puede limitar una consulta a 1.000 registros.
- *
- * Recuperamos los datos por bloques de 1.000 hasta
- * obtener todos los registros.
  * ============================================================
  */
 
@@ -85,7 +82,6 @@ export async function getParticipations(): Promise<
   Participation[]
 > {
   const PAGE_SIZE = 1000;
-
   const allParticipations: Participation[] = [];
 
   let from = 0;
@@ -110,15 +106,9 @@ export async function getParticipations(): Promise<
       throw error;
     }
 
-    const page =
-      (data ?? []).map(mapParticipation);
+    const page = (data ?? []).map(mapParticipation);
 
     allParticipations.push(...page);
-
-    /*
-     * Si recibimos menos de 1.000 registros,
-     * hemos llegado al final.
-     */
 
     if (page.length < PAGE_SIZE) {
       break;
@@ -133,10 +123,6 @@ export async function getParticipations(): Promise<
 /*
  * ============================================================
  * OBTENER PARTICIPACIONES DE UN PARTIDO
- *
- * Esta función evita tener que cargar todas las
- * participaciones de la base de datos cuando solo
- * necesitamos trabajar con un partido concreto.
  * ============================================================
  */
 
@@ -160,61 +146,36 @@ export async function getParticipationsByMatchId(
     throw error;
   }
 
-  return (data ?? []).map(
-    mapParticipation
-  );
+  return (data ?? []).map(mapParticipation);
 }
 
 /*
  * ============================================================
- * CREAR PARTICIPACIÓN
+ * CREAR O ACTUALIZAR UNA PARTICIPACIÓN
  *
- * El ID lo genera Supabase automáticamente.
+ * Si ya existe una participación con la combinación
+ * match_id + player_id, se actualiza.
+ *
+ * Si no existe, se crea una nueva.
  * ============================================================
  */
 
 export async function addParticipation(
   participation: Omit<Participation, "id">
 ): Promise<Participation> {
+  const row = toSupabaseRow(participation);
+
   const { data, error } = await supabase
     .from("participations")
-    .insert({
-      match_id:
-        participation.matchId,
-
-      player_id:
-        participation.playerId,
-
-      team_id:
-        participation.teamId,
-
-      position_id:
-        participation.positionId,
-
-      shirt_number:
-        participation.shirtNumber,
-
-      is_starting_xi:
-        participation.isStartingXI,
-
-      minutes_played:
-        participation.minutesPlayed,
-
-      captain:
-        participation.captain,
-
-      substitute_in_minute:
-        participation.substituteInMinute,
-
-      substitute_out_minute:
-        participation.substituteOutMinute,
+    .upsert(row, {
+      onConflict: "match_id,player_id",
     })
     .select(participationSelect)
     .single();
 
   if (error) {
     console.error(
-      "Error creando participación:",
+      "Error creando o actualizando participación:",
       JSON.stringify(error, null, 2)
     );
 
@@ -226,92 +187,64 @@ export async function addParticipation(
 
 /*
  * ============================================================
- * CREAR VARIAS PARTICIPACIONES
+ * CREAR O ACTUALIZAR VARIAS PARTICIPACIONES
  *
- * Permite añadir todos los jugadores de un equipo
- * y guardar sus participaciones de una sola vez.
- *
- * El ID de cada participación lo genera Supabase.
+ * Evita errores de duplicidad cuando alguna participación
+ * ya existe en la base de datos.
  * ============================================================
  */
 
 export async function addParticipations(
   participations: Omit<Participation, "id">[]
 ): Promise<Participation[]> {
-  /*
-   * No hacemos ninguna petición si no hay
-   * participaciones que guardar.
-   */
-
   if (participations.length === 0) {
     return [];
   }
 
   /*
-   * Convertimos nuestro modelo TypeScript
-   * al modelo de Supabase.
+   * Evitar duplicados dentro de la propia petición.
+   *
+   * Si el mismo jugador aparece varias veces para el mismo
+   * partido, conservamos la última aparición.
    */
 
-  const rows = participations.map(
-    (participation) => ({
-      match_id:
-        participation.matchId,
+  const uniqueParticipations = new Map<
+    string,
+    Omit<Participation, "id">
+  >();
 
-      player_id:
-        participation.playerId,
+  for (const participation of participations) {
+    const key = `${participation.matchId}-${participation.playerId}`;
 
-      team_id:
-        participation.teamId,
+    uniqueParticipations.set(key, participation);
+  }
 
-      position_id:
-        participation.positionId,
-
-      shirt_number:
-        participation.shirtNumber,
-
-      is_starting_xi:
-        participation.isStartingXI,
-
-      minutes_played:
-        participation.minutesPlayed,
-
-      captain:
-        participation.captain,
-
-      substitute_in_minute:
-        participation.substituteInMinute,
-
-      substitute_out_minute:
-        participation.substituteOutMinute,
-    })
+  const rows = Array.from(uniqueParticipations.values()).map(
+    toSupabaseRow
   );
-
-  /*
-   * INSERT MASIVO
-   */
 
   const { data, error } = await supabase
     .from("participations")
-    .insert(rows)
+    .upsert(rows, {
+      onConflict: "match_id,player_id",
+    })
     .select(participationSelect);
 
   if (error) {
     console.error(
-      "Error creando participaciones:",
+      "Error creando o actualizando participaciones:",
       JSON.stringify(error, null, 2)
     );
 
     throw error;
   }
 
-  return (data ?? []).map(
-    mapParticipation
-  );
+  return (data ?? []).map(mapParticipation);
 }
 
 /*
  * ============================================================
- * ACTUALIZAR PARTICIPACIÓN
+ * ACTUALIZAR PARTICIPACIÓN POR ID
  * ============================================================
  */
 
@@ -321,37 +254,7 @@ export async function updateParticipation(
 ): Promise<Participation | undefined> {
   const { data, error } = await supabase
     .from("participations")
-    .update({
-      match_id:
-        changes.matchId,
-
-      player_id:
-        changes.playerId,
-
-      team_id:
-        changes.teamId,
-
-      position_id:
-        changes.positionId,
-
-      shirt_number:
-        changes.shirtNumber,
-
-      is_starting_xi:
-        changes.isStartingXI,
-
-      minutes_played:
-        changes.minutesPlayed,
-
-      captain:
-        changes.captain,
-
-      substitute_in_minute:
-        changes.substituteInMinute,
-
-      substitute_out_minute:
-        changes.substituteOutMinute,
-    })
+    .update(toSupabaseRow(changes))
     .eq("id", id)
     .select(participationSelect)
     .maybeSingle();

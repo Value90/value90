@@ -1,3 +1,4 @@
+
 import Dashboard from "@/components/layout/Dashboard";
 
 import CountriesPage from "@/components/countries/CountriesPage";
@@ -14,6 +15,9 @@ import StagesPage from "@/components/stages/StagesPage";
 import ParticipationsPage from "@/components/participations/ParticipationsPage";
 import PlayerMatchStatsPage from "@/components/player-match-stats/PlayerMatchStatsPage";
 import MatchRatingsPage from "@/components/match-ratings/MatchRatingsPage";
+
+// Nueva pantalla de datos del partido
+import MatchDataPage from "@/components/match-data/MatchDataPage";
 
 import DatosV90Page from "@/components/dashboard/DatosV90Page";
 import ProgresoPage from "@/components/dashboard/ProgresoPage";
@@ -48,6 +52,9 @@ export default function AdminContent({
 
     case "match-ratings":
       return <MatchRatingsPage />;
+
+    case "match-data":
+      return <MatchDataPage />;
 
     /*
      * ============================================================
@@ -84,9 +91,8 @@ export default function AdminContent({
           </h1>
 
           <p className="mt-2 text-sm text-slate-600 sm:text-base">
-            Esta sección se desarrollará cuando
-            el motor V90 disponga de datos suficientes
-            para generar valores de mercado.
+            Esta sección se desarrollará cuando el motor V90 disponga de
+            datos suficientes para generar valores de mercado.
           </p>
         </div>
       );

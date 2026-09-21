@@ -34,6 +34,9 @@ export default function Dashboard() {
   const [competitionCount, setCompetitionCount] =
     useState(0);
 
+  const [dashboardCompetitions, setDashboardCompetitions] =
+    useState<Awaited<ReturnType<typeof getCompetitions>>>([]);
+
   const [
     competitionsLoading,
     setCompetitionsLoading,
@@ -54,11 +57,17 @@ export default function Dashboard() {
   const [stageCount, setStageCount] =
     useState(0);
 
+  const [dashboardStages, setDashboardStages] =
+    useState<Awaited<ReturnType<typeof getStages>>>([]);
+
   const [stagesLoading, setStagesLoading] =
     useState(true);
 
   const [matchCount, setMatchCount] =
     useState(0);
+
+  const [dashboardMatches, setDashboardMatches] =
+    useState<Awaited<ReturnType<typeof getMatches>>>([]);
 
   const [matchesLoading, setMatchesLoading] =
     useState(true);
@@ -81,6 +90,9 @@ export default function Dashboard() {
 
   const [matchRatingCount, setMatchRatingCount] =
     useState(0);
+
+  const [dashboardMatchRatings, setDashboardMatchRatings] =
+    useState<Awaited<ReturnType<typeof getMatchRatings>>>([]);
 
   const [
     matchRatingsLoading,
@@ -155,6 +167,7 @@ export default function Dashboard() {
         setCompetitionCount(
           competitions.length
         );
+        setDashboardCompetitions(competitions);
       } catch (error) {
         console.error(
           "Error obteniendo competiciones para el dashboard:",
@@ -242,6 +255,7 @@ export default function Dashboard() {
         const stages = await getStages();
 
         setStageCount(stages.length);
+        setDashboardStages(stages);
       } catch (error) {
         console.error(
           "Error obteniendo jornadas / fases para el dashboard:",
@@ -274,6 +288,7 @@ export default function Dashboard() {
         setMatchCount(
           matches.length
         );
+        setDashboardMatches(matches);
       } catch (error) {
         console.error(
           "Error obteniendo partidos para el dashboard:",
@@ -376,6 +391,7 @@ export default function Dashboard() {
         setMatchRatingCount(
           matchRatings.length
         );
+        setDashboardMatchRatings(matchRatings);
 
         /*
          * ======================================================
@@ -496,6 +512,48 @@ export default function Dashboard() {
    * ============================================================
    */
 
+  /*
+   * ============================================================
+   * PENDIENTES V90
+   * ============================================================
+   */
+
+  const matchIdsWithRatings = new Set(
+    dashboardMatchRatings.map((rating) => rating.matchId)
+  );
+
+  const pendingMatchCount = dashboardMatches.filter(
+    (match) => !matchIdsWithRatings.has(match.id)
+  ).length;
+
+  const oldestPendingStage = [...dashboardStages]
+    .filter((stage) => {
+      const stageMatches = dashboardMatches.filter(
+        (match) => match.stageId === stage.id
+      );
+
+      return (
+        stageMatches.length > 0 &&
+        stageMatches.every((match) => !matchIdsWithRatings.has(match.id))
+      );
+    })
+    .sort((a, b) => {
+      const getNumber = (name: string) =>
+        Number(name.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
+
+      return getNumber(a.name) - getNumber(b.name);
+    })[0];
+
+  const oldestPendingCompetition = oldestPendingStage
+    ? dashboardCompetitions.find((competition) => {
+        const stageMatch = dashboardMatches.find(
+          (match) => match.stageId === oldestPendingStage.id
+        );
+
+        return competition.id === stageMatch?.competitionId;
+      })
+    : undefined;
+
   const externalAverageDisplay =
     matchRatingsLoading
       ? "..."
@@ -580,20 +638,23 @@ export default function Dashboard() {
           />
 
           <StatCard
-            title="Pendientes"
+            title="Partidos pendientes"
             value={
-              v90Loading
+              v90Loading || matchesLoading || matchRatingsLoading
                 ? "..."
-                : v90Summary.pending.toString()
+                : pendingMatchCount.toString()
             }
           />
 
           <StatCard
-            title="Errores"
+            title="Jornada pendiente"
+            compactValue
             value={
-              v90Loading
+              v90Loading || matchesLoading || matchRatingsLoading || stagesLoading
                 ? "..."
-                : v90Summary.errors.toString()
+                : oldestPendingStage
+                  ? `${oldestPendingStage.name.replace(/jornada/gi, "J").replace(/\s+/g, "")}${oldestPendingCompetition ? ` ${oldestPendingCompetition.name}` : ""}`
+                  : "—"
             }
           />
 
