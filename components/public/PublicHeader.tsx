@@ -1,26 +1,41 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 export default function PublicHeader() {
+  const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigation = [
     { label: "Inicio", href: "/public" },
-    { label: "Jugadores", href: "#jugadores" },
-    { label: "Equipos", href: "#equipos" },
-    { label: "Partidos", href: "#partidos" },
-    { label: "Competiciones", href: "#competiciones" },
-    { label: "Rankings", href: "#rankings" },
-    { label: "Estadísticas", href: "#estadisticas" },
+    { label: "Jugadores", href: "/public/jugadores" },
+    { label: "Equipos", href: "/public/equipos" },
+    { label: "Partidos", href: "/public/partidos" },
+    { label: "Competiciones", href: "/public/competiciones" },
+    { label: "Rankings", href: "/public/rankings" },
+    { label: "Estadísticas", href: "/public/estadisticas" },
   ];
+
+  const isActive = (href: string) => {
+    if (href === "/public") {
+      return pathname === "/public";
+    }
+
+    return pathname.startsWith(href);
+  };
+
+  const handleMobileNavigation = () => {
+    setMobileMenuOpen(false);
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-10">
 
         {/* LOGO */}
-        <a
+        <Link
           href="/public"
           className="group flex items-center gap-2"
           aria-label="Value90 inicio"
@@ -38,29 +53,33 @@ export default function PublicHeader() {
               FOOTBALL DATA & PLAYER VALUE
             </div>
           </div>
-        </a>
+        </Link>
 
-        {/* DESKTOP NAVIGATION */}
-        <nav className="hidden items-center gap-7 lg:flex">
-          {navigation.map((item) => (
-            <a
-              key={item.label}
-              href={item.href}
-              className={`text-sm font-medium transition ${
-                item.label === "Inicio"
-                  ? "font-semibold text-emerald-600"
-                  : "text-slate-600 hover:text-emerald-600"
-              }`}
-            >
-              {item.label}
-            </a>
-          ))}
+        {/* MENÚ ESCRITORIO */}
+        <nav className="hidden items-center gap-5 lg:flex xl:gap-7">
+          {navigation.map((item) => {
+            const active = isActive(item.href);
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`text-sm transition ${
+                  active
+                    ? "font-bold text-emerald-600"
+                    : "font-medium text-slate-600 hover:text-emerald-600"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* RIGHT ACTIONS */}
-        <div className="hidden items-center gap-3 lg:flex">
+        {/* ACCIONES DERECHA */}
+        <div className="hidden items-center gap-2 lg:flex">
 
-          {/* SEARCH */}
+          {/* BUSCAR */}
           <button
             type="button"
             className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
@@ -81,7 +100,7 @@ export default function PublicHeader() {
             </svg>
           </button>
 
-          {/* DARK MODE */}
+          {/* TEMA */}
           <button
             type="button"
             className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
@@ -109,16 +128,16 @@ export default function PublicHeader() {
             </svg>
           </button>
 
-          {/* LOGIN */}
+          {/* ACCEDER */}
           <button
             type="button"
-            className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
+            className="ml-1 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
           >
             Acceder
           </button>
         </div>
 
-        {/* MOBILE MENU BUTTON */}
+        {/* BOTÓN MENÚ MÓVIL */}
         <button
           type="button"
           onClick={() => setMobileMenuOpen((value) => !value)}
@@ -159,20 +178,29 @@ export default function PublicHeader() {
         </button>
       </div>
 
-      {/* MOBILE NAVIGATION */}
+      {/* MENÚ MÓVIL */}
       {mobileMenuOpen && (
         <div className="border-t border-slate-200 bg-white lg:hidden">
           <nav className="mx-auto flex max-w-[1440px] flex-col px-5 py-4 sm:px-8">
-            {navigation.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="border-b border-slate-100 py-3 text-sm font-medium text-slate-700 last:border-b-0 hover:text-emerald-600"
-              >
-                {item.label}
-              </a>
-            ))}
+
+            {navigation.map((item) => {
+              const active = isActive(item.href);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={handleMobileNavigation}
+                  className={`border-b border-slate-100 py-3 text-sm last:border-b-0 ${
+                    active
+                      ? "font-bold text-emerald-600"
+                      : "font-medium text-slate-700 hover:text-emerald-600"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
 
             <button
               type="button"
@@ -180,6 +208,7 @@ export default function PublicHeader() {
             >
               Acceder
             </button>
+
           </nav>
         </div>
       )}

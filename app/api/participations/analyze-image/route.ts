@@ -3,6 +3,7 @@ import {
   createRecognitionResult,
   getLearningContext,
 } from "@/services/ai.feedback.service";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 interface RosterPlayer {
   playerId: number;
@@ -60,6 +61,38 @@ function parseJson(text: string): unknown {
 
 export async function POST(request: Request) {
   try {
+    /*
+     * Cliente de Supabase para el servidor.
+     *
+     * Es importante utilizar este cliente porque esta ruta se ejecuta
+     * en el servidor y necesitamos que Supabase reciba la sesión
+     * autenticada mediante las cookies.
+     */
+    const supabase = await createServerClient();
+
+    /*
+     * Comprobamos que existe una sesión autenticada.
+     */
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      console.error(
+        "[participations/analyze-image] Usuario no autenticado:",
+        authError,
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "La sesión ha expirado o no existe un usuario autenticado.",
+        },
+        { status: 401 },
+      );
+    }
+
     const body = (await request.json()) as AnalyzeRequest;
 
     const apiKey = process.env.OPENAI_API_KEY;
@@ -67,21 +100,24 @@ export async function POST(request: Request) {
     if (!apiKey) {
       return NextResponse.json(
         { error: "No está configurada OPENAI_API_KEY." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     if (!body.image) {
       return NextResponse.json(
         { error: "No se ha recibido ninguna imagen." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!Array.isArray(body.roster) || body.roster.length === 0) {
       return NextResponse.json(
-        { error: "No se han recibido jugadores de las plantillas." },
-        { status: 400 }
+        {
+          error:
+            "No se han recibido jugadores de las plantillas.",
+        },
+        { status: 400 },
       );
     }
 
@@ -90,20 +126,38 @@ export async function POST(request: Request) {
         ? body.matchDuration
         : 90;
 
-    const homeTeamName = body.homeTeamName ?? "Equipo local";
-    const awayTeamName = body.awayTeamName ?? "Equipo visitante";
+    const homeTeamName =
+      body.homeTeamName ?? "Equipo local";
 
+    const awayTeamName =
+      body.awayTeamName ?? "Equipo visitante";
+
+    /*
+     * Recuperamos el contexto de aprendizaje utilizando el cliente
+     * autenticado del servidor.
+     *
+     * Antes se utilizaba el cliente del navegador de forma indirecta,
+     * lo que provocaba el error RLS.
+     */
     let learningContext = "";
+
     try {
-      learningContext = await getLearningContext("participations");
+      learningContext = await getLearningContext(
+        "participations",
+        {},
+        supabase,
+      );
     } catch (learningError) {
-      console.error("[participations/analyze-image] No se pudo cargar el contexto de aprendizaje:", learningError);
+      console.error(
+        "[participations/analyze-image] No se pudo cargar el contexto de aprendizaje:",
+        learningError,
+      );
     }
 
     const rosterText = body.roster
       .map(
         (player) =>
-          `ID=${player.playerId} | equipo=${player.teamSide} | equipoId=${player.teamId} | dorsal=${player.shirtNumber ?? "-"} | nombre=${player.playerName} | nombreCorto=${player.shortName}`
+          `ID=${player.playerId} | equipo=${player.teamSide} | equipoId=${player.teamId} | dorsal=${player.shirtNumber ?? "-"} | nombre=${player.playerName} | nombreCorto=${player.shortName}`,
       )
       .join("\n");
 
@@ -168,7 +222,8 @@ REGLAS IMPORTANTES:
         },
         body: JSON.stringify({
           model:
-            process.env.OPENAI_PARTICIPATION_MODEL ?? "gpt-5.6-luna",
+            process.env.OPENAI_PARTICIPATION_MODEL ??
+            "gpt-5.6-luna",
           store: false,
           input: [
             {
@@ -240,13 +295,16 @@ REGLAS IMPORTANTES:
             },
           },
         }),
-      }
+      },
     );
 
     const responseData = await openAIResponse.json();
 
     if (!openAIResponse.ok) {
-      console.error("OpenAI error:", responseData);
+      console.error(
+        "OpenAI error:",
+        responseData,
+      );
 
       return NextResponse.json(
         {
@@ -254,18 +312,28 @@ REGLAS IMPORTANTES:
             responseData?.error?.message ??
             "OpenAI no pudo analizar la imagen.",
         },
-        { status: openAIResponse.status || 500 }
+        {
+          status:
+            openAIResponse.status || 500,
+        },
       );
     }
 
-    const outputText = extractOutputText(responseData);
+    const outputText =
+      extractOutputText(responseData);
 
     if (!outputText) {
-      console.error("OpenAI response sin texto de salida:", responseData);
+      console.error(
+        "OpenAI response sin texto de salida:",
+        responseData,
+      );
 
       return NextResponse.json(
-        { error: "OpenAI no devolvió ningún resultado." },
-        { status: 502 }
+        {
+          error:
+            "OpenAI no devolvió ningún resultado.",
+        },
+        { status: 502 },
       );
     }
 
@@ -275,20 +343,27 @@ REGLAS IMPORTANTES:
 
     if (!Array.isArray(parsed.players)) {
       return NextResponse.json(
-        { error: "La respuesta de OpenAI no tiene el formato esperado." },
-        { status: 502 }
+        {
+          error:
+            "La respuesta de OpenAI no tiene el formato esperado.",
+        },
+        { status: 502 },
       );
     }
 
     const rosterIds = new Set(
-      body.roster.map((player) => player.playerId)
+      body.roster.map(
+        (player) => player.playerId,
+      ),
     );
 
     const seenIds = new Set<number>();
 
     const players = parsed.players
       .filter((item: any) => {
-        const playerId = Number(item?.playerId);
+        const playerId = Number(
+          item?.playerId,
+        );
 
         if (!Number.isInteger(playerId)) {
           return false;
@@ -303,86 +378,170 @@ REGLAS IMPORTANTES:
         }
 
         seenIds.add(playerId);
+
         return true;
       })
       .map((item: any) => {
-        const playerId = Number(item.playerId);
+        const playerId = Number(
+          item.playerId,
+        );
+
         const inMinute =
           item.substituteInMinute === null ||
           item.substituteInMinute === undefined
             ? null
-            : Number(item.substituteInMinute);
+            : Number(
+                item.substituteInMinute,
+              );
+
         const outMinute =
           item.substituteOutMinute === null ||
           item.substituteOutMinute === undefined
             ? null
-            : Number(item.substituteOutMinute);
-        const confidence = Number(item.confidence);
-        const captainConfidence = Number(item.captainConfidence);
+            : Number(
+                item.substituteOutMinute,
+              );
+
+        const confidence = Number(
+          item.confidence,
+        );
+
+        const captainConfidence =
+          Number(
+            item.captainConfidence,
+          );
 
         return {
           playerId,
-          isStartingXI: item.isStartingXI === true,
+
+          isStartingXI:
+            item.isStartingXI === true,
+
           substituteInMinute:
             typeof inMinute === "number" &&
-            Number.isInteger(inMinute) && inMinute >= 0
+            Number.isInteger(inMinute) &&
+            inMinute >= 0
               ? inMinute
               : null,
+
           substituteOutMinute:
             typeof outMinute === "number" &&
-            Number.isInteger(outMinute) && outMinute >= 0
+            Number.isInteger(outMinute) &&
+            outMinute >= 0
               ? outMinute
               : null,
+
           confidence:
             Number.isFinite(confidence)
-              ? Math.max(0, Math.min(1, confidence))
+              ? Math.max(
+                  0,
+                  Math.min(1, confidence),
+                )
               : 0,
-          captain: item.captain === true,
+
+          captain:
+            item.captain === true,
+
           captainConfidence:
-            Number.isFinite(captainConfidence)
-              ? Math.max(0, Math.min(1, captainConfidence))
+            Number.isFinite(
+              captainConfidence,
+            )
+              ? Math.max(
+                  0,
+                  Math.min(
+                    1,
+                    captainConfidence,
+                  ),
+                )
               : 0,
         };
       });
 
-    let recognitionResultId: number | null = null;
+    let recognitionResultId:
+      number | null = null;
 
-    // Guardamos el resultado bruto/normalizado para poder comparar posteriormente
-    // las correcciones manuales del usuario. Si falla el registro, no bloqueamos
-    // el análisis principal.
+    /*
+     * Guardamos el resultado bruto/normalizado
+     * para poder comparar posteriormente las
+     * correcciones manuales del usuario.
+     *
+     * IMPORTANTE:
+     * Utilizamos el cliente servidor autenticado.
+     */
     try {
-      const recognitionResult = await createRecognitionResult({
-        matchId: body.matchId ?? null,
-        recognitionType: "participations",
-        source: "participation-image",
-        rawResponse: { players },
-        requestContext: {
-          homeTeamName,
-          awayTeamName,
-          matchDuration,
-          roster: body.roster,
-        },
-      });
-      recognitionResultId = recognitionResult?.id ?? null;
+      const recognitionResult =
+        await createRecognitionResult(
+          {
+            matchId:
+              body.matchId ?? null,
+
+            recognitionType:
+              "participations",
+
+            source:
+              "participation-image",
+
+            rawResponse: {
+              players,
+            },
+
+            requestContext: {
+              homeTeamName,
+              awayTeamName,
+              matchDuration,
+              roster: body.roster,
+            },
+          },
+          supabase,
+        );
+
+      recognitionResultId =
+        recognitionResult?.id ?? null;
+
+      console.log(
+        "[participations/analyze-image] Resultado de reconocimiento guardado:",
+        recognitionResultId,
+      );
     } catch (feedbackError) {
-      console.error("[participations/analyze-image] No se pudo registrar el feedback:", feedbackError);
+      console.error(
+        "[participations/analyze-image] No se pudo registrar el feedback:",
+        feedbackError,
+      );
     }
 
-    // Seguridad adicional: como máximo un capitán por equipo.
-    for (const side of ["home", "away"] as const) {
-      const sidePlayers = players.filter((item) => {
-        const rosterPlayer = body.roster!.find(
-          (candidate) => candidate.playerId === item.playerId
-        );
-        return rosterPlayer?.teamSide === side;
-      });
+    /*
+     * Seguridad adicional:
+     * como máximo un capitán por equipo.
+     */
+    for (const side of [
+      "home",
+      "away",
+    ] as const) {
+      const sidePlayers =
+        players.filter((item) => {
+          const rosterPlayer =
+            body.roster!.find(
+              (candidate) =>
+                candidate.playerId ===
+                item.playerId,
+            );
 
-      const captains = sidePlayers.filter((item) => item.captain);
+          return (
+            rosterPlayer?.teamSide === side
+          );
+        });
+
+      const captains =
+        sidePlayers.filter(
+          (item) => item.captain,
+        );
 
       if (captains.length > 1) {
         captains
           .sort(
-            (a, b) => b.captainConfidence - a.captainConfidence
+            (a, b) =>
+              b.captainConfidence -
+              a.captainConfidence,
           )
           .slice(1)
           .forEach((item) => {
@@ -391,9 +550,15 @@ REGLAS IMPORTANTES:
       }
     }
 
-    return NextResponse.json({ players });
+    return NextResponse.json({
+      players,
+      recognitionResultId,
+    });
   } catch (error) {
-    console.error("Error analizando imagen de participación:", error);
+    console.error(
+      "Error analizando imagen de participación:",
+      error,
+    );
 
     return NextResponse.json(
       {
@@ -402,7 +567,7 @@ REGLAS IMPORTANTES:
             ? error.message
             : "No se pudo analizar la imagen.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

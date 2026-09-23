@@ -3,6 +3,7 @@ import PublicHero from "./PublicHero";
 import PublicStats from "./PublicStats";
 import FeaturedPlayers from "./FeaturedPlayers";
 import V90Ranking from "./V90Ranking";
+import LatestMatches from "./LatestMatches";
 
 export default function PublicHome() {
   return (
@@ -23,6 +24,9 @@ export default function PublicHome() {
 
         {/* RANKING V90 */}
         <V90Ranking />
+
+        {/* ÚLTIMOS PARTIDOS */}
+        <LatestMatches />
 
       </main>
     </div>
