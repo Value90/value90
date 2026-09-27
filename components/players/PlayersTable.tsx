@@ -44,6 +44,15 @@ export default function PlayersTable({
 
   /*
    * ============================================================
+   * FILTRO POR PAÍS
+   * ============================================================
+   */
+
+  const [selectedCountryId, setSelectedCountryId] =
+    useState<number>(0);
+
+  /*
+   * ============================================================
    * CARGAR DATOS
    * ============================================================
    */
@@ -88,6 +97,47 @@ export default function PlayersTable({
       mounted = false;
     };
   }, []);
+
+  /*
+   * ============================================================
+   * JUGADORES FILTRADOS POR PAÍS
+   * ============================================================
+   */
+
+  const filteredPlayers = useMemo(() => {
+    /*
+     * 0 = todos los países
+     */
+
+    if (selectedCountryId === 0) {
+      return players;
+    }
+
+    return players.filter(
+      (player) =>
+        player.countryId ===
+        selectedCountryId
+    );
+  }, [
+    players,
+    selectedCountryId,
+  ]);
+
+  /*
+   * ============================================================
+   * PAÍSES ORDENADOS ALFABÉTICAMENTE
+   * ============================================================
+   */
+
+  const sortedCountries = useMemo(() => {
+    return [...countries].sort(
+      (a, b) =>
+        a.name.localeCompare(
+          b.name,
+          "es"
+        )
+    );
+  }, [countries]);
 
   /*
    * ============================================================
@@ -241,26 +291,90 @@ export default function PlayersTable({
    */
 
   return (
-    <div
-      className="
-        w-full
-        min-w-0
-        overflow-hidden
-        [&_table]:min-w-[700px]
-        [&_th]:whitespace-nowrap
-        [&_td]:whitespace-nowrap
-        [&_th]:px-3
-        [&_td]:px-3
-        [&_th]:py-3
-        [&_td]:py-3
-        sm:[&_th]:px-4
-        sm:[&_td]:px-4
-      "
-    >
-      <DataTable
-        columns={columns}
-        data={players}
-      />
+    <div className="w-full min-w-0 space-y-4">
+
+      {/* ======================================================
+          FILTRO DE PAÍS
+          ====================================================== */}
+
+      <div className="w-full">
+
+        <select
+          value={selectedCountryId}
+          onChange={(event) => {
+            setSelectedCountryId(
+              Number(
+                event.target.value
+              )
+            );
+          }}
+          className="
+            w-full
+            min-w-0
+            max-w-full
+            rounded-lg
+            border
+            border-slate-300
+            bg-white
+            px-3
+            py-2.5
+            text-sm
+            text-slate-700
+            outline-none
+            transition
+            focus:border-slate-500
+            sm:w-auto
+            sm:min-w-[240px]
+          "
+        >
+
+          <option value={0}>
+            Todos los países
+          </option>
+
+          {sortedCountries.map(
+            (country) => (
+              <option
+                key={country.id}
+                value={country.id}
+              >
+                {country.name}
+              </option>
+            )
+          )}
+
+        </select>
+
+      </div>
+
+      {/* ======================================================
+          TABLA
+          ====================================================== */}
+
+      <div
+        className="
+          w-full
+          min-w-0
+          overflow-hidden
+          [&_table]:min-w-[700px]
+          [&_th]:whitespace-nowrap
+          [&_td]:whitespace-nowrap
+          [&_th]:px-3
+          [&_td]:px-3
+          [&_th]:py-3
+          [&_td]:py-3
+          sm:[&_th]:px-4
+          sm:[&_td]:px-4
+        "
+      >
+
+        <DataTable
+          columns={columns}
+          data={filteredPlayers}
+        />
+
+      </div>
+
     </div>
   );
 }

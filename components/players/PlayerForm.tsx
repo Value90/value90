@@ -61,6 +61,12 @@ export default function PlayerForm({
       player?.countryId?.toString() ?? ""
     );
 
+  /*
+   * FILTRO DE PAÍSES
+   */
+  const [countryFilter, setCountryFilter] =
+    useState("");
+
   const [birthDate, setBirthDate] =
     useState(
       player?.birthDate ?? ""
@@ -148,6 +154,34 @@ export default function PlayerForm({
           )
       );
     }, [countries]);
+
+  /*
+   * ============================================================
+   * PAÍSES FILTRADOS
+   * ============================================================
+   */
+
+  const filteredCountries =
+    useMemo(() => {
+      const filter =
+        countryFilter
+          .trim()
+          .toLocaleLowerCase("es");
+
+      if (!filter) {
+        return sortedCountries;
+      }
+
+      return sortedCountries.filter(
+        (country) =>
+          country.name
+            .toLocaleLowerCase("es")
+            .includes(filter)
+      );
+    }, [
+      sortedCountries,
+      countryFilter,
+    ]);
 
   /*
    * ============================================================
@@ -436,6 +470,33 @@ export default function PlayerForm({
         <div>
 
           <label
+            htmlFor="player-country-filter"
+            className="mb-2 block text-sm font-medium text-slate-700"
+          >
+            Filtrar países
+          </label>
+
+          <input
+            id="player-country-filter"
+            type="text"
+            value={countryFilter}
+            onChange={(event) =>
+              setCountryFilter(
+                event.target.value
+              )
+            }
+            placeholder="Escribe para buscar un país..."
+            className="mb-2 w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
+          />
+
+          <div className="mb-2 text-xs text-slate-500">
+            {filteredCountries.length}{" "}
+            {filteredCountries.length === 1
+              ? "país disponible"
+              : "países disponibles"}
+          </div>
+
+          <label
             htmlFor="player-country"
             className="mb-2 block text-sm font-medium text-slate-700"
           >
@@ -457,14 +518,20 @@ export default function PlayerForm({
               Selecciona un país
             </option>
 
-            {sortedCountries.map(
-              (country) => (
-                <option
-                  key={country.id}
-                  value={country.id}
-                >
-                  {country.name}
-                </option>
+            {filteredCountries.length === 0 ? (
+              <option value="" disabled>
+                No se encontraron países
+              </option>
+            ) : (
+              filteredCountries.map(
+                (country) => (
+                  <option
+                    key={country.id}
+                    value={country.id}
+                  >
+                    {country.name}
+                  </option>
+                )
               )
             )}
 
