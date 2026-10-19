@@ -13,7 +13,6 @@ export default function PublicHeader() {
     { label: "Jugadores", href: "/public/jugadores" },
     { label: "Equipos", href: "/public/equipos" },
     { label: "Partidos", href: "/public/partidos" },
-    { label: "Competiciones", href: "/public/competiciones" },
     { label: "Rankings", href: "/public/rankings" },
     { label: "Estadísticas", href: "/public/estadisticas" },
   ];

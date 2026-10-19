@@ -40,38 +40,13 @@ export default function MatchForm({
   onCancel,
   onSaved,
 }: MatchFormProps) {
-  /*
-   * ============================================================
-   * DATOS
-   * ============================================================
-   */
-
-  const [competitions, setCompetitions] =
-    useState<Competition[]>([]);
-
-  const [seasons, setSeasons] =
-    useState<Season[]>([]);
-
-  const [stages, setStages] =
-    useState<Stage[]>([]);
-
-  const [teams, setTeams] =
-    useState<Team[]>([]);
-
-  const [teamCompetitions, setTeamCompetitions] =
-    useState<TeamCompetition[]>([]);
-
-  const [dataLoading, setDataLoading] =
-    useState(true);
-
-  const [teamsLoading, setTeamsLoading] =
-    useState(true);
-
-  /*
-   * ============================================================
-   * CARGAR COMPETICIONES, TEMPORADAS Y FASES
-   * ============================================================
-   */
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamCompetitions, setTeamCompetitions] = useState<TeamCompetition[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [teamsLoading, setTeamsLoading] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
@@ -108,12 +83,6 @@ export default function MatchForm({
     loadData();
   }, []);
 
-  /*
-   * ============================================================
-   * CARGAR EQUIPOS
-   * ============================================================
-   */
-
   useEffect(() => {
     const loadTeams = async () => {
       try {
@@ -123,10 +92,7 @@ export default function MatchForm({
 
         setTeams(data);
       } catch (error) {
-        console.error(
-          "Error obteniendo equipos:",
-          error
-        );
+        console.error("Error obteniendo equipos:", error);
 
         setTeams([]);
       } finally {
@@ -137,27 +103,13 @@ export default function MatchForm({
     loadTeams();
   }, []);
 
-  /*
-   * ============================================================
-   * ESTADO DEL FORMULARIO
-   * ============================================================
-   */
+  const [competitionId, setCompetitionId] = useState(
+    match?.competitionId?.toString() ?? ""
+  );
 
-  const [competitionId, setCompetitionId] =
-    useState(
-      match?.competitionId?.toString() ?? ""
-    );
-
-  const [seasonId, setSeasonId] =
-    useState(
-      match?.seasonId?.toString() ?? ""
-    );
-
-  /*
-   * ============================================================
-   * CARGAR RELACIÓN EQUIPO ↔ COMPETICIÓN POR TEMPORADA
-   * ============================================================
-   */
+  const [seasonId, setSeasonId] = useState(
+    match?.seasonId?.toString() ?? ""
+  );
 
   useEffect(() => {
     const loadTeamCompetitions = async () => {
@@ -167,10 +119,9 @@ export default function MatchForm({
       }
 
       try {
-        const data =
-          await getTeamCompetitionsBySeason(
-            Number(seasonId)
-          );
+        const data = await getTeamCompetitionsBySeason(
+          Number(seasonId)
+        );
 
         setTeamCompetitions(data);
       } catch (error) {
@@ -186,140 +137,86 @@ export default function MatchForm({
     loadTeamCompetitions();
   }, [seasonId]);
 
-  const [stageId, setStageId] =
-    useState(
-      match?.stageId?.toString() ?? ""
-    );
+  const [stageId, setStageId] = useState(
+    match?.stageId?.toString() ?? ""
+  );
 
-  const [homeTeamId, setHomeTeamId] =
-    useState(
-      match?.homeTeamId?.toString() ?? ""
-    );
+  const [homeTeamId, setHomeTeamId] = useState(
+    match?.homeTeamId?.toString() ?? ""
+  );
 
-  const [awayTeamId, setAwayTeamId] =
-    useState(
-      match?.awayTeamId?.toString() ?? ""
-    );
+  const [awayTeamId, setAwayTeamId] = useState(
+    match?.awayTeamId?.toString() ?? ""
+  );
 
-  const [homeScore, setHomeScore] =
-    useState(
-      match?.homeScore?.toString() ?? "0"
-    );
+  const [homeScore, setHomeScore] = useState(
+    match?.homeScore?.toString() ?? "0"
+  );
 
-  const [awayScore, setAwayScore] =
-    useState(
-      match?.awayScore?.toString() ?? "0"
-    );
+  const [awayScore, setAwayScore] = useState(
+    match?.awayScore?.toString() ?? "0"
+  );
 
-  const [date, setDate] =
-    useState(
-      match?.date ?? ""
-    );
+  const [date, setDate] = useState(
+    match?.date ?? ""
+  );
 
-  const [stadium, setStadium] =
-    useState(
-      match?.stadium ?? ""
-    );
+  const [time, setTime] = useState(
+    match?.date?.includes("T")
+      ? match.date.split("T")[1]?.slice(0, 5) ?? ""
+      : ""
+  );
 
-  const [status, setStatus] =
-    useState<Match["status"]>(
-      match?.status ?? "Programado"
-    );
+  const [stadium, setStadium] = useState(
+    match?.stadium ?? ""
+  );
 
-  const [matchDuration, setMatchDuration] =
-    useState<number>(
-      match?.matchDuration ?? 90
-    );
+  const [status, setStatus] = useState<Match["status"]>(
+    match?.status ?? "Programado"
+  );
 
-  const [hasPenalties, setHasPenalties] =
-    useState<boolean>(
-      match?.homePenaltyScore !== null &&
+  const [matchDuration, setMatchDuration] = useState<number>(
+    match?.matchDuration ?? 90
+  );
+
+  const [hasPenalties, setHasPenalties] = useState<boolean>(
+    match?.homePenaltyScore !== null &&
       match?.homePenaltyScore !== undefined &&
       match?.awayPenaltyScore !== null &&
       match?.awayPenaltyScore !== undefined
-    );
+  );
 
-  const [homePenaltyScore, setHomePenaltyScore] =
-    useState<string>(
-      match?.homePenaltyScore?.toString() ?? ""
-    );
+  const [homePenaltyScore, setHomePenaltyScore] = useState<string>(
+    match?.homePenaltyScore?.toString() ?? ""
+  );
 
-  const [awayPenaltyScore, setAwayPenaltyScore] =
-    useState<string>(
-      match?.awayPenaltyScore?.toString() ?? ""
-    );
+  const [awayPenaltyScore, setAwayPenaltyScore] = useState<string>(
+    match?.awayPenaltyScore?.toString() ?? ""
+  );
 
-  /*
-   * ============================================================
-   * COMPETICIÓN SELECCIONADA
-   * ============================================================
-   */
+  const selectedCompetition = competitions.find(
+    (competition) =>
+      competition.id === Number(competitionId)
+  );
 
-  const selectedCompetition =
-    competitions.find(
-      (competition) =>
-        competition.id === Number(competitionId)
-    );
+  const selectedHomeTeam = teams.find(
+    (team) =>
+      team.id === Number(homeTeamId)
+  );
 
-  /*
-   * ============================================================
-   * EQUIPO LOCAL SELECCIONADO
-   * ============================================================
-   */
-
-  const selectedHomeTeam =
-    teams.find(
-      (team) =>
-        team.id === Number(homeTeamId)
-    );
-
-  /*
-   * ============================================================
-   * IDs DE EQUIPOS REGISTRADOS EN LA COMPETICIÓN EXACTA
-   * ============================================================
-   *
-   * IMPORTANTE:
-   *
-   * Un equipo puede estar relacionado con varias competiciones
-   * dentro de una misma temporada.
-   *
-   * Ejemplo:
-   *
-   * Real Madrid
-   *   → LaLiga
-   *   → Champions League
-   *
-   * Si seleccionamos LaLiga, únicamente debe utilizarse la
-   * relación:
-   *
-   *   Real Madrid + LaLiga + temporada
-   *
-   * La relación con Champions NO debe influir.
-   *
-   * ============================================================
-   */
-
-  const registeredTeamIds =
-    new Set(
-      teamCompetitions
-        .filter(
-          (relation) =>
-            relation.active === true &&
-            relation.seasonId === Number(seasonId) &&
-            relation.competitionId ===
-              Number(competitionId)
-        )
-        .map(
-          (relation) =>
-            relation.teamId
-        )
-    );
-
-  /*
-   * ============================================================
-   * EQUIPOS FILTRADOS Y ORDENADOS
-   * ============================================================
-   */
+  const registeredTeamIds = new Set(
+    teamCompetitions
+      .filter(
+        (relation) =>
+          relation.active === true &&
+          relation.seasonId === Number(seasonId) &&
+          relation.competitionId === Number(competitionId)
+      )
+      .map(
+        (relation) =>
+          relation.teamId
+      )
+  );
 
   const filteredTeams = [...teams]
     .filter((team) => {
@@ -331,35 +228,16 @@ export default function MatchForm({
         return false;
       }
 
-      /*
-       * ========================================================
-       * COMPETICIONES DE SELECCIONES
-       * ========================================================
-       */
-
       if (
         selectedCompetition.competitionType ===
         "National Team"
       ) {
-        /*
-         * Competición FIFA:
-         *
-         * cualquier selección nacional.
-         */
-
         if (
           selectedCompetition.confederation ===
           "FIFA"
         ) {
           return team.type === "Selección";
         }
-
-        /*
-         * Competición de una confederación:
-         *
-         * únicamente selecciones pertenecientes
-         * a esa confederación.
-         */
 
         return (
           team.type === "Selección" &&
@@ -368,34 +246,8 @@ export default function MatchForm({
         );
       }
 
-      /*
-       * ========================================================
-       * COMPETICIONES DE CLUBES
-       * ========================================================
-       *
-       * AQUÍ ESTÁ LA CORRECCIÓN PRINCIPAL.
-       *
-       * El equipo debe estar registrado exactamente en:
-       *
-       *   - la temporada seleccionada
-       *   - la competición seleccionada
-       *   - relación activa
-       *
-       * No importa que el equipo tenga además otras
-       * competiciones.
-       *
-       * ========================================================
-       */
-
       const isRegisteredForCompetition =
         registeredTeamIds.has(team.id);
-
-      /*
-       * Al editar un partido existente, conservamos
-       * temporalmente sus equipos aunque la relación histórica
-       * todavía no esté registrada, para no romper partidos
-       * ya existentes.
-       */
 
       const isCurrentEditedTeam =
         !!match &&
@@ -422,151 +274,73 @@ export default function MatchForm({
       )
     );
 
-  /*
-   * ============================================================
-   * JORNADAS / FASES DISPONIBLES
-   * ============================================================
-   *
-   * Las jornadas se ordenan por el número que aparece
-   * en el nombre:
-   *
-   * Jornada 4
-   * Jornada 3
-   * Jornada 2
-   * Jornada 1
-   *
-   * No dependemos de displayOrder porque puede no coincidir
-   * con el número real de la jornada.
-   */
+  const availableStages = stages
+    .filter(
+      (stage) =>
+        stage.seasonId === Number(seasonId) &&
+        stage.active
+    )
+    .sort((a, b) => {
+      const numberA =
+        a.name.match(/\d+/)?.[0];
 
-  const availableStages =
-    stages
-      .filter(
-        (stage) =>
-          stage.seasonId ===
-            Number(seasonId) &&
-          stage.active
-      )
-      .sort((a, b) => {
-        const numberA =
-          a.name.match(/\d+/)?.[0];
+      const numberB =
+        b.name.match(/\d+/)?.[0];
 
-        const numberB =
-          b.name.match(/\d+/)?.[0];
+      const stageNumberA =
+        numberA !== undefined
+          ? Number(numberA)
+          : null;
 
-        const stageNumberA =
-          numberA !== undefined
-            ? Number(numberA)
-            : null;
+      const stageNumberB =
+        numberB !== undefined
+          ? Number(numberB)
+          : null;
 
-        const stageNumberB =
-          numberB !== undefined
-            ? Number(numberB)
-            : null;
-
-        /*
-         * Si ambas fases tienen número,
-         * ordenar de mayor a menor.
-         */
-
-        if (
-          stageNumberA !== null &&
-          stageNumberB !== null
-        ) {
-          return (
-            stageNumberB -
-            stageNumberA
-          );
-        }
-
-        /*
-         * Si alguna no tiene número,
-         * usamos displayOrder como respaldo.
-         */
-
+      if (
+        stageNumberA !== null &&
+        stageNumberB !== null
+      ) {
         return (
-          (b.displayOrder ?? 0) -
-          (a.displayOrder ?? 0)
+          stageNumberB -
+          stageNumberA
         );
-      });
+      }
 
-  /*
-   * ============================================================
-   * CAMBIO DE COMPETICIÓN
-   * ============================================================
-   */
+      return (
+        (b.displayOrder ?? 0) -
+        (a.displayOrder ?? 0)
+      );
+    });
 
   const handleCompetitionChange = (
     value: string
   ) => {
     setCompetitionId(value);
-
-    /*
-     * Cambiar de competición invalida
-     * los equipos y el estadio seleccionados.
-     */
-
     setHomeTeamId("");
     setAwayTeamId("");
     setStadium("");
   };
-
-  /*
-   * ============================================================
-   * CAMBIO DE TEMPORADA
-   * ============================================================
-   */
 
   const handleSeasonChange = (
     value: string
   ) => {
     setSeasonId(value);
-
-    /*
-     * La jornada / fase seleccionada
-     * puede dejar de ser válida.
-     */
-
     setStageId("");
-
-    /*
-     * La relación equipo ↔ competición también cambia
-     * al cambiar de temporada.
-     *
-     * Limpiamos los equipos para evitar conservar
-     * una selección perteneciente a otra temporada.
-     */
-
     setHomeTeamId("");
     setAwayTeamId("");
     setStadium("");
   };
-
-  /*
-   * ============================================================
-   * CAMBIO DE EQUIPO LOCAL
-   * ============================================================
-   *
-   * REGLA DE VALUE90:
-   *
-   * Club
-   *   → usar su estadio habitual
-   *
-   * Selección
-   *   → no asumir un estadio concreto
-   * ============================================================
-   */
 
   const handleHomeTeamChange = (
     value: string
   ) => {
     setHomeTeamId(value);
 
-    const selectedTeam =
-      teams.find(
-        (team) =>
-          team.id === Number(value)
-      );
+    const selectedTeam = teams.find(
+      (team) =>
+        team.id === Number(value)
+    );
 
     if (!selectedTeam) {
       setStadium("");
@@ -574,8 +348,7 @@ export default function MatchForm({
     }
 
     if (
-      selectedTeam.type ===
-      "Club"
+      selectedTeam.type === "Club"
     ) {
       setStadium(
         selectedTeam.stadium ?? ""
@@ -584,90 +357,48 @@ export default function MatchForm({
       return;
     }
 
-    /*
-     * Las selecciones pueden disputar
-     * partidos en distintos estadios.
-     *
-     * No asignamos uno automáticamente.
-     */
-
     setStadium("");
   };
-
-  /*
-   * ============================================================
-   * GUARDAR
-   * ============================================================
-   */
 
   const handleSubmit = (
     event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
-    /*
-     * COMPETICIÓN
-     */
-
     if (!competitionId) {
       alert(
         "Selecciona una competición."
       );
-
       return;
     }
-
-    /*
-     * TEMPORADA
-     */
 
     if (!seasonId) {
       alert(
         "Selecciona una temporada."
       );
-
       return;
     }
-
-    /*
-     * FASE / JORNADA
-     */
 
     if (!stageId) {
       alert(
         "Selecciona una fase o jornada."
       );
-
       return;
     }
-
-    /*
-     * EQUIPO LOCAL
-     */
 
     if (!homeTeamId) {
       alert(
         "Selecciona el equipo local."
       );
-
       return;
     }
-
-    /*
-     * EQUIPO VISITANTE
-     */
 
     if (!awayTeamId) {
       alert(
         "Selecciona el equipo visitante."
       );
-
       return;
     }
-
-    /*
-     * MISMO EQUIPO
-     */
 
     if (
       homeTeamId === awayTeamId
@@ -675,44 +406,25 @@ export default function MatchForm({
       alert(
         "El equipo local y el visitante no pueden ser el mismo."
       );
-
       return;
     }
-
-    /*
-     * FECHA
-     */
 
     if (!date) {
       alert(
         "Selecciona la fecha del partido."
       );
-
       return;
     }
 
-    /*
-     * ESTADIO
-     *
-     * Para un club debería existir su estadio habitual.
-     * Para una selección puede ser introducido manualmente.
-     */
-
     if (
-      selectedHomeTeam?.type ===
-        "Club" &&
+      selectedHomeTeam?.type === "Club" &&
       !stadium.trim()
     ) {
       alert(
         "El equipo local es un club y necesita tener un estadio."
       );
-
       return;
     }
-
-    /*
-     * DURACIÓN DEL PARTIDO
-     */
 
     if (
       matchDuration !== 90 &&
@@ -721,13 +433,8 @@ export default function MatchForm({
       alert(
         "La duración del partido debe ser de 90 o 120 minutos."
       );
-
       return;
     }
-
-    /*
-     * PENALTIS
-     */
 
     if (hasPenalties) {
       if (
@@ -737,7 +444,6 @@ export default function MatchForm({
         alert(
           "Introduce el resultado de la tanda de penaltis para ambos equipos."
         );
-
         return;
       }
 
@@ -748,37 +454,30 @@ export default function MatchForm({
         Number(awayPenaltyScore);
 
       if (
-        !Number.isInteger(
-          homePenalties
-        ) ||
-        !Number.isInteger(
-          awayPenalties
-        ) ||
+        !Number.isInteger(homePenalties) ||
+        !Number.isInteger(awayPenalties) ||
         homePenalties < 0 ||
         awayPenalties < 0
       ) {
         alert(
           "El resultado de los penaltis debe ser un número entero igual o superior a 0."
         );
-
         return;
       }
 
       if (
-        homePenalties ===
-        awayPenalties
+        homePenalties === awayPenalties
       ) {
         alert(
           "La tanda de penaltis no puede terminar empatada."
         );
-
         return;
       }
     }
 
-    /*
-     * DATOS DEL PARTIDO
-     */
+    const dateTime = time
+      ? `${date}T${time}:00`
+      : date;
 
     const matchData: Omit<
       Match,
@@ -805,7 +504,7 @@ export default function MatchForm({
       awayScore:
         Number(awayScore),
 
-      date,
+      date: dateTime,
 
       stadium:
         stadium.trim(),
@@ -825,28 +524,14 @@ export default function MatchForm({
           : null,
     };
 
-    /*
-     * DEVOLVER DATOS A LA PÁGINA
-     */
-
     onSaved(matchData);
   };
-
-  /*
-   * ============================================================
-   * RENDER
-   * ============================================================
-   */
 
   return (
     <form
       onSubmit={handleSubmit}
       className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 md:p-6 lg:p-8"
     >
-      {/* ======================================================
-          CABECERA
-          ====================================================== */}
-
       <div className="mb-6 sm:mb-8">
         <h2 className="text-xl font-bold sm:text-2xl">
           {match
@@ -861,15 +546,7 @@ export default function MatchForm({
         </p>
       </div>
 
-      {/* ======================================================
-          FORMULARIO
-          ====================================================== */}
-
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 md:gap-6">
-
-        {/* ====================================================
-            COMPETICIÓN
-            ==================================================== */}
 
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -911,10 +588,6 @@ export default function MatchForm({
           </select>
         </div>
 
-        {/* ====================================================
-            TEMPORADA
-            ==================================================== */}
-
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Temporada
@@ -955,10 +628,6 @@ export default function MatchForm({
           </select>
         </div>
 
-        {/* ====================================================
-            FASE / JORNADA
-            ==================================================== */}
-
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Fase / Jornada
@@ -983,8 +652,7 @@ export default function MatchForm({
                 ? "Cargando fases..."
                 : !seasonId
                   ? "Selecciona primero una temporada"
-                  : availableStages.length ===
-                      0
+                  : availableStages.length === 0
                     ? "No hay fases / jornadas"
                     : "Seleccionar fase / jornada"}
             </option>
@@ -1002,35 +670,76 @@ export default function MatchForm({
           </select>
         </div>
 
-        {/* ====================================================
-            FECHA
-            ==================================================== */}
+        {/* FECHA Y HORA EN UNA FILA PROPIA */}
 
-        <div className="min-w-0">
-          <label className="mb-2 block text-sm font-semibold text-slate-700">
-            Fecha
-          </label>
+        <div className="min-w-0 md:col-span-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
 
-          <input
-            type="date"
-            value={
-              date.includes("T")
-                ? date.split("T")[0]
-                : date
-            }
-            onChange={(event) =>
-              setDate(
-                event.target.value
-              )
-            }
-            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
-            required
-          />
+            <div className="min-w-0">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Fecha
+              </label>
+
+              <input
+                type="date"
+                value={
+                  date.includes("T")
+                    ? date.split("T")[0]
+                    : date
+                }
+                onChange={(event) => {
+                  const newDate =
+                    event.target.value;
+
+                  setDate(
+                    time
+                      ? `${newDate}T${time}:00`
+                      : newDate
+                  );
+                }}
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+                required
+              />
+            </div>
+
+            <div className="min-w-0">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Hora
+              </label>
+
+              <input
+                type="time"
+                value={time}
+                onChange={(event) => {
+                  const newTime =
+                    event.target.value;
+
+                  setTime(newTime);
+
+                  const currentDate =
+                    date.includes("T")
+                      ? date.split("T")[0]
+                      : date;
+
+                  if (
+                    currentDate &&
+                    newTime
+                  ) {
+                    setDate(
+                      `${currentDate}T${newTime}:00`
+                    );
+                  }
+                }}
+                className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
+              />
+            </div>
+
+          </div>
         </div>
 
-        {/* ====================================================
-            EQUIPO LOCAL
-            ==================================================== */}
+        {/* ESPACIO ANTES DE LOS EQUIPOS */}
+
+        <div className="hidden md:block md:col-span-2 h-1" />
 
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -1059,8 +768,7 @@ export default function MatchForm({
                   ? "Selecciona primero una competición"
                   : !seasonId
                     ? "Selecciona primero una temporada"
-                    : filteredTeams.length ===
-                        0
+                    : filteredTeams.length === 0
                       ? "No hay equipos disponibles"
                       : "Seleccionar equipo local"}
             </option>
@@ -1085,10 +793,6 @@ export default function MatchForm({
             </p>
           )}
         </div>
-
-        {/* ====================================================
-            EQUIPO VISITANTE
-            ==================================================== */}
 
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -1117,8 +821,7 @@ export default function MatchForm({
                   ? "Selecciona primero una competición"
                   : !seasonId
                     ? "Selecciona primero una temporada"
-                    : filteredTeams.length ===
-                        0
+                    : filteredTeams.length === 0
                       ? "No hay equipos disponibles"
                       : "Seleccionar equipo visitante"}
             </option>
@@ -1136,10 +839,6 @@ export default function MatchForm({
             )}
           </select>
         </div>
-
-        {/* ====================================================
-            GOLES LOCAL
-            ==================================================== */}
 
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -1159,10 +858,6 @@ export default function MatchForm({
           />
         </div>
 
-        {/* ====================================================
-            GOLES VISITANTE
-            ==================================================== */}
-
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Goles visitante
@@ -1181,10 +876,6 @@ export default function MatchForm({
           />
         </div>
 
-        {/* ====================================================
-            ESTADIO
-            ==================================================== */}
-
         <div className="min-w-0 md:col-span-2">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
             Estadio
@@ -1199,8 +890,7 @@ export default function MatchForm({
               )
             }
             placeholder={
-              selectedHomeTeam?.type ===
-              "Club"
+              selectedHomeTeam?.type === "Club"
                 ? "Estadio del club"
                 : "Introduce el estadio"
             }
@@ -1210,10 +900,9 @@ export default function MatchForm({
           {selectedHomeTeam?.type ===
             "Club" && (
             <p className="mt-1 text-xs text-slate-500">
-              Estadio rellenado
-              automáticamente según el club
-              local. Puedes modificarlo si es
-              necesario.
+              Estadio rellenado automáticamente
+              según el club local. Puedes
+              modificarlo si es necesario.
             </p>
           )}
 
@@ -1226,10 +915,6 @@ export default function MatchForm({
             </p>
           )}
         </div>
-
-        {/* ====================================================
-            ESTADO
-            ==================================================== */}
 
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -1258,10 +943,6 @@ export default function MatchForm({
             </option>
           </select>
         </div>
-
-        {/* ====================================================
-            DURACIÓN DEL PARTIDO
-            ==================================================== */}
 
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -1293,10 +974,6 @@ export default function MatchForm({
           </p>
         </div>
 
-        {/* ====================================================
-            PENALTIS
-            ==================================================== */}
-
         <div className="min-w-0 md:col-span-2">
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-300 bg-white px-4 py-3 hover:bg-slate-50">
             <input
@@ -1318,6 +995,7 @@ export default function MatchForm({
 
         {hasPenalties && (
           <div className="grid min-w-0 grid-cols-1 gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 sm:gap-5 sm:p-5 md:col-span-2">
+
             <div className="min-w-0">
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 {selectedHomeTeam?.name ??
@@ -1359,13 +1037,11 @@ export default function MatchForm({
                 className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
               />
             </div>
+
           </div>
         )}
-      </div>
 
-      {/* ======================================================
-          BOTONES
-          ====================================================== */}
+      </div>
 
       <div className="mt-6 flex flex-col-reverse gap-3 sm:mt-8 sm:flex-row sm:justify-end">
 

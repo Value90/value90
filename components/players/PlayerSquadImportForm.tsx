@@ -7,14 +7,18 @@ import {
 } from "react";
 
 import {
-  getSeasons,
-  type Season,
-} from "@/services/season.service";
+  getMatchRatings,
+  getMatchRatingByParticipationId,
+  addMatchRating,
+  updateMatchRating,
+  calculateExternalAverage,
+  type MatchRating,
+} from "@/services/match-rating.service";
 
 import {
-  getTeams,
-  type Team,
-} from "@/services/team.service";
+  getMatches,
+  type Match,
+} from "@/services/match.service";
 
 import {
   getCompetitions,
@@ -22,455 +26,97 @@ import {
 } from "@/services/competition.service";
 
 import {
+  getSeasons,
+  type Season,
+} from "@/services/season.service";
+
+import {
+  getStages,
+  type Stage,
+} from "@/services/stage.service";
+
+import {
+  getParticipations,
+  type Participation,
+} from "@/services/participation.service";
+
+import {
   getPlayers,
   type Player,
-  addPlayer,
 } from "@/services/player.service";
 
 import {
-  getCountries,
-  type Country,
-} from "@/services/country.service";
-
-import {
-  getPositions,
-  type Position,
-} from "@/services/position.service";
+  getTeams,
+  type Team,
+} from "@/services/team.service";
 
 import {
   getHistPlayerTeamsByTeamAndSeason,
-  saveHistPlayerTeamSquad,
-  type HistPlayerTeam,
 } from "@/services/hist-player-team.service";
 
-import {
-  getTeamCompetitionsBySeason,
-  type TeamCompetition,
-} from "@/services/team-competition.service";
-
-interface ImportRow {
-  inputName: string;
-  normalizedName: string;
-  countryName: string | null;
-  countryId: number | null;
-  birthDate: string | null;
-  existingPlayer?: Player;
-  status: "existing" | "new" | "duplicate";
-  playerId?: number;
+interface MatchRatingFormProps {
+  matchRating?: MatchRating;
+  onCancel: () => void;
+  onSaved: () => void;
+  initialInputMode?: "manual" | "import";
 }
 
-interface SquadRow {
-  playerId: number;
+
+interface ImportRatingRow {
   playerName: string;
-  shirtNumber: string;
+  player: Player | undefined;
+  playerId: number | null;
+  stageName: string;
+  stageId: number | null;
+  matchId: number | null;
+  participationId: number | null;
+  rating: number | null;
+  status: "ok" | "player-missing" | "stage-missing" | "match-missing" | "participation-missing" | "invalid";
+  message: string;
+}
+
+interface ImportColumn {
+  index: number;
+  label: string;
+  stageName: string;
+  stageKey: string;
+  stageId: number | null;
+  matchId: number | null;
+}
+
+interface OrderedParticipation {
+  participation: Participation;
+  player: Player | undefined;
+  team: Team | undefined;
   positionId: number;
-  history?: HistPlayerTeam;
 }
 
-type ImportStep = "players" | "numbers";
-
-interface PlayerSquadImportFormProps {
-  onSaved?: () => void | Promise<void>;
-  onCancel?: () => void;
-}
-
-/*
- * ============================================================
- * UTILIDADES
- * ============================================================
- */
-
-function normalizeName(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("es")
-    .replace(/[.'’`´]/g, "")
-    .replace(/[-_/]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/*
- * Extrae:
- *
- * 1. David Raya
- * 13. Joan Garcia
- *
- * Devuelve:
- *
- * dorsal = 1
- * nombre = David Raya
- */
-function parseShirtNumberLine(
-  line: string,
-  positions: Position[]
-): {
-  shirtNumber: number | null;
-  name: string;
-  positionId: number;
-  positionName: string | null;
-} {
-  const trimmed = line.trim();
-
-  const match = trimmed.match(
-    /^(\d{1,3})\s*[\.\-:)]?\s+(.+)$/
-  );
-
-  if (!match) {
-    return {
-      shirtNumber: null,
-      name: trimmed,
-      positionId: 0,
-      positionName: null,
-    };
-  }
-
-  let name = match[2].trim();
-  let positionId = 0;
-  let positionName: string | null = null;
-
-  /*
-   * Buscamos la posición al final de la línea.
-   * Primero intentamos los nombres reales de la tabla positions
-   * y después algunas abreviaturas habituales.
-   */
-  const sortedPositionCandidates = [...positions]
-    .filter((position) => position.active)
-    .sort(
-      (a, b) =>
-        normalizeName(b.name).length -
-        normalizeName(a.name).length
-    );
-
-  const matchedPosition = sortedPositionCandidates.find(
-    (position) => {
-      const normalizedName = normalizeName(name);
-      const normalizedPosition = normalizeName(
-        position.name
-      );
-
-      return (
-        normalizedName === normalizedPosition ||
-        normalizedName.endsWith(
-          ` ${normalizedPosition}`
-        )
-      );
-    }
-  );
-
-  if (matchedPosition) {
-    positionId = matchedPosition.id;
-    positionName = matchedPosition.name;
-
-    const normalizedName = normalizeName(name);
-    const normalizedPosition = normalizeName(
-      matchedPosition.name
-    );
-
-    if (normalizedName.endsWith(` ${normalizedPosition}`)) {
-      const words = name.split(/\s+/);
-      const positionWords =
-        matchedPosition.name.trim().split(/\s+/);
-
-      name = words
-        .slice(0, words.length - positionWords.length)
-        .join(" ")
-        .trim();
-    } else {
-      name = "";
-    }
-  } else {
-    /*
-     * Abreviaturas y variantes habituales.
-     * Solo se aplican cuando existe una posición compatible
-     * en la tabla de posiciones.
-     */
-    const normalizedName = normalizeName(name);
-
-    const aliases: Array<{
-      aliases: string[];
-      positionNames: string[];
-    }> = [
-      {
-        aliases: ["por", "port", "gk", "arquero", "guardameta"],
-        positionNames: ["portero"],
-      },
-      {
-        aliases: ["ld", "lateral diestro"],
-        positionNames: ["lateral derecho"],
-      },
-      {
-        aliases: ["li", "lateral zurdo"],
-        positionNames: ["lateral izquierdo"],
-      },
-      {
-        aliases: ["dfc", "zaguero", "defensa central"],
-        positionNames: ["central"],
-      },
-      {
-        aliases: ["mcd", "mediocentro defensivo", "pivote"],
-        positionNames: ["mediocentro"],
-      },
-      {
-        aliases: ["mc", "centrocampista"],
-        positionNames: ["mediocentro"],
-      },
-      {
-        aliases: ["md", "interior derecho"],
-        positionNames: ["interior derecho"],
-      },
-      {
-        aliases: ["mi", "interior izquierdo"],
-        positionNames: ["interior izquierdo"],
-      },
-      {
-        aliases: ["ed", "extremo diestro"],
-        positionNames: ["extremo derecho"],
-      },
-      {
-        aliases: ["ei", "extremo zurdo"],
-        positionNames: ["extremo izquierdo"],
-      },
-      {
-        aliases: ["mp", "mediapunta"],
-        positionNames: ["mediapunta"],
-      },
-      {
-        aliases: ["dc", "delantero centro", "9"],
-        positionNames: ["delantero"],
-      },
-      {
-        aliases: ["del", "punta"],
-        positionNames: ["delantero"],
-      },
-    ];
-
-    const matchedAlias = aliases.find(
-      (item) =>
-        item.aliases.includes(normalizedName.split(" ").pop() ?? "") ||
-        item.aliases.some((alias) =>
-          normalizedName.endsWith(` ${alias}`)
-        )
-    );
-
-    if (matchedAlias) {
-      const targetPosition = sortedPositionCandidates.find(
-        (position) =>
-          matchedAlias.positionNames.some(
-            (name) =>
-              normalizeName(position.name) ===
-              normalizeName(name)
-          )
-      );
-
-      if (targetPosition) {
-        const alias = matchedAlias.aliases.find(
-          (item) =>
-            normalizedName === item ||
-            normalizedName.endsWith(` ${item}`)
-        );
-
-        if (alias) {
-          positionId = targetPosition.id;
-          positionName = targetPosition.name;
-
-          const words = name.split(/\s+/);
-          name = words
-            .slice(0, words.length - alias.split(" ").length)
-            .join(" ")
-            .trim();
-        }
-      }
-    }
-  }
-
-  return {
-    shirtNumber: Number(match[1]),
-    name,
-    positionId,
-    positionName,
-  };
-}
-
-/**
- * Analiza una línea de importación de jugador.
- *
- * Formato recomendado (copiado desde Google Sheets):
- * Nombre<TAB>País<TAB>Fecha
- *
- * También admite una columna intermedia vacía, por ejemplo:
- * Nombre<TAB><TAB>País<TAB>Fecha
- *
- * La fecha se convierte de DD/MM/YYYY a YYYY-MM-DD.
- */
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function parsePlayerImportLine(
-  line: string,
-  countries: Country[]
-): {
-  name: string;
-  countryName: string | null;
-  countryId: number | null;
-  birthDate: string | null;
-} {
-  const trimmedLine = line.trim();
-
-  if (!trimmedLine) {
-    return {
-      name: "",
-      countryName: null,
-      countryId: null,
-      birthDate: null,
-    };
-  }
-
-  /*
-   * ==========================================================
-   * 1. DETECTAR LA FECHA AL FINAL DE LA LÍNEA
-   *
-   * Admitimos:
-   * 27/05/1998
-   * 27-05-1998
-   * 27.05.1998
-   *
-   * La fecha es opcional.
-   * ==========================================================
-   */
-
-  let remaining = trimmedLine;
-  let birthDate: string | null = null;
-
-  const dateMatch = remaining.match(
-    /(?:^|\s)(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})\s*$/
-  );
-
-  if (dateMatch) {
-    const day = dateMatch[1].padStart(2, "0");
-    const month = dateMatch[2].padStart(2, "0");
-    const year = dateMatch[3];
-
-    birthDate = `${year}-${month}-${day}`;
-
-    remaining = remaining
-      .slice(0, dateMatch.index)
-      .trim();
-  }
-
-  /*
-   * ==========================================================
-   * 2. DETECTAR EL PAÍS
-   *
-   * Buscamos el país al final del texto restante.
-   * Esto funciona tanto con TAB como con espacios:
-   *
-   * Alessandro Bastoni\tItalia\t13/04/1999
-   * Alessandro Bastoni Italia 13/04/1999
-   *
-   * Ordenamos por longitud para priorizar países con varias
-   * palabras (por ejemplo "Estados Unidos").
-   * ==========================================================
-   */
-
-  let countryName: string | null = null;
-  let countryId: number | null = null;
-
-  const countriesByLength = [...countries]
-    .filter((country) => country.name?.trim())
-    .sort(
-      (a, b) =>
-        b.name.trim().length -
-        a.name.trim().length
-    );
-
-  const normalizedRemaining = normalizeName(remaining);
-
-  const matchedCountry =
-    countriesByLength.find((country) => {
-      const normalizedCountry =
-        normalizeName(country.name);
-
-      return (
-        normalizedRemaining ===
-          normalizedCountry ||
-        normalizedRemaining.endsWith(
-          ` ${normalizedCountry}`
-        )
-      );
-    });
-
-  if (matchedCountry) {
-    countryName = matchedCountry.name;
-    countryId = matchedCountry.id;
-
-    const normalizedCountry =
-      normalizeName(matchedCountry.name);
-
-    /*
-     * Eliminamos el país del final respetando el texto original.
-     * Para ello buscamos el último tramo equivalente mediante
-     * palabras, de forma que también funcione con TAB o espacios.
-     */
-    const countryWords = normalizedCountry.split(" ");
-    const remainingWords = remaining
-      .trim()
-      .split(/\s+/);
-
-    if (remainingWords.length >= countryWords.length) {
-      const candidate = remainingWords
-        .slice(
-          remainingWords.length -
-            countryWords.length
-        )
-        .join(" ");
-
-      if (
-        normalizeName(candidate) ===
-        normalizedCountry
-      ) {
-        remaining = remainingWords
-          .slice(
-            0,
-            remainingWords.length -
-              countryWords.length
-          )
-          .join(" ")
-          .trim();
-      } else {
-        remaining = remaining
-          .replace(
-            new RegExp(
-              `\\s+${escapeRegExp(matchedCountry.name)}\\s*$`,
-              "i"
-            ),
-            ""
-          )
-          .trim();
-      }
-    }
-  }
-
-  return {
-    name: remaining.trim(),
-    countryName,
-    countryId,
-    birthDate,
-  };
-}
-
-export default function PlayerSquadImportForm({
-  onSaved,
+export default function MatchRatingForm({
+  matchRating,
   onCancel,
-}: PlayerSquadImportFormProps) {
+  onSaved,
+  initialInputMode = "manual",
+}: MatchRatingFormProps) {
   /*
    * ============================================================
-   * DATOS MAESTROS
+   * DATOS
    * ============================================================
    */
+
+  const [matches, setMatches] =
+    useState<Match[]>([]);
+
+  const [stages, setStages] =
+    useState<Stage[]>([]);
+
+  const [participations, setParticipations] =
+    useState<Participation[]>([]);
+
+  const [matchRatings, setMatchRatings] =
+    useState<MatchRating[]>([]);
+
+  const [players, setPlayers] =
+    useState<Player[]>([]);
 
   const [seasons, setSeasons] =
     useState<Season[]>([]);
@@ -481,96 +127,221 @@ export default function PlayerSquadImportForm({
   const [teams, setTeams] =
     useState<Team[]>([]);
 
-  const [players, setPlayers] =
-    useState<Player[]>([]);
-
-  const [countries, setCountries] =
-    useState<Country[]>([]);
-
-  const [positions, setPositions] =
-    useState<Position[]>([]);
-
-  const [teamCompetitions, setTeamCompetitions] =
-    useState<TeamCompetition[]>([]);
-
   /*
    * ============================================================
-   * SELECCIÓN
+   * ESTADOS DE CARGA
    * ============================================================
    */
 
-  const [seasonId, setSeasonId] =
-    useState<number>(0);
+  const [
+    competitionsLoading,
+    setCompetitionsLoading,
+  ] = useState(true);
 
-  const [competitionId, setCompetitionId] =
-    useState<number>(0);
+  const [
+    teamsLoading,
+    setTeamsLoading,
+  ] = useState(true);
 
-  const [teamId, setTeamId] =
-    useState<number>(0);
+  const [
+    seasonsLoading,
+    setSeasonsLoading,
+  ] = useState(true);
 
-  const [applyCountryToAll, setApplyCountryToAll] =
-    useState(false);
+  const [
+    stagesLoading,
+    setStagesLoading,
+  ] = useState(true);
 
-  const [globalCountryId, setGlobalCountryId] =
-    useState<number>(0);
+  const [
+    participationsLoading,
+    setParticipationsLoading,
+  ] = useState(true);
 
-  /*
-   * ============================================================
-   * PASO
-   * ============================================================
-   */
+  const [
+    matchRatingsLoading,
+    setMatchRatingsLoading,
+  ] = useState(true);
 
-  const [step, setStep] =
-    useState<ImportStep>("players");
-
-  /*
-   * ============================================================
-   * PASO 1 - JUGADORES
-   * ============================================================
-   */
-
-  const [playerText, setPlayerText] =
-    useState("");
-
-  const [rows, setRows] =
-    useState<ImportRow[]>([]);
-
-  /*
-   * ============================================================
-   * PASO 2 - DORSALES / POSICIONES
-   * ============================================================
-   */
-
-  const [shirtNumberText, setShirtNumberText] =
-    useState("");
-
-  const [squadRows, setSquadRows] =
-    useState<SquadRow[]>([]);
+  const [
+    historyLoading,
+    setHistoryLoading,
+  ] = useState(false);
 
   /*
    * ============================================================
-   * ESTADO
+   * FILTROS
    * ============================================================
    */
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    competitionId,
+    setCompetitionId,
+  ] = useState<number>(0);
 
-  const [analysing, setAnalysing] =
-    useState(false);
+  const [
+    seasonId,
+    setSeasonId,
+  ] = useState<number>(0);
 
-  const [saving, setSaving] =
-    useState(false);
+  const [
+    stageId,
+    setStageId,
+  ] = useState<number>(0);
+
+  const [
+    matchId,
+    setMatchId,
+  ] = useState<number>(
+    matchRating?.matchId ?? 0
+  );
+
+  const [
+    teamId,
+    setTeamId,
+  ] = useState<number>(0);
+
+  /*
+   * ============================================================
+   * PARTICIPACIONES ORDENADAS
+   * ============================================================
+   */
+
+  const [
+    orderedParticipations,
+    setOrderedParticipations,
+  ] = useState<OrderedParticipation[]>([]);
+
+  /*
+   * ============================================================
+   * PROGRESO
+   *
+   * IMPORTANTE:
+   *
+   * totalParticipations permanece FIJO durante
+   * toda la carga del partido/equipo.
+   *
+   * completedParticipations representa cuántas
+   * valoraciones ya estaban guardadas antes de
+   * empezar o cuántas hemos guardado durante
+   * esta sesión.
+   * ============================================================
+   */
+
+  const [
+    totalParticipations,
+    setTotalParticipations,
+  ] = useState(0);
+
+  const [
+    completedParticipations,
+    setCompletedParticipations,
+  ] = useState(0);
+
+  /*
+   * ============================================================
+   * JUGADOR ACTUAL
+   * ============================================================
+   */
+
+  const [
+    currentPlayerIndex,
+    setCurrentPlayerIndex,
+  ] = useState(0);
+
+  /*
+   * ============================================================
+   * NOTAS
+   * ============================================================
+   */
+
+  const [
+    marcaRating,
+    setMarcaRating,
+  ] = useState<string>(
+    matchRating?.marcaRating !== null &&
+      matchRating?.marcaRating !== undefined
+      ? String(matchRating.marcaRating)
+      : ""
+  );
+
+  const [
+    asRating,
+    setAsRating,
+  ] = useState<string>(
+    matchRating?.asRating !== null &&
+      matchRating?.asRating !== undefined
+      ? String(matchRating.asRating)
+      : ""
+  );
+
+  const [
+    sofascoreRating,
+    setSofascoreRating,
+  ] = useState<string>(
+    matchRating?.sofascoreRating !== null &&
+      matchRating?.sofascoreRating !== undefined
+      ? String(matchRating.sofascoreRating)
+      : ""
+  );
+
+  const [
+    flashscoreRating,
+    setFlashscoreRating,
+  ] = useState<string>(
+    matchRating?.flashscoreRating !== null &&
+      matchRating?.flashscoreRating !== undefined
+      ? String(matchRating.flashscoreRating)
+      : ""
+  );
+
+  /*
+   * ============================================================
+   * ESTADO GENERAL
+   * ============================================================
+   */
 
   const [error, setError] =
     useState("");
 
-  const [success, setSuccess] =
+  const [saving, setSaving] =
+    useState(false);
+
+  /*
+   * ============================================================
+   * IMPORTACIÓN DESDE GOOGLE SHEETS
+   * ============================================================
+   */
+
+  const [inputMode, setInputMode] =
+    useState<"manual" | "import">(
+      matchRating ? "manual" : initialInputMode
+    );
+
+  const [importSource, setImportSource] =
+    useState<"Marca" | "AS" | "SofaScore" | "FlashScore">("Marca");
+
+  const [importText, setImportText] =
+    useState("");
+
+  const [importColumns, setImportColumns] =
+    useState<ImportColumn[]>([]);
+
+  const [importPreview, setImportPreview] =
+    useState<ImportRatingRow[]>([]);
+
+  const [importAnalyzed, setImportAnalyzed] =
+    useState(false);
+
+  const [importing, setImporting] =
+    useState(false);
+
+  const [importMessage, setImportMessage] =
     useState("");
 
   /*
    * ============================================================
-   * CARGAR DATOS
+   * CARGAR DATOS PRINCIPALES
    * ============================================================
    */
 
@@ -579,55 +350,53 @@ export default function PlayerSquadImportForm({
 
     async function loadData() {
       try {
-        setLoading(true);
-        setError("");
-
         const [
-          seasonsData,
-          competitionsData,
-          teamsData,
+          matchesData,
+          stagesData,
+          participationsData,
           playersData,
-          countriesData,
-          positionsData,
+          matchRatingsData,
         ] = await Promise.all([
-          getSeasons(),
-          getCompetitions(),
-          getTeams(),
+          getMatches(),
+          getStages(),
+          getParticipations(),
           getPlayers(),
-          getCountries(),
-          getPositions(),
+          getMatchRatings(),
         ]);
 
         if (!mounted) {
           return;
         }
 
-        setSeasons(seasonsData);
-        setCompetitions(
-          competitionsData
+        setMatches(matchesData);
+        setStages(stagesData);
+        setParticipations(
+          participationsData
         );
-        setTeams(teamsData);
         setPlayers(playersData);
-        setCountries(
-          countriesData
+        setMatchRatings(
+          matchRatingsData
         );
-        setPositions(
-          positionsData
-        );
-      } catch (err) {
+      } catch (error) {
         console.error(
-          "Error cargando datos:",
-          err
+          "Error cargando datos del formulario:",
+          error
         );
 
-        if (mounted) {
-          setError(
-            "No se pudieron cargar los datos necesarios."
-          );
+        if (!mounted) {
+          return;
         }
+
+        setMatches([]);
+        setStages([]);
+        setParticipations([]);
+        setPlayers([]);
+        setMatchRatings([]);
       } finally {
         if (mounted) {
-          setLoading(false);
+          setStagesLoading(false);
+          setParticipationsLoading(false);
+          setMatchRatingsLoading(false);
         }
       }
     }
@@ -641,152 +410,151 @@ export default function PlayerSquadImportForm({
 
   /*
    * ============================================================
-   * RELACIONES EQUIPO - COMPETICIÓN POR TEMPORADA
+   * CARGAR TEMPORADAS
    * ============================================================
    */
 
   useEffect(() => {
     let mounted = true;
 
-    async function loadTeamCompetitions() {
-      if (!seasonId) {
-        setTeamCompetitions([]);
-        return;
-      }
-
+    async function loadSeasons() {
       try {
-        const data =
-          await getTeamCompetitionsBySeason(seasonId);
+        setSeasonsLoading(true);
+
+        const data = await getSeasons();
 
         if (mounted) {
-          setTeamCompetitions(data);
+          setSeasons(data);
         }
-      } catch (err) {
+      } catch (error) {
         console.error(
-          "Error cargando relaciones equipo-competición:",
-          err
+          "Error cargando temporadas:",
+          error
         );
 
         if (mounted) {
-          setTeamCompetitions([]);
+          setSeasons([]);
+        }
+      } finally {
+        if (mounted) {
+          setSeasonsLoading(false);
         }
       }
     }
 
-    loadTeamCompetitions();
+    loadSeasons();
 
     return () => {
       mounted = false;
     };
-  }, [seasonId]);
+  }, []);
 
   /*
    * ============================================================
-   * TEMPORADAS
-   *
-   * Más reciente primero.
+   * CARGAR COMPETICIONES
    * ============================================================
    */
 
-  const sortedSeasons =
-    useMemo(() => {
-      return [...seasons].sort(
-        (a, b) => {
-          const aText =
-            String(
-              a.name ?? ""
-            );
+  useEffect(() => {
+    let mounted = true;
 
-          const bText =
-            String(
-              b.name ?? ""
-            );
+    async function loadCompetitions() {
+      try {
+        setCompetitionsLoading(true);
 
-          const aYear =
-            Number(
-              aText.substring(
-                0,
-                2
-              )
-            );
+        const data =
+          await getCompetitions();
 
-          const bYear =
-            Number(
-              bText.substring(
-                0,
-                2
-              )
-            );
-
-          if (
-            !Number.isNaN(
-              aYear
-            ) &&
-            !Number.isNaN(
-              bYear
-            )
-          ) {
-            return bYear - aYear;
-          }
-
-          return bText.localeCompare(
-            aText,
-            "es"
-          );
+        if (mounted) {
+          setCompetitions(data);
         }
-      );
-    }, [seasons]);
+      } catch (error) {
+        console.error(
+          "Error cargando competiciones:",
+          error
+        );
+
+        if (mounted) {
+          setCompetitions([]);
+        }
+      } finally {
+        if (mounted) {
+          setCompetitionsLoading(false);
+        }
+      }
+    }
+
+    loadCompetitions();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   /*
    * ============================================================
-   * COMPETICIONES
+   * CARGAR EQUIPOS
+   * ============================================================
+   */
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadTeams() {
+      try {
+        setTeamsLoading(true);
+
+        const data = await getTeams();
+
+        if (mounted) {
+          setTeams(data);
+        }
+      } catch (error) {
+        console.error(
+          "Error cargando equipos:",
+          error
+        );
+
+        if (mounted) {
+          setTeams([]);
+        }
+      } finally {
+        if (mounted) {
+          setTeamsLoading(false);
+        }
+      }
+    }
+
+    loadTeams();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /*
+   * ============================================================
+   * COMPETICIONES DISPONIBLES
    * ============================================================
    */
 
   const availableCompetitions =
     useMemo(() => {
-      if (!seasonId) {
-        return [];
-      }
-
-      const competitionIdsWithTeams =
-        new Set(
-          teamCompetitions
-            .filter(
-              (item) =>
-                item.active &&
-                item.seasonId === seasonId
-            )
-            .map(
-              (item) => item.competitionId
-            )
-        );
-
       return competitions
-        .filter(
-          (competition) =>
-            competition.active
-        )
         .filter((competition) => {
-          if (
-            competition.competitionType ===
-            "National Team"
-          ) {
-            return true;
+          if (!competition.active) {
+            return false;
           }
 
-          return (
-            competitionIdsWithTeams.has(
-              competition.id
-            ) ||
-            teams.some(
-              (team) =>
-                team.active &&
-                team.type === "Club" &&
-                team.competitionId ===
-                  competition.id
-            )
-          );
+          if (inputMode === "manual" && seasonId) {
+            return matches.some(
+              (match) =>
+                match.seasonId === seasonId &&
+                match.competitionId === competition.id
+            );
+          }
+
+          return true;
         })
         .sort((a, b) =>
           a.name.localeCompare(
@@ -797,91 +565,210 @@ export default function PlayerSquadImportForm({
         );
     }, [
       competitions,
+      matches,
       seasonId,
-      teamCompetitions,
-      teams,
+      inputMode,
     ]);
 
   /*
    * ============================================================
-   * COMPETICIÓN SELECCIONADA
+   * TEMPORADAS DISPONIBLES
    * ============================================================
    */
 
-  const selectedCompetition =
+  const availableSeasons =
     useMemo(() => {
-      return competitions.find(
-        (competition) =>
-          competition.id ===
-          competitionId
-      );
+      return seasons
+        .filter(
+          (season) =>
+            season.active
+        )
+        .sort((a, b) =>
+          a.name.localeCompare(
+            b.name,
+            "es"
+          )
+        );
+    }, [seasons]);
+
+  /*
+   * ============================================================
+   * JORNADAS / FASES
+   * ============================================================
+   */
+
+  const availableStages =
+    useMemo(() => {
+      if (!seasonId) {
+        return [];
+      }
+
+      return stages
+        .filter((stage) => {
+          if (
+            stage.seasonId !== seasonId ||
+            !stage.active
+          ) {
+            return false;
+          }
+
+          if (!competitionId) {
+            return true;
+          }
+
+          return matches.some(
+            (match) =>
+              match.seasonId === seasonId &&
+              match.competitionId === competitionId &&
+              match.stageId === stage.id
+          );
+        })
+        .sort((a, b) => {
+          const numberA = Number(
+            a.name.match(/\d+/)?.[0] ?? 0
+          );
+          const numberB = Number(
+            b.name.match(/\d+/)?.[0] ?? 0
+          );
+
+          if (numberA !== numberB) {
+            return numberB - numberA;
+          }
+
+          return (b.displayOrder ?? 0) -
+            (a.displayOrder ?? 0);
+        });
     }, [
-      competitions,
+      stages,
+      matches,
+      seasonId,
       competitionId,
     ]);
 
   /*
    * ============================================================
-   * EQUIPOS DISPONIBLES
+   * PARTIDOS FILTRADOS
    * ============================================================
    */
 
-  const availableTeams =
+  const availableMatches =
     useMemo(() => {
-      if (!selectedCompetition) {
+      return matches
+        .filter((match) => {
+          if (
+            competitionId &&
+            match.competitionId !==
+              competitionId
+          ) {
+            return false;
+          }
+
+          if (
+            seasonId &&
+            match.seasonId !==
+              seasonId
+          ) {
+            return false;
+          }
+
+          if (
+            stageId &&
+            match.stageId !==
+              stageId
+          ) {
+            return false;
+          }
+
+          return true;
+        })
+        .sort((a, b) => {
+          const dateA =
+            a.date
+              ? new Date(a.date).getTime()
+              : 0;
+
+          const dateB =
+            b.date
+              ? new Date(b.date).getTime()
+              : 0;
+
+          return dateB - dateA;
+        });
+    }, [
+      matches,
+      competitionId,
+      seasonId,
+      stageId,
+    ]);
+
+  /*
+   * ============================================================
+   * PARTIDO SELECCIONADO
+   * ============================================================
+   */
+
+  const selectedMatch =
+    matches.find(
+      (match) =>
+        match.id === matchId
+    );
+
+  /*
+   * ============================================================
+   * EQUIPOS DEL PARTIDO
+   * ============================================================
+   */
+
+  const availableMatchTeams =
+    useMemo(() => {
+      if (!selectedMatch) {
         return [];
       }
 
-      const isNationalTeam =
-        selectedCompetition.competitionType ===
-        "National Team";
-
-      if (isNationalTeam) {
-        return teams
-          .filter(
-            (team) => team.active
-          )
-          .filter(
-            (team) =>
-              team.type
-                ?.toLocaleLowerCase("es") ===
-              "selección"
-          )
-          .sort((a, b) =>
-            a.name.localeCompare(
-              b.name,
-              "es",
-              { sensitivity: "base" }
-            )
-          );
-      }
-
-      const teamIdsBySeasonCompetition =
-        new Set(
-          teamCompetitions
-            .filter(
-              (item) =>
-                item.active &&
-                item.seasonId === seasonId &&
-                item.competitionId ===
-                  competitionId
-            )
-            .map(
-              (item) => item.teamId
-            )
-        );
+      const ids = [
+        selectedMatch.homeTeamId,
+        selectedMatch.awayTeamId,
+      ];
 
       return teams
-        .filter(
-          (team) => team.active
+        .filter((team) =>
+          ids.includes(team.id)
         )
-        .filter(
-          (team) =>
-            teamIdsBySeasonCompetition.has(
-              team.id
-            ) ||
-            team.competitionId ===
-              competitionId
+        .sort((a, b) =>
+          a.name.localeCompare(
+            b.name,
+            "es"
+          )
+        );
+    }, [
+      selectedMatch,
+      teams,
+    ]);
+
+  /*
+   * ============================================================
+   * EQUIPOS PARA IMPORTACIÓN
+   * ============================================================
+   * Se muestran como "nombre corto - nombre completo",
+   * pero se ordenan por nombre completo.
+   * ============================================================
+   */
+
+  const availableImportTeams =
+    useMemo(() => {
+      if (!seasonId || !competitionId) {
+        return [];
+      }
+
+      return teams
+        .filter((team) =>
+          matches.some(
+            (match) =>
+              match.competitionId === competitionId &&
+              match.seasonId === seasonId &&
+              (match.homeTeamId === team.id ||
+                match.awayTeamId === team.id)
+          )
         )
         .sort((a, b) =>
           a.name.localeCompare(
@@ -892,116 +779,309 @@ export default function PlayerSquadImportForm({
         );
     }, [
       teams,
-      competitionId,
+      matches,
       seasonId,
-      teamCompetitions,
-      selectedCompetition,
+      competitionId,
     ]);
 
   /*
    * ============================================================
-   * PAÍSES
+   * CARGAR Y ORDENAR PARTICIPACIONES
    * ============================================================
    */
 
-  const sortedCountries =
-    useMemo(() => {
-      return [...countries].sort(
-        (a, b) =>
-          a.name.localeCompare(
-            b.name,
-            "es",
-            {
-              sensitivity:
-                "base",
+  useEffect(() => {
+    if (
+      !matchId ||
+      !teamId ||
+      !seasonId
+    ) {
+      setOrderedParticipations([]);
+      setCurrentPlayerIndex(0);
+      setTotalParticipations(0);
+      setCompletedParticipations(0);
+      return;
+    }
+
+    if (matchRatingsLoading) {
+      return;
+    }
+
+    let mounted = true;
+
+    async function loadOrderedPlayers() {
+      try {
+        setHistoryLoading(true);
+        setError("");
+
+        /*
+         * ======================================================
+         * TODAS LAS PARTICIPACIONES DEL EQUIPO
+         * ======================================================
+         */
+
+        const teamParticipations =
+          participations.filter(
+            (participation) =>
+              participation.matchId ===
+                matchId &&
+              participation.teamId ===
+                teamId
+          );
+
+        /*
+         * ======================================================
+         * FIJAR EL TOTAL
+         *
+         * MUY IMPORTANTE:
+         *
+         * Este valor NO depende de la lista de
+         * pendientes y por tanto NO disminuye
+         * cuando guardamos una valoración.
+         * ======================================================
+         */
+
+        if (!matchRating) {
+          const existingRatings =
+            teamParticipations.filter(
+              (participation) =>
+                matchRatings.some(
+                  (rating) =>
+                    rating.participationId ===
+                    participation.id
+                )
+            ).length;
+
+          setTotalParticipations(
+            teamParticipations.length
+          );
+
+          setCompletedParticipations(
+            existingRatings
+          );
+        } else {
+          /*
+           * En edición trabajamos únicamente
+           * con la valoración seleccionada.
+           */
+
+          setTotalParticipations(1);
+          setCompletedParticipations(0);
+        }
+
+        /*
+         * ======================================================
+         * PARTICIPACIONES PENDIENTES
+         * ======================================================
+         */
+
+        const pendingParticipations =
+          teamParticipations.filter(
+            (participation) => {
+              /*
+               * MODO EDICIÓN
+               */
+
+              if (matchRating) {
+                return (
+                  participation.id ===
+                  matchRating.participationId
+                );
+              }
+
+              /*
+               * MODO NUEVA VALORACIÓN
+               */
+
+              const hasRating =
+                matchRatings.some(
+                  (rating) =>
+                    rating.participationId ===
+                    participation.id
+                );
+
+              return !hasRating;
             }
-          )
-      );
-    }, [countries]);
+          );
+
+        /*
+         * ======================================================
+         * NO HAY PARTICIPACIONES PENDIENTES
+         * ======================================================
+         */
+
+        if (
+          pendingParticipations.length ===
+          0
+        ) {
+          if (mounted) {
+            setOrderedParticipations([]);
+            setCurrentPlayerIndex(0);
+          }
+
+          return;
+        }
+
+        /*
+         * ======================================================
+         * CARGAR HISTORIAL DEL EQUIPO
+         * ======================================================
+         */
+
+        const history =
+          await getHistPlayerTeamsByTeamAndSeason(
+            teamId,
+            seasonId
+          );
+
+        if (!mounted) {
+          return;
+        }
+
+        const historyMap =
+          new Map(
+            history.map((item) => [
+              item.playerId,
+              item,
+            ])
+          );
+
+        /*
+         * ======================================================
+         * CONSTRUIR RESULTADO
+         * ======================================================
+         */
+
+        const result =
+          pendingParticipations
+            .map(
+              (
+                participation
+              ) => {
+                const player =
+                  players.find(
+                    (item) =>
+                      item.id ===
+                      participation.playerId
+                  );
+
+                const team =
+                  teams.find(
+                    (item) =>
+                      item.id ===
+                      participation.teamId
+                  );
+
+                const historyItem =
+                  historyMap.get(
+                    participation.playerId
+                  );
+
+                const positionId =
+                  historyItem
+                    ?.positionId ??
+                  participation.positionId ??
+                  999;
+
+                return {
+                  participation,
+                  player,
+                  team,
+                  positionId,
+                };
+              }
+            )
+            .sort((a, b) => {
+              if (
+                a.positionId !==
+                b.positionId
+              ) {
+                return (
+                  a.positionId - b.positionId
+                );
+              }
+
+              return (
+                a.player?.name ?? ""
+              ).localeCompare(
+                b.player?.name ?? "",
+                "es"
+              );
+            });
+
+        setOrderedParticipations(
+          result
+        );
+
+        setCurrentPlayerIndex(0);
+
+        /*
+         * ======================================================
+         * LIMPIAR NOTAS EN NUEVA VALORACIÓN
+         * ======================================================
+         */
+
+        if (!matchRating) {
+          setMarcaRating("");
+          setAsRating("");
+          setSofascoreRating("");
+          setFlashscoreRating("");
+        }
+      } catch (error) {
+        console.error(
+          "Error cargando jugadores del equipo:",
+          error
+        );
+
+        if (mounted) {
+          setOrderedParticipations([]);
+          setError(
+            "No se pudieron cargar los jugadores del equipo."
+          );
+        }
+      } finally {
+        if (mounted) {
+          setHistoryLoading(false);
+        }
+      }
+    }
+
+    loadOrderedPlayers();
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    matchId,
+    teamId,
+    seasonId,
+    participations,
+    players,
+    teams,
+    matchRatings,
+    matchRatingsLoading,
+    matchRating,
+  ]);
 
   /*
    * ============================================================
-   * POSICIONES
-   *
-   * Se muestran según displayOrder.
-   *
-   * Usamos un fallback por ID por si alguna posición
-   * antigua no tiene displayOrder informado.
+   * PARTICIPACIÓN ACTUAL
    * ============================================================
    */
 
-  const sortedPositions =
-    useMemo(() => {
-      return positions
-        .filter(
-          (position) =>
-            position.active
-        )
-        .sort((a, b) => {
-          const orderA =
-            (
-              a as Position & {
-                displayOrder?: number;
-              }
-            ).displayOrder;
+  const currentItem =
+    orderedParticipations[
+      currentPlayerIndex
+    ];
 
-          const orderB =
-            (
-              b as Position & {
-                displayOrder?: number;
-              }
-            ).displayOrder;
+  const currentParticipation =
+    currentItem?.participation;
 
-          if (
-            orderA !== undefined &&
-            orderB !== undefined
-          ) {
-            return orderA - orderB;
-          }
+  const currentPlayer =
+    currentItem?.player;
 
-          if (
-            orderA !== undefined
-          ) {
-            return -1;
-          }
-
-          if (
-            orderB !== undefined
-          ) {
-            return 1;
-          }
-
-          return a.id - b.id;
-        });
-    }, [positions]);
-
-  /*
-   * ============================================================
-   * CAMBIO DE TEMPORADA
-   * ============================================================
-   */
-
-  const handleSeasonChange = (
-    value: number
-  ) => {
-    setSeasonId(value);
-
-    setCompetitionId(0);
-    setTeamId(0);
-    setApplyCountryToAll(false);
-    setGlobalCountryId(0);
-
-    setRows([]);
-    setSquadRows([]);
-
-    setPlayerText("");
-    setShirtNumberText("");
-
-    setStep("players");
-
-    setError("");
-    setSuccess("");
-  };
+  const currentTeam =
+    currentItem?.team;
 
   /*
    * ============================================================
@@ -1014,20 +1094,95 @@ export default function PlayerSquadImportForm({
   ) => {
     setCompetitionId(value);
 
+    setStageId(0);
+    setMatchId(0);
     setTeamId(0);
-    setApplyCountryToAll(false);
-    setGlobalCountryId(0);
 
-    setRows([]);
-    setSquadRows([]);
+    setOrderedParticipations([]);
+    setCurrentPlayerIndex(0);
 
-    setPlayerText("");
-    setShirtNumberText("");
+    setTotalParticipations(0);
+    setCompletedParticipations(0);
 
-    setStep("players");
-
+    clearRatings();
     setError("");
-    setSuccess("");
+  };
+
+  /*
+   * ============================================================
+   * CAMBIO DE TEMPORADA
+   * ============================================================
+   */
+
+  const handleSeasonChange = (
+    value: number
+  ) => {
+    setSeasonId(value);
+
+    // En importación el orden es: temporada → competición.
+    if (inputMode === "import") {
+      setCompetitionId(0);
+    }
+
+    setStageId(0);
+    setMatchId(0);
+    setTeamId(0);
+
+    setOrderedParticipations([]);
+    setCurrentPlayerIndex(0);
+
+    setTotalParticipations(0);
+    setCompletedParticipations(0);
+
+    clearRatings();
+    setError("");
+  };
+
+  /*
+   * ============================================================
+   * CAMBIO DE JORNADA
+   * ============================================================
+   */
+
+  const handleStageChange = (
+    value: number
+  ) => {
+    setStageId(value);
+
+    setMatchId(0);
+    setTeamId(0);
+
+    setOrderedParticipations([]);
+    setCurrentPlayerIndex(0);
+
+    setTotalParticipations(0);
+    setCompletedParticipations(0);
+
+    clearRatings();
+    setError("");
+  };
+
+  /*
+   * ============================================================
+   * CAMBIO DE PARTIDO
+   * ============================================================
+   */
+
+  const handleMatchChange = (
+    value: number
+  ) => {
+    setMatchId(value);
+
+    setTeamId(0);
+
+    setOrderedParticipations([]);
+    setCurrentPlayerIndex(0);
+
+    setTotalParticipations(0);
+    setCompletedParticipations(0);
+
+    clearRatings();
+    setError("");
   };
 
   /*
@@ -1040,1210 +1195,1187 @@ export default function PlayerSquadImportForm({
     value: number
   ) => {
     setTeamId(value);
-    setApplyCountryToAll(false);
-    setGlobalCountryId(0);
 
-    setRows([]);
-    setSquadRows([]);
+    setOrderedParticipations([]);
+    setCurrentPlayerIndex(0);
 
-    setPlayerText("");
-    setShirtNumberText("");
+    setTotalParticipations(0);
+    setCompletedParticipations(0);
 
-    setStep("players");
-
+    clearRatings();
     setError("");
-    setSuccess("");
   };
 
   /*
    * ============================================================
-   * ANALIZAR LISTA DE JUGADORES
+   * LIMPIAR NOTAS
    * ============================================================
    */
 
-  const handleAnalyse = async () => {
+  const clearRatings = () => {
+    setMarcaRating("");
+    setAsRating("");
+    setSofascoreRating("");
+    setFlashscoreRating("");
+  };
+
+  /*
+   * ============================================================
+   * VALIDAR NOTA
+   * ============================================================
+   */
+
+  const validateRating = (
+    value: string,
+    min: number,
+    max: number,
+    label: string
+  ): boolean => {
+    if (value === "") {
+      return true;
+    }
+
+    const numericValue =
+      Number(value);
+
+    if (Number.isNaN(numericValue)) {
+      setError(
+        `${label} debe ser un número válido.`
+      );
+
+      return false;
+    }
+
+    if (
+      numericValue < min ||
+      numericValue > max
+    ) {
+      setError(
+        `${label} debe estar entre ${min} y ${max}.`
+      );
+
+      return false;
+    }
+
+    return true;
+  };
+
+  /*
+   * ============================================================
+   * GUARDAR JUGADOR ACTUAL Y SIGUIENTE
+   * ============================================================
+   */
+
+  const handleNext = async () => {
     setError("");
-    setSuccess("");
 
-    if (!seasonId) {
+    if (!currentParticipation) {
       setError(
-        "Selecciona una temporada."
+        "No hay ningún jugador seleccionado."
       );
+
       return;
     }
 
-    if (!competitionId) {
-      setError(
-        "Selecciona una competición."
-      );
+    /*
+     * ========================================================
+     * VALIDAR NOTAS
+     * ========================================================
+     */
+
+    if (
+      !validateRating(
+        marcaRating,
+        0,
+        3,
+        "La nota de Marca"
+      )
+    ) {
       return;
     }
 
-    if (!teamId) {
-      setError(
-        "Selecciona un equipo."
-      );
+    if (
+      !validateRating(
+        asRating,
+        0,
+        4,
+        "La nota de AS"
+      )
+    ) {
       return;
     }
 
-    if (applyCountryToAll && !globalCountryId) {
-      setError(
-        "Selecciona el país que quieres asignar a todos los jugadores nuevos."
-      );
+    if (
+      !validateRating(
+        sofascoreRating,
+        0,
+        10,
+        "La nota de SofaScore"
+      )
+    ) {
       return;
     }
 
-    const lines =
-      playerText
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
-
-    if (lines.length === 0) {
-      setError(
-        "Pega al menos un jugador."
-      );
+    if (
+      !validateRating(
+        flashscoreRating,
+        0,
+        10,
+        "La nota de FlashScore"
+      )
+    ) {
       return;
     }
 
-    setAnalysing(true);
+    /*
+     * ========================================================
+     * AL MENOS UNA NOTA
+     * ========================================================
+     */
+
+    if (
+      marcaRating === "" &&
+      asRating === "" &&
+      sofascoreRating === "" &&
+      flashscoreRating === ""
+    ) {
+      setError(
+        "Introduce al menos una valoración antes de continuar."
+      );
+
+      return;
+    }
+
+    /*
+     * ========================================================
+     * CONVERTIR NOTAS
+     * ========================================================
+     */
+
+    const marcaValue =
+      marcaRating === ""
+        ? null
+        : Number(marcaRating);
+
+    const asValue =
+      asRating === ""
+        ? null
+        : Number(asRating);
+
+    const sofascoreValue =
+      sofascoreRating === ""
+        ? null
+        : Number(sofascoreRating);
+
+    const flashscoreValue =
+      flashscoreRating === ""
+        ? null
+        : Number(flashscoreRating);
+
+    /*
+     * ========================================================
+     * MEDIA EXTERNA
+     * ========================================================
+     *
+     * El cálculo se realiza mediante la función centralizada
+     * del servicio match-rating para mantener una única lógica.
+     * ========================================================
+     */
+
+    const externalAverage =
+      calculateExternalAverage(
+        marcaValue,
+        asValue,
+        sofascoreValue,
+        flashscoreValue
+      );
+
+    /*
+     * ========================================================
+     * DATOS A GUARDAR
+     * ========================================================
+     */
+
+    const matchRatingData: Omit<
+      MatchRating,
+      "id"
+    > = {
+      matchId,
+
+      playerId:
+        currentParticipation.playerId,
+
+      participationId:
+        currentParticipation.id,
+
+      marcaRating: marcaValue,
+
+      asRating: asValue,
+
+      sofascoreRating:
+        sofascoreValue,
+
+      flashscoreRating:
+        flashscoreValue,
+
+      externalAverage,
+
+      value90MatchRating:
+        null,
+
+      finalMatchRating:
+        null,
+
+      confidence:
+        null,
+
+      calculationVersion:
+        null,
+
+      calculatedAt:
+        null,
+    };
 
     try {
-      /*
-       * Mapa de jugadores existentes.
-       */
-      const playerMap =
-        new Map<
-          string,
-          Player[]
-        >();
-
-      players.forEach(
-        (player) => {
-          const key =
-            normalizeName(
-              player.name
-            );
-
-          const list =
-            playerMap.get(
-              key
-            ) ?? [];
-
-          list.push(player);
-
-          playerMap.set(
-            key,
-            list
-          );
-        }
-      );
+      setSaving(true);
 
       /*
-       * Analizamos nombre, país y fecha de nacimiento
-       * directamente desde las columnas pegadas.
+       * ========================================================
+       * MODO EDICIÓN
+       * ========================================================
        */
-      const parsedLines = lines.map((line) =>
-        parsePlayerImportLine(line, countries)
-      );
 
-      /*
-       * Contamos duplicados dentro del texto usando la identidad
-       * completa cuando hay país y/o fecha.
-       *
-       * Esto permite, por ejemplo:
-       *
-       * Roberto Fernández    España      03/07/2002
-       * Roberto Fernández    Paraguay    29/03/1988
-       *
-       * Son dos identidades diferentes y ambas son válidas.
-       */
-      const inputIdentityCount =
-        new Map<string, number>();
-
-      parsedLines.forEach((item) => {
-        const normalizedName =
-          normalizeName(item.name);
-
-        const effectiveCountryId =
-          applyCountryToAll
-            ? globalCountryId
-            : item.countryId;
-
-        const identityKey = [
-          normalizedName,
-          effectiveCountryId ?? "",
-          item.birthDate ?? "",
-        ].join("|");
-
-        inputIdentityCount.set(
-          identityKey,
-          (inputIdentityCount.get(identityKey) ?? 0) + 1
+      if (matchRating) {
+        await updateMatchRating(
+          matchRating.id,
+          matchRatingData
         );
+
+        onSaved();
+        return;
+      }
+
+      /*
+       * ========================================================
+       * NUEVO REGISTRO
+       * ========================================================
+       */
+
+      await addMatchRating(
+        matchRatingData
+      );
+
+      /*
+       * Añadir inmediatamente el nuevo
+       * Match Rating al estado local.
+       */
+
+      const newMatchRating =
+        {
+          ...matchRatingData,
+          id: -Date.now(),
+        } as MatchRating;
+
+      setMatchRatings(
+        (current) => [
+          ...current,
+          newMatchRating,
+        ]
+      );
+
+      /*
+       * ========================================================
+       * ACTUALIZAR PROGRESO
+       *
+       * AQUÍ ESTÁ LA CLAVE:
+       *
+       * El total NO cambia.
+       *
+       * Si había 16:
+       * 1/16 → 2/16 → 3/16...
+       * ========================================================
+       */
+
+      setCompletedParticipations(
+        (current) => current + 1
+      );
+
+      /*
+       * ========================================================
+       * ¿ES EL ÚLTIMO JUGADOR PENDIENTE?
+       * ========================================================
+       */
+
+      const isLastPlayer =
+        currentPlayerIndex >=
+        orderedParticipations.length -
+          1;
+
+      if (isLastPlayer) {
+        onSaved();
+        return;
+      }
+
+      /*
+       * ========================================================
+       * SIGUIENTE JUGADOR
+       * ========================================================
+       */
+
+      setCurrentPlayerIndex(
+        (current) =>
+          current + 1
+      );
+
+      clearRatings();
+    } catch (error) {
+      console.error(
+        "Error guardando valoración:",
+        error
+      );
+
+      setError(
+        "No se ha podido guardar la valoración."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /*
+   * ============================================================
+   * ETIQUETA DEL PARTIDO
+   * ============================================================
+   */
+
+  const getMatchLabel = (
+    match: Match
+  ) => {
+    const homeTeam =
+      teams.find(
+        (team) =>
+          team.id ===
+          match.homeTeamId
+      );
+
+    const awayTeam =
+      teams.find(
+        (team) =>
+          team.id ===
+          match.awayTeamId
+      );
+
+    return `${homeTeam?.shortName ?? "?"} - ${
+      awayTeam?.shortName ?? "?"
+    }`;
+  };
+
+  /*
+   * ============================================================
+   * POSICIÓN
+   * ============================================================
+   */
+
+  const getPositionLabel = (
+    positionId: number
+  ) => {
+    if (positionId === 999) {
+      return "Sin posición";
+    }
+
+    return `Posición ${positionId}`;
+  };
+
+  /*
+   * ============================================================
+   * PROGRESO ACTUAL
+   * ============================================================
+   *
+   * El jugador que estamos viendo es el siguiente
+   * que vamos a valorar.
+   *
+   * Por eso:
+   *
+   * completados + 1 = posición actual.
+   *
+   * Ejemplo:
+   *
+   * 0 completados → 1/16
+   * 1 completado  → 2/16
+   * 2 completados → 3/16
+   * ============================================================
+   */
+
+  const currentProgress =
+    totalParticipations > 0
+      ? Math.min(
+          completedParticipations + 1,
+          totalParticipations
+        )
+      : 0;
+
+  const progressPercentage =
+    totalParticipations > 0
+      ? Math.min(
+          (currentProgress /
+            totalParticipations) *
+            100,
+          100
+        )
+      : 0;
+
+
+  /*
+   * ============================================================
+   * UTILIDADES DE IMPORTACIÓN
+   * ============================================================
+   */
+
+  const normalizeImportName = (value: string): string => {
+    return value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/^\s*\d+\s*[\.\-:)]\s*/, "")
+      .replace(/[.'’`´]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+  };
+
+  /*
+   * Normaliza el nombre de una jornada/fase para poder reconocer
+   * diferentes formas de escribirla en Google Sheets.
+   *
+   * Ejemplos reconocidos:
+   *   J1              -> jornada:1
+   *   Jornada 1       -> jornada:1
+   *   1               -> knockout:final
+   *   16              -> knockout:dieciseisavos
+   *   Dieciseisavos   -> knockout:dieciseisavos
+   *   16avos          -> knockout:dieciseisavos
+   *   Octavos         -> knockout:octavos
+   *   Cuartos         -> knockout:cuartos
+   *   Semifinal       -> knockout:semifinal
+   *   Final           -> knockout:final
+   */
+  const getImportStageKey = (
+    value: string
+  ): string | null => {
+    const normalized = value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[.'’`´]/g, "")
+      .replace(/[\-_]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const jornadaMatch = normalized.match(
+      /^j(?:ornada)?\s*(\d+)$/
+    );
+
+    if (jornadaMatch) {
+      return `jornada:${Number(jornadaMatch[1])}`;
+    }
+
+    const bareNumberMap: Record<string, string> = {
+      "16": "knockout:dieciseisavos",
+      "8": "knockout:octavos",
+      "4": "knockout:cuartos",
+      "2": "knockout:semifinal",
+      "1": "knockout:final",
+    };
+
+    if (bareNumberMap[normalized]) {
+      return bareNumberMap[normalized];
+    }
+
+    if (
+      /^(16|dieciseisavos?|dieciseisavos? de final|16avos?|1\/16|ronda de 16)$/.test(
+        normalized
+      )
+    ) {
+      return "knockout:dieciseisavos";
+    }
+
+    if (
+      /^(8|octavos?|octavos? de final|1\/8|ronda de 8)$/.test(
+        normalized
+      )
+    ) {
+      return "knockout:octavos";
+    }
+
+    if (
+      /^(4|cuartos?|cuartos? de final|1\/4)$/.test(
+        normalized
+      )
+    ) {
+      return "knockout:cuartos";
+    }
+
+    if (
+      /^(2|semifinal|semifinales|semifinales? de final|1\/2)$/.test(
+        normalized
+      )
+    ) {
+      return "knockout:semifinal";
+    }
+
+    if (/^(1|final|final de la competicion)$/.test(normalized)) {
+      return "knockout:final";
+    }
+
+    return null;
+  };
+
+  const getImportStageDisplayName = (
+    stageKey: string,
+    originalLabel: string
+  ): string => {
+    if (stageKey.startsWith("jornada:")) {
+      return originalLabel.trim();
+    }
+
+    const names: Record<string, string> = {
+      "knockout:dieciseisavos": "Dieciseisavos",
+      "knockout:octavos": "Octavos",
+      "knockout:cuartos": "Cuartos",
+      "knockout:semifinal": "Semifinal",
+      "knockout:final": "Final",
+    };
+
+    return names[stageKey] ?? originalLabel.trim();
+  };
+
+  const getImportRatingRange = () => {
+    if (importSource === "Marca") return { min: 0, max: 3 };
+    if (importSource === "AS") return { min: 0, max: 4 };
+    return { min: 0, max: 10 };
+  };
+
+  const resetImport = () => {
+    setImportText("");
+    setImportColumns([]);
+    setImportPreview([]);
+    setImportAnalyzed(false);
+    setImportMessage("");
+    setError("");
+  };
+
+  const resolveImportStage = (
+    headerLabel: string
+  ): {
+    key: string;
+    stage: Stage | undefined;
+    displayName: string;
+  } | null => {
+    const key = getImportStageKey(headerLabel);
+
+    if (!key) {
+      return null;
+    }
+
+    const availableStagesForImport = stages.filter(
+      (stage) =>
+        stage.seasonId === seasonId &&
+        stage.active
+    );
+
+    let stage: Stage | undefined;
+
+    if (key.startsWith("jornada:")) {
+      const number = Number(key.split(":")[1]);
+
+      stage = availableStagesForImport.find((item) => {
+        const normalized = item.name
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/\s+/g, " ")
+          .trim();
+
+        const match = normalized.match(
+          /^j(?:ornada)?\s*(\d+)$/
+        );
+
+        return match
+          ? Number(match[1]) === number
+          : false;
       });
+    } else {
+      const aliases: Record<string, string[]> = {
+        "knockout:dieciseisavos": [
+          "dieciseisavos",
+          "dieciseisavos de final",
+          "16avos",
+          "16avos de final",
+          "ronda de 16",
+          "1/16",
+        ],
+        "knockout:octavos": [
+          "octavos",
+          "octavos de final",
+          "ronda de 8",
+          "1/8",
+        ],
+        "knockout:cuartos": [
+          "cuartos",
+          "cuartos de final",
+          "1/4",
+        ],
+        "knockout:semifinal": [
+          "semifinal",
+          "semifinales",
+          "semifinal de final",
+          "1/2",
+        ],
+        "knockout:final": [
+          "final",
+          "final de la competicion",
+        ],
+      };
 
-      const analysedRows: ImportRow[] =
-        parsedLines.map((item) => {
-          const inputName = item.name;
-          const normalizedName =
-            normalizeName(inputName);
+      const targetAliases = aliases[key] ?? [];
 
-          const effectiveCountryId =
-            applyCountryToAll
-              ? globalCountryId
-              : item.countryId;
+      stage = availableStagesForImport.find((item) => {
+        const normalized = item.name
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[.'’`´]/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
 
-          const effectiveCountry = countries.find(
-            (country) =>
-              country.id === effectiveCountryId
+        return targetAliases.includes(normalized);
+      });
+    }
+
+    return {
+      key,
+      stage,
+      displayName: getImportStageDisplayName(
+        key,
+        headerLabel
+      ),
+    };
+  };
+
+  const analyzeImport = () => {
+    setError("");
+    setImportMessage("");
+    setImportAnalyzed(false);
+    setImportPreview([]);
+    setImportColumns([]);
+
+    if (!competitionId || !seasonId || !teamId) {
+      setError(
+        "Selecciona competición, temporada y equipo antes de analizar la importación."
+      );
+      return;
+    }
+
+    if (!importText.trim()) {
+      setError("Pega primero los datos copiados desde Google Sheets.");
+      return;
+    }
+
+    const lines = importText
+      .replace(/\r/g, "")
+      .split("\n")
+      .map((line) => line.split("\t"));
+
+    /*
+     * Buscamos la fila de cabecera comprobando cualquier fase
+     * reconocible, no solamente J1/J2/J3.
+     *
+     * Damos prioridad a una fila cuyo primer campo sea JUGADOR
+     * o que contenga varias columnas de fases. Esto evita que un
+     * valor "1" dentro de una fila de datos sea confundido con
+     * la columna FINAL.
+     */
+    let headerIndex = -1;
+    let bestStageCount = 0;
+
+    lines.forEach((cells, index) => {
+      const stageCount = cells.filter((cell) =>
+        Boolean(resolveImportStage(cell.trim()))
+      ).length;
+
+      const firstCell = (cells[0] ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+
+      const looksLikePlayerHeader =
+        firstCell === "jugador" ||
+        firstCell === "jugadores";
+
+      if (
+        looksLikePlayerHeader &&
+        stageCount > 0
+      ) {
+        headerIndex = index;
+        bestStageCount = stageCount;
+        return;
+      }
+
+      if (
+        stageCount > bestStageCount
+      ) {
+        headerIndex = index;
+        bestStageCount = stageCount;
+      }
+    });
+
+    if (headerIndex === -1 || bestStageCount === 0) {
+      setError(
+        "No se han encontrado columnas de jornadas o fases. Se admiten J1, J2, J3..., Dieciseisavos, Octavos, Cuartos, Semifinal, Final y los formatos numéricos 16, 8, 4, 2 y 1."
+      );
+      return;
+    }
+
+    const header = lines[headerIndex];
+    const columns: ImportColumn[] = [];
+
+    header.forEach((cell, index) => {
+      const headerLabel = cell.trim();
+      const resolved = resolveImportStage(headerLabel);
+
+      if (!resolved) return;
+
+      let matchId: number | null = null;
+
+      if (resolved.stage) {
+        const stageMatches = matches.filter(
+          (item) =>
+            item.competitionId === competitionId &&
+            item.seasonId === seasonId &&
+            item.stageId === resolved.stage!.id &&
+            (item.homeTeamId === teamId ||
+              item.awayTeamId === teamId)
+        );
+
+        if (stageMatches.length === 1) {
+          matchId = stageMatches[0].id;
+        }
+      }
+
+      columns.push({
+        index,
+        label: headerLabel,
+        stageName: resolved.displayName,
+        stageKey: resolved.key,
+        stageId: resolved.stage?.id ?? null,
+        matchId,
+      });
+    });
+
+    if (!columns.length) {
+      setError("No se han encontrado columnas de jornadas o fases reconocibles.");
+      return;
+    }
+
+    const selectedParticipations = participations.filter(
+      (participation) =>
+        participation.teamId === teamId &&
+        matches.some(
+          (item) =>
+            item.id === participation.matchId &&
+            item.competitionId === competitionId &&
+            item.seasonId === seasonId
+        )
+    );
+
+    const playerMap = new Map<string, Player[]>();
+
+    players.forEach((player) => {
+      const key = normalizeImportName(player.name);
+      const current = playerMap.get(key) ?? [];
+      current.push(player);
+      playerMap.set(key, current);
+    });
+
+    const range = getImportRatingRange();
+    const preview: ImportRatingRow[] = [];
+
+    for (
+      let lineIndex = headerIndex + 1;
+      lineIndex < lines.length;
+      lineIndex += 1
+    ) {
+      const cells = lines[lineIndex];
+      const rawName = (cells[0] ?? "").trim();
+
+      if (!rawName) continue;
+
+      const upperName = rawName.toUpperCase();
+      if (
+        upperName === "MARCA" ||
+        upperName === "AS" ||
+        upperName === "SOFASCORE" ||
+        upperName === "FLASHSCORE" ||
+        upperName.includes("TOTALES EQUIPO")
+      ) {
+        continue;
+      }
+
+      const normalizedName = normalizeImportName(rawName);
+      if (!normalizedName) continue;
+
+      const matchingPlayers =
+        playerMap.get(normalizedName) ?? [];
+
+      const rowHasValue = columns.some(
+        (column) => (cells[column.index] ?? "").trim() !== ""
+      );
+
+      if (!rowHasValue) continue;
+
+      if (matchingPlayers.length === 0) {
+        preview.push({
+          playerName: rawName,
+          player: undefined,
+          playerId: null,
+          stageName: "—",
+          stageId: null,
+          matchId: null,
+          participationId: null,
+          rating: null,
+          status: "player-missing",
+          message: "Jugador no encontrado en la base de datos.",
+        });
+        continue;
+      }
+
+      /*
+       * ==========================================================
+       * IDENTIFICACIÓN DEL JUGADOR USANDO EL EQUIPO + PARTIDO
+       * ==========================================================
+       *
+       * El nombre NO es suficiente porque puede haber dos jugadores
+       * con el mismo nombre (por ejemplo, Emiliano Martínez).
+       *
+       * Para resolver la ambigüedad no usamos solamente la lista
+       * global de participaciones. Comprobamos, para cada candidato,
+       * si tiene una participación REAL en alguno de los partidos
+       * que corresponden a las columnas importadas y al teamId
+       * seleccionado.
+       *
+       * El candidato que tenga más coincidencias con esos partidos
+       * es el jugador correcto. Si hay empate o ninguno participa,
+       * no hacemos una elección arbitraria.
+       * ==========================================================
+       */
+      let player: Player | undefined;
+
+      if (matchingPlayers.length === 1) {
+        player = matchingPlayers[0];
+      } else {
+        const candidateScores = matchingPlayers.map((candidate) => {
+          const matchingParticipationCount = columns.reduce(
+            (count, column) => {
+              if (!column.matchId) return count;
+
+              const hasParticipation = selectedParticipations.some(
+                (participation) =>
+                  participation.matchId === column.matchId &&
+                  participation.teamId === teamId &&
+                  participation.playerId === candidate.id
+              );
+
+              return count + (hasParticipation ? 1 : 0);
+            },
+            0
           );
 
-          const effectiveCountryName =
-            effectiveCountry?.name ?? null;
-
-          const matches =
-            playerMap.get(normalizedName) ?? [];
-
-          /*
-           * ========================================================
-           * IDENTIDAD DEL JUGADOR
-           *
-           * La prioridad es:
-           *
-           * 1. Nombre + país + fecha
-           * 2. Nombre + país
-           * 3. Nombre + fecha
-           * 4. Solo nombre
-           *
-           * Cuando los datos proporcionados NO coinciden con un
-           * jugador existente con ese nombre, entendemos que se
-           * trata de una persona diferente y se crea como NUEVO.
-           *
-           * Ejemplo:
-           *
-           * Roberto Fernández - España - 03/07/2002
-           * Roberto Fernández - Paraguay - 29/03/1988
-           *
-           * El segundo NO es un duplicado del primero.
-           * ========================================================
-           */
-
-          const identityKey = [
-            normalizedName,
-            effectiveCountryId ?? "",
-            item.birthDate ?? "",
-          ].join("|");
-
-          /*
-           * El mismo jugador aparece dos veces en el texto
-           * con exactamente los mismos datos.
-           */
-          if (
-            inputIdentityCount.get(identityKey)! > 1
-          ) {
-            return {
-              inputName,
-              normalizedName,
-              countryName: effectiveCountryName,
-              countryId: effectiveCountryId,
-              birthDate: item.birthDate,
-              status: "duplicate",
-            };
-          }
-
-          /*
-           * Filtramos los jugadores existentes por los datos que
-           * realmente se han proporcionado.
-           */
-          let identityMatches = matches;
-
-          if (effectiveCountryId) {
-            identityMatches =
-              identityMatches.filter(
-                (player) =>
-                  player.countryId ===
-                  effectiveCountryId
-              );
-          }
-
-          if (item.birthDate) {
-            identityMatches =
-              identityMatches.filter(
-                (player) =>
-                  player.birthDate ===
-                  item.birthDate
-              );
-          }
-
-          /*
-           * Una única coincidencia con los datos disponibles:
-           * es el jugador existente.
-           */
-          if (
-            identityMatches.length === 1
-          ) {
-            return {
-              inputName,
-              normalizedName,
-              countryName: effectiveCountryName,
-              countryId: effectiveCountryId,
-              birthDate: item.birthDate,
-              existingPlayer:
-                identityMatches[0],
-              playerId:
-                identityMatches[0].id,
-              status: "existing",
-            };
-          }
-
-          /*
-           * Hay varios jugadores que cumplen los datos
-           * proporcionados y no podemos distinguirlos.
-           */
-          if (
-            identityMatches.length > 1
-          ) {
-            return {
-              inputName,
-              normalizedName,
-              countryName: effectiveCountryName,
-              countryId: effectiveCountryId,
-              birthDate: item.birthDate,
-              status: "duplicate",
-            };
-          }
-
-          /*
-           * El nombre existe, pero ninguno de esos jugadores
-           * coincide con el país/fecha proporcionados.
-           *
-           * Esto NO es un duplicado:
-           * significa que estamos importando otro jugador
-           * con el mismo nombre.
-           */
-          if (
-            matches.length > 0 &&
-            (effectiveCountryId ||
-              item.birthDate)
-          ) {
-            return {
-              inputName,
-              normalizedName,
-              countryName: effectiveCountryName,
-              countryId: effectiveCountryId,
-              birthDate: item.birthDate,
-              status: "new",
-            };
-          }
-
-          /*
-           * Solo tenemos el nombre y ya existe un jugador con
-           * ese mismo nombre. Sin más información no podemos
-           * saber cuál es.
-           */
-          if (matches.length > 0) {
-            return {
-              inputName,
-              normalizedName,
-              countryName: effectiveCountryName,
-              countryId: effectiveCountryId,
-              birthDate: item.birthDate,
-              status: "duplicate",
-            };
-          }
-
-          /*
-           * No existe ningún jugador con ese nombre.
-           */
           return {
-            inputName,
-            normalizedName,
-            countryName: effectiveCountryName,
-            countryId: effectiveCountryId,
-            birthDate: item.birthDate,
-            status: "new",
+            candidate,
+            matchingParticipationCount,
           };
         });
 
-      setRows(
-        analysedRows
-      );
-    } catch (err) {
-      console.error(
-        "Error analizando jugadores:",
-        err
-      );
-
-      setError(
-        "No se pudo analizar la lista de jugadores."
-      );
-    } finally {
-      setAnalysing(false);
-    }
-  };
-
-  /*
-   * ============================================================
-   * RESUMEN DEL ANÁLISIS
-   * ============================================================
-   */
-
-  const existingCount =
-    rows.filter(
-      (row) =>
-        row.status ===
-        "existing"
-    ).length;
-
-  const newCount =
-    rows.filter(
-      (row) =>
-        row.status ===
-        "new"
-    ).length;
-
-  const duplicateCount =
-    rows.filter(
-      (row) =>
-        row.status ===
-        "duplicate"
-    ).length;
-
-  /*
-   * ============================================================
-   * CREAR JUGADORES + PLANTILLA
-   * ============================================================
-   */
-
-  const handleCreatePlayersAndSquad =
-    async () => {
-      setError("");
-      setSuccess("");
-
-      if (!seasonId) {
-        setError(
-          "Selecciona una temporada."
+        const maxScore = Math.max(
+          ...candidateScores.map(
+            (item) => item.matchingParticipationCount
+          )
         );
-        return;
-      }
 
-      if (!competitionId) {
-        setError(
-          "Selecciona una competición."
+        const bestCandidates = candidateScores.filter(
+          (item) =>
+            item.matchingParticipationCount === maxScore &&
+            maxScore > 0
         );
-        return;
-      }
 
-      if (!teamId) {
-        setError(
-          "Selecciona un equipo."
-        );
-        return;
-      }
-
-      if (applyCountryToAll && !globalCountryId) {
-        setError(
-          "Selecciona el país que quieres asignar a todos los jugadores nuevos."
-        );
-        return;
-      }
-
-      if (
-        rows.length === 0
-      ) {
-        setError(
-          "Primero debes analizar la lista de jugadores."
-        );
-        return;
-      }
-
-      if (
-        duplicateCount >
-        0
-      ) {
-        setError(
-          "Hay jugadores duplicados o ambiguos. Se ha comparado nombre, país y fecha de nacimiento. Revísalos antes de continuar."
-        );
-        return;
-      }
-
-      setSaving(true);
-
-      try {
-        let updatedPlayers =
-          [...players];
-
-        const finalRows =
-          [...rows];
-
-        /*
-         * ======================================================
-         * CREAR JUGADORES NUEVOS
-         * ======================================================
-         */
-
-        for (
-          let index = 0;
-          index <
-          finalRows.length;
-          index++
-        ) {
-          const row =
-            finalRows[index];
-
-          if (
-            row.status !==
-            "new"
-          ) {
-            continue;
-          }
-
-          const playerData:
-            Omit<
-              Player,
-              "id"
-            > = {
-            name: row.inputName.trim(),
-            shortName: row.inputName.trim(),
-            countryId: applyCountryToAll
-              ? globalCountryId
-              : row.countryId,
-            birthDate: row.birthDate,
-            active: true,
-          };
-
-          const createdPlayer =
-            await addPlayer(
-              playerData
-            );
-
-          updatedPlayers.push(
-            createdPlayer
-          );
-
-          finalRows[index] = {
-            ...row,
-            existingPlayer:
-              createdPlayer,
-            playerId:
-              createdPlayer.id,
-            status:
-              "existing",
-          };
+        if (bestCandidates.length === 1) {
+          player = bestCandidates[0].candidate;
         }
+      }
 
-        /*
-         * Actualizamos estado local.
-         */
-        setPlayers(
-          updatedPlayers
-        );
+      if (!player) {
+        preview.push({
+          playerName: rawName,
+          player: undefined,
+          playerId: null,
+          stageName: "—",
+          stageId: null,
+          matchId: null,
+          participationId: null,
+          rating: null,
+          status: "player-missing",
+          message:
+            matchingPlayers.length > 1
+              ? `Hay varios jugadores llamados "${rawName}" y no se ha podido identificar de forma segura al que pertenece al equipo seleccionado.`
+              : "Jugador no encontrado en la base de datos.",
+        });
+        continue;
+      }
 
-        setRows(
-          finalRows
-        );
+      for (const column of columns) {
+        const rawValue = (cells[column.index] ?? "").trim();
+        if (rawValue === "") continue;
 
-        /*
-         * ======================================================
-         * COMPROBAR QUE TODOS TIENEN PLAYER ID
-         * ======================================================
-         */
-
-        const incomplete =
-          finalRows.filter(
-            (row) =>
-              !row.playerId
-          );
+        const rating = Number(rawValue.replace(",", "."));
 
         if (
-          incomplete.length >
-          0
+          Number.isNaN(rating) ||
+          rating < range.min ||
+          rating > range.max
         ) {
-          throw new Error(
-            "Hay jugadores sin identificar."
-          );
+          preview.push({
+            playerName: rawName,
+            player,
+            playerId: player.id,
+            stageName: column.stageName,
+            stageId: column.stageId,
+            matchId: column.matchId,
+            participationId: null,
+            rating: Number.isNaN(rating) ? null : rating,
+            status: "invalid",
+            message: `${importSource} debe estar entre ${range.min} y ${range.max}.`,
+          });
+          continue;
         }
 
-        /*
-         * ======================================================
-         * CREAR HISTORIAL DE PLANTILLA
-         * ======================================================
-         */
-
-        const squadRecords =
-          finalRows.map(
-            (row) => ({
-              playerId:
-                row.playerId!,
-              teamId,
-              seasonId,
-              shirtNumber:
-                null,
-              positionId:
-                null,
-              startDate:
-                null,
-              endDate:
-                null,
-              active: true,
-            })
-          );
-
-        await saveHistPlayerTeamSquad(
-          squadRecords
-        );
-
-        /*
-         * ======================================================
-         * CARGAR PLANTILLA RECIÉN CREADA
-         * ======================================================
-         */
-
-        const savedSquad =
-          await getHistPlayerTeamsByTeamAndSeason(
-            teamId,
-            seasonId
-          );
-
-        const newSquadRows: SquadRow[] =
-          savedSquad
-            .flatMap(
-              (history) => {
-                const player =
-                  updatedPlayers.find(
-                    (item) =>
-                      item.id ===
-                      history.playerId
-                  );
-
-                if (!player) {
-                  return [];
-                }
-
-                const row: SquadRow = {
-                  playerId:
-                    player.id,
-
-                  playerName:
-                    player.name,
-
-                  shirtNumber:
-                    history.shirtNumber !==
-                      null &&
-                    history.shirtNumber !==
-                      undefined
-                      ? String(
-                          history.shirtNumber
-                        )
-                      : "",
-
-                  positionId:
-                    history.positionId ??
-                    0,
-
-                  history,
-                };
-
-                return [row];
-              }
-            )
-
-            .sort(
-              (a, b) =>
-                a.playerName.localeCompare(
-                  b.playerName,
-                  "es"
-                )
-            );
-
-        setSquadRows(
-          newSquadRows
-        );
-
-        setStep(
-          "numbers"
-        );
-
-        setShirtNumberText(
-          ""
-        );
-
-        setSuccess(
-          `Plantilla creada correctamente: ${newSquadRows.length} jugadores. Ahora puedes pegar la lista con los dorsales.`
-        );
-      } catch (err) {
-        console.error(
-          "Error creando jugadores y plantilla:",
-          err
-        );
-
-        setError(
-          "No se pudo crear la plantilla. Comprueba los datos e inténtalo de nuevo."
-        );
-      } finally {
-        setSaving(false);
-      }
-    };
-
-  /*
-   * ============================================================
-   * ANALIZAR DORSALES
-   * ============================================================
-   */
-
-  const handleAnalyseShirtNumbers =
-    () => {
-      setError("");
-      setSuccess("");
-
-      if (
-        squadRows.length ===
-        0
-      ) {
-        setError(
-          "No hay una plantilla cargada."
-        );
-        return;
-      }
-
-      const lines =
-        shirtNumberText
-          .split(/\r?\n/)
-          .map(
-            (line) =>
-              line.trim()
-          )
-          .filter(Boolean);
-
-      if (
-        lines.length === 0
-      ) {
-        setError(
-          "Pega la lista de jugadores con sus dorsales."
-        );
-        return;
-      }
-
-      /*
-       * ========================================================
-       * MAPA DE JUGADORES DE LA PLANTILLA
-       * ========================================================
-       */
-
-      const squadMap =
-        new Map<
-          string,
-          SquadRow
-        >();
-
-      squadRows.forEach(
-        (row) => {
-          squadMap.set(
-            normalizeName(
-              row.playerName
-            ),
-            row
-          );
+        if (!column.stageId) {
+          preview.push({
+            playerName: rawName,
+            player,
+            playerId: player.id,
+            stageName: column.stageName,
+            stageId: null,
+            matchId: null,
+            participationId: null,
+            rating,
+            status: "stage-missing",
+            message: `No existe la fase "${column.stageName}" en la temporada seleccionada.`,
+          });
+          continue;
         }
-      );
 
-      /*
-       * ========================================================
-       * ANALIZAR LISTA
-       * ========================================================
-       */
-
-      const updatedRows =
-        squadRows.map(
-          (row) => ({
-            ...row,
-            shirtNumber:
-              row.shirtNumber,
-          })
-        );
-
-      const matchedPlayerIds =
-        new Set<number>();
-
-      const usedShirtNumbers =
-        new Map<
-          number,
-          string[]
-        >();
-
-      const errors: string[] =
-        [];
-
-      lines.forEach(
-        (line) => {
-          const parsed =
-            parseShirtNumberLine(
-              line,
-              positions
-            );
-
-          /*
-           * Si no tiene dorsal.
-           */
-          if (
-            parsed.shirtNumber ===
-            null
-          ) {
-            errors.push(
-              `"${line}" no tiene un dorsal válido.`
-            );
-            return;
-          }
-
-          /*
-           * Dorsal válido 1-99.
-           */
-          if (
-            parsed.shirtNumber <
-              1 ||
-            parsed.shirtNumber >
-              99
-          ) {
-            errors.push(
-              `${parsed.name}: el dorsal ${parsed.shirtNumber} debe estar entre 1 y 99.`
-            );
-            return;
-          }
-
-          const normalized =
-            normalizeName(
-              parsed.name
-            );
-
-          const squadPlayer =
-            squadMap.get(
-              normalized
-            );
-
-          /*
-           * Jugador no encontrado
-           * en la plantilla.
-           */
-          if (
-            !squadPlayer
-          ) {
-            errors.push(
-              `${parsed.name}: no pertenece a la plantilla seleccionada.`
-            );
-            return;
-          }
-
-          /*
-           * Jugador repetido.
-           */
-          if (
-            matchedPlayerIds.has(
-              squadPlayer.playerId
-            )
-          ) {
-            errors.push(
-              `${parsed.name}: aparece más de una vez en la lista.`
-            );
-            return;
-          }
-
-          matchedPlayerIds.add(
-            squadPlayer.playerId
-          );
-
-          /*
-           * Control de dorsales repetidos.
-           */
-          const names =
-            usedShirtNumbers.get(
-              parsed.shirtNumber
-            ) ?? [];
-
-          names.push(
-            parsed.name
-          );
-
-          usedShirtNumbers.set(
-            parsed.shirtNumber,
-            names
-          );
-
-          /*
-           * Actualizar dorsal.
-           */
-          const rowIndex =
-            updatedRows.findIndex(
-              (row) =>
-                row.playerId ===
-                squadPlayer.playerId
-            );
-
-          if (
-            rowIndex >= 0
-          ) {
-            updatedRows[
-              rowIndex
-            ] = {
-              ...updatedRows[
-                rowIndex
-              ],
-              shirtNumber:
-                String(
-                  parsed.shirtNumber
-                ),
-              positionId:
-                parsed.positionId ||
-                updatedRows[rowIndex]
-                  .positionId,
-            };
-          }
+        if (!column.matchId) {
+          preview.push({
+            playerName: rawName,
+            player,
+            playerId: player.id,
+            stageName: column.stageName,
+            stageId: column.stageId,
+            matchId: null,
+            participationId: null,
+            rating,
+            status: "match-missing",
+            message: `No se ha encontrado un único partido de este equipo en ${column.stageName}.`,
+          });
+          continue;
         }
-      );
 
-      /*
-       * ========================================================
-       * DORSALES DUPLICADOS
-       * ========================================================
-       */
+        const participation = selectedParticipations.find(
+          (item) =>
+            item.matchId === column.matchId &&
+            item.playerId === player.id
+        );
 
-      usedShirtNumbers.forEach(
-        (
-          names,
-          shirtNumber
-        ) => {
-          if (
-            names.length >
-            1
-          ) {
-            errors.push(
-              `El dorsal ${shirtNumber} está repetido: ${names.join(
-                ", "
-              )}.`
-            );
-          }
+        if (!participation) {
+          preview.push({
+            playerName: rawName,
+            player,
+            playerId: player.id,
+            stageName: column.stageName,
+            stageId: column.stageId,
+            matchId: column.matchId,
+            participationId: null,
+            rating,
+            status: "participation-missing",
+            message:
+              "No existe participación de este jugador en ese partido.",
+          });
+          continue;
         }
-      );
 
-      if (
-        errors.length > 0
-      ) {
-        setError(
-          errors.join(" ")
-        );
-        return;
+        preview.push({
+          playerName: rawName,
+          player,
+          playerId: player.id,
+          stageName: column.stageName,
+          stageId: column.stageId,
+          matchId: column.matchId,
+          participationId: participation.id,
+          rating,
+          status: "ok",
+          message: "Listo para guardar.",
+        });
       }
+    }
 
-      /*
-       * ========================================================
-       * COMPROBAR QUE SE HAN ENCONTRADO TODOS
-       * ========================================================
-       */
-
-      if (
-        matchedPlayerIds.size !==
-        lines.length
-      ) {
-        setError(
-          "No se han podido identificar correctamente todos los jugadores."
-        );
-        return;
-      }
-
-      setSquadRows(
-        updatedRows
+    if (!preview.length) {
+      setError(
+        "No se han encontrado valoraciones en las columnas de jornadas o fases."
       );
+      return;
+    }
 
-      setSuccess(
-        `Dorsales reconocidos correctamente: ${matchedPlayerIds.size} jugadores. Las posiciones reconocidas se han asignado automáticamente; puedes corregirlas manualmente si es necesario.`
-      );
-    };
-
-  /*
-   * ============================================================
-   * CAMBIAR POSICIÓN
-   * ============================================================
-   */
-
-  const handlePositionChange =
-    (
-      playerId: number,
-      positionId: number
-    ) => {
-      setSquadRows(
-        (current) =>
-          current.map(
-            (row) =>
-              row.playerId ===
-              playerId
-                ? {
-                    ...row,
-                    positionId,
-                  }
-                : row
-          )
-      );
-    };
-
-  /*
-   * ============================================================
-   * REINICIAR FORMULARIO
-   * ============================================================
-   */
-
-  const resetForm = () => {
-    setSeasonId(0);
-    setCompetitionId(0);
-    setTeamId(0);
-
-    setStep("players");
-
-    setPlayerText("");
-    setRows([]);
-
-    setShirtNumberText("");
-    setSquadRows([]);
-
-    setError("");
+    setImportColumns(columns);
+    setImportPreview(preview);
+    setImportAnalyzed(true);
   };
 
-  /*
-   * ============================================================
-   * GUARDAR DORSALES + POSICIONES
-   * ============================================================
-   */
+  const saveImport = async () => {
+    setError("");
+    setImportMessage("");
 
-  const handleSaveNumbersAndPositions =
-    async () => {
-      setError("");
-      setSuccess("");
-
-      if (
-        squadRows.length ===
-        0
-      ) {
-        setError(
-          "No hay jugadores en la plantilla."
-        );
-        return;
-      }
-
-      /*
-       * ========================================================
-       * VALIDAR DORSALES
-       * ========================================================
-       */
-
-      const validationErrors: string[] =
-        [];
-
-      const shirtNumberMap =
-        new Map<
-          number,
-          string[]
-        >();
-
-      squadRows.forEach(
-        (row) => {
-          if (
-            !row.shirtNumber
-          ) {
-            validationErrors.push(
-              `${row.playerName}: falta el dorsal.`
-            );
-            return;
-          }
-
-          const shirtNumber =
-            Number(
-              row.shirtNumber
-            );
-
-          if (
-            !Number.isInteger(
-              shirtNumber
-            ) ||
-            shirtNumber < 1 ||
-            shirtNumber > 99
-          ) {
-            validationErrors.push(
-              `${row.playerName}: el dorsal debe estar entre 1 y 99.`
-            );
-            return;
-          }
-
-          const names =
-            shirtNumberMap.get(
-              shirtNumber
-            ) ?? [];
-
-          names.push(
-            row.playerName
-          );
-
-          shirtNumberMap.set(
-            shirtNumber,
-            names
-          );
-        }
-      );
-
-      shirtNumberMap.forEach(
-        (
-          names,
-          shirtNumber
-        ) => {
-          if (
-            names.length >
-            1
-          ) {
-            validationErrors.push(
-              `El dorsal ${shirtNumber} está repetido: ${names.join(
-                ", "
-              )}.`
-            );
-          }
-        }
-      );
-
-      /*
-       * ========================================================
-       * VALIDAR POSICIONES
-       * ========================================================
-       */
-
-      squadRows.forEach(
-        (row) => {
-          if (
-            !row.positionId ||
-            row.positionId <= 0
-          ) {
-            validationErrors.push(
-              `${row.playerName}: debes seleccionar una posición.`
-            );
-          }
-        }
-      );
-
-      if (
-        validationErrors.length >
-        0
-      ) {
-        setError(
-          validationErrors.join(
-            " "
-          )
-        );
-        return;
-      }
-
-      /*
-       * ========================================================
-       * GUARDAR
-       * ========================================================
-       */
-
-      setSaving(true);
-
-      try {
-        const records =
-          squadRows.map(
-            (row) => ({
-              playerId:
-                row.playerId,
-
-              teamId,
-
-              seasonId,
-
-              shirtNumber:
-                Number(
-                  row.shirtNumber
-                ),
-
-              positionId:
-                row.positionId,
-
-              startDate:
-                row.history
-                  ?.startDate ??
-                null,
-
-              endDate:
-                row.history
-                  ?.endDate ??
-                null,
-
-              active: true,
-            })
-          );
-
-        await saveHistPlayerTeamSquad(
-          records
-        );
-
-        const savedMessage =
-          `Plantilla completada correctamente: ${records.length} jugadores con dorsal y posición.`;
-
-        /*
-         * Reiniciamos el formulario para poder
-         * registrar inmediatamente otra plantilla.
-         */
-        resetForm();
-
-        setSuccess(savedMessage);
-
-        if (onSaved) {
-          await onSaved();
-        }
-      } catch (err) {
-        console.error(
-          "Error guardando dorsales y posiciones:",
-          err
-        );
-
-        setError(
-          "No se pudieron guardar los dorsales y posiciones."
-        );
-      } finally {
-        setSaving(false);
-      }
-    };
-
-  /*
-   * ============================================================
-   * VOLVER AL PASO 1
-   * ============================================================
-   */
-
-  const handleBackToPlayers =
-    () => {
-      setStep(
-        "players"
-      );
-
-      setError("");
-      setSuccess("");
-    };
-
-  /*
-   * ============================================================
-   * CARGANDO
-   * ============================================================
-   */
-
-  if (loading) {
-    return (
-      <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-5 md:p-6">
-        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
-          Importar plantilla
-        </h2>
-
-        <p className="mt-2 text-sm text-slate-500">
-          Cargando datos...
-        </p>
-      </div>
+    const validRows = importPreview.filter(
+      (row) =>
+        row.status === "ok" &&
+        row.playerId !== null &&
+        row.matchId !== null &&
+        row.participationId !== null &&
+        row.rating !== null
     );
-  }
+
+    if (!validRows.length) {
+      setError("No hay valoraciones válidas para guardar.");
+      return;
+    }
+
+    setImporting(true);
+
+    try {
+      const localRatings = [...matchRatings];
+      let savedCount = 0;
+
+      for (const row of validRows) {
+        const existingIndex = localRatings.findIndex(
+          (rating) =>
+            rating.participationId === row.participationId
+        );
+
+        // La memoria local puede no estar actualizada si se ha
+        // importado otra fuente previamente. La base de datos es
+        // la fuente de verdad para comprobar si ya existe la valoración.
+        let existing =
+          existingIndex >= 0
+            ? localRatings[existingIndex]
+            : undefined;
+
+        if (!existing) {
+          existing =
+            await getMatchRatingByParticipationId(
+              row.participationId!
+            );
+        }
+
+        const marca =
+          importSource === "Marca"
+            ? row.rating
+            : existing?.marcaRating ?? null;
+
+        const as =
+          importSource === "AS"
+            ? row.rating
+            : existing?.asRating ?? null;
+
+        const sofa =
+          importSource === "SofaScore"
+            ? row.rating
+            : existing?.sofascoreRating ?? null;
+
+        const flash =
+          importSource === "FlashScore"
+            ? row.rating
+            : existing?.flashscoreRating ?? null;
+
+        const data: Omit<MatchRating, "id"> = {
+          matchId: row.matchId!,
+          playerId: row.playerId!,
+          participationId: row.participationId!,
+          marcaRating: marca,
+          asRating: as,
+          sofascoreRating: sofa,
+          flashscoreRating: flash,
+          externalAverage: calculateExternalAverage(
+            marca,
+            as,
+            sofa,
+            flash
+          ),
+          value90MatchRating:
+            existing?.value90MatchRating ?? null,
+          finalMatchRating:
+            existing?.finalMatchRating ?? null,
+          confidence: existing?.confidence ?? null,
+          calculationVersion:
+            existing?.calculationVersion ?? null,
+          calculatedAt:
+            existing?.calculatedAt ?? null,
+        };
+
+        if (existing) {
+          // Ya existe la valoración para esta participación:
+          // actualizamos únicamente la fuente importada y
+          // conservamos las demás notas.
+          const updated = await updateMatchRating(
+            existing.id,
+            data
+          );
+
+          if (updated) {
+            if (existingIndex >= 0) {
+              localRatings[existingIndex] = updated;
+            } else {
+              localRatings.push(updated);
+            }
+          }
+        } else {
+          const created = await addMatchRating(data);
+          localRatings.push(created);
+        }
+
+        savedCount += 1;
+      }
+
+      setMatchRatings(localRatings);
+      setImportMessage(
+        `Se han guardado ${savedCount} valoraciones de ${importSource}.`
+      );
+      setImportAnalyzed(false);
+      setImportPreview([]);
+      setImportColumns([]);
+      setImportText("");
+      onSaved();
+    } catch (error) {
+      console.error(
+        "Error importando valoraciones:",
+        error
+      );
+      setError(
+        "No se han podido guardar las valoraciones. Revisa los datos e inténtalo de nuevo."
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
 
   /*
    * ============================================================
@@ -2252,736 +2384,982 @@ export default function PlayerSquadImportForm({
    */
 
   return (
-    <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-5 md:p-6">
-
-      {/* ======================================================
-          CABECERA
-          ====================================================== */}
+    <div className="rounded-xl border bg-white p-6 shadow">
 
       <div className="mb-6">
-        <h2 className="text-lg font-bold text-slate-800 sm:text-xl">
-          Importar plantilla
+        <h2 className="text-xl font-bold text-slate-800">
+          {matchRating
+            ? "Editar valoración del partido"
+            : "Valoraciones de partidos"}
         </h2>
 
         <p className="mt-1 text-sm text-slate-500">
-          Crea o reconoce jugadores y
-          completa después sus dorsales
-          y posiciones.
+          Introduce las valoraciones manualmente o
+          impórtalas directamente desde Google Sheets.
         </p>
       </div>
 
-      {/* ======================================================
-          MENSAJES
-          ====================================================== */}
+      {!matchRating && (
+        <div className="mb-6 grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setInputMode("manual");
+              setError("");
+              setImportMessage("");
+            }}
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${
+              inputMode === "manual"
+                ? "bg-white text-slate-800 shadow"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Introducción manual
+          </button>
 
-      {error && (
-        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:p-4">
-          <strong className="font-semibold">
-            Revisa los siguientes errores:
-          </strong>
-
-          <p className="mt-1">
-            {error}
-          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setInputMode("import");
+              setError("");
+            }}
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold ${
+              inputMode === "import"
+                ? "bg-white text-slate-800 shadow"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Importar desde Google Sheets
+          </button>
         </div>
       )}
 
-      {success && (
-        <div className="mb-5 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 sm:p-4">
-          {success}
-        </div>
-      )}
-
-      {/* ======================================================
-          DATOS DE LA PLANTILLA
-          ====================================================== */}
-
-      <div className="mb-5 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:mb-6 sm:p-5">
-
-        <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
-          Datos de la plantilla
-        </h3>
-
-        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-5">
-
-          {/* TEMPORADA */}
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Temporada
-            </label>
-
-            <select
-              value={seasonId}
-              onChange={(event) =>
-                handleSeasonChange(
-                  Number(
-                    event.target.value
-                  )
-                )
-              }
-              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm sm:px-4"
-            >
-              <option value={0}>
-                Selecciona temporada
-              </option>
-
-              {sortedSeasons.map(
-                (season) => (
-                  <option
-                    key={season.id}
-                    value={season.id}
-                  >
-                    {season.name}
-                  </option>
-                )
-              )}
-            </select>
-          </div>
-
-          {/* COMPETICIÓN */}
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Competición
-            </label>
-
-            <select
-              value={competitionId}
-              onChange={(event) =>
-                handleCompetitionChange(
-                  Number(
-                    event.target.value
-                  )
-                )
-              }
-              disabled={
-                !seasonId
-              }
-              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100 sm:px-4"
-            >
-              <option value={0}>
-                Selecciona competición
-              </option>
-
-              {availableCompetitions.map(
-                (
-                  competition
-                ) => (
-                  <option
-                    key={
-                      competition.id
-                    }
-                    value={
-                      competition.id
-                    }
-                  >
-                    {
-                      competition.name
-                    }
-                  </option>
-                )
-              )}
-            </select>
-          </div>
-
-          {/* EQUIPO */}
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Equipo
-            </label>
-
-            <select
-              value={teamId}
-              onChange={(event) =>
-                handleTeamChange(
-                  Number(
-                    event.target.value
-                  )
-                )
-              }
-              disabled={
-                !competitionId
-              }
-              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100 sm:px-4"
-            >
-              <option value={0}>
-                Selecciona equipo
-              </option>
-
-              {availableTeams.map(
-                (team) => (
-                  <option
-                    key={team.id}
-                    value={team.id}
-                  >
-                    {`${team.shortName ?? team.name} - ${team.name}`}
-                  </option>
-                )
-              )}
-            </select>
-          </div>
-
-          {/* PAÍS PARA TODOS (SOLO SELECCIONES) */}
-
-          {selectedCompetition?.competitionType ===
-            "National Team" && (
-            <div className="min-w-0 lg:col-span-1">
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                País para todos
-              </label>
-
-              <label className="mb-2 flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={applyCountryToAll}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setApplyCountryToAll(checked);
-
-                    if (!checked) {
-                      setGlobalCountryId(0);
-                    }
-                  }}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                Asignar el mismo país a todos los jugadores nuevos
-              </label>
-
-              {applyCountryToAll && (
-                <select
-                  value={globalCountryId}
-                  onChange={(event) =>
-                    setGlobalCountryId(
-                      Number(event.target.value)
-                    )
-                  }
-                  className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm sm:px-4"
-                >
-                  <option value={0}>
-                    Selecciona país
-                  </option>
-
-                  {sortedCountries.map((country) => (
-                    <option
-                      key={country.id}
-                      value={country.id}
-                    >
-                      {country.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {!applyCountryToAll && (
-                <p className="text-xs text-slate-500">
-                  Puedes indicar el país de cada jugador en la lista pegada.
-                </p>
-              )}
+      {inputMode === "import" && !matchRating ? (
+        <div className="space-y-6">
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
             </div>
           )}
 
-        </div>
-      </div>
+          {importMessage && (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+              {importMessage}
+            </div>
+          )}
 
-      {/* ======================================================
-          PASO 1
-          ====================================================== */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+            <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
+              1. Selección de la importación
+            </h3>
 
-      {step === "players" && (
-        <div className="space-y-6">
+            <div className="grid gap-5 md:grid-cols-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Temporada
+                </label>
+                <select
+                  value={seasonId}
+                  onChange={(event) =>
+                    handleSeasonChange(
+                      Number(event.target.value)
+                    )
+                  }
+                  disabled={
+                    seasonsLoading
+                  }
+                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                >
+                  <option value={0}>
+                    {seasonsLoading
+                      ? "Cargando..."
+                      : "Seleccionar temporada"}
+                  </option>
+                  {availableSeasons.map((season) => (
+                    <option
+                      key={season.id}
+                      value={season.id}
+                    >
+                      {season.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="rounded-xl border border-slate-200 p-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Competición
+                </label>
+                <select
+                  value={competitionId}
+                  onChange={(event) =>
+                    handleCompetitionChange(
+                      Number(event.target.value)
+                    )
+                  }
+                  disabled={competitionsLoading}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                >
+                  <option value={0}>
+                    {competitionsLoading
+                      ? "Cargando..."
+                      : "Seleccionar competición"}
+                  </option>
+                  {availableCompetitions.map((competition) => (
+                    <option
+                      key={competition.id}
+                      value={competition.id}
+                    >
+                      {competition.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="mb-4">
-              <h3 className="text-base font-bold text-slate-800">
-                Paso 1 · Jugadores
-              </h3>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Equipo
+                </label>
+                <select
+                  value={teamId}
+                  onChange={(event) =>
+                    handleTeamChange(
+                      Number(event.target.value)
+                    )
+                  }
+                  disabled={!seasonId || !competitionId || teamsLoading}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+                >
+                  <option value={0}>
+                    {!seasonId
+                      ? "Selecciona primero una temporada"
+                      : !competitionId
+                        ? "Selecciona primero una competición"
+                        : teamsLoading
+                          ? "Cargando..."
+                          : "Seleccionar equipo"}
+                  </option>
+                  {availableImportTeams.map((team) => (
+                      <option
+                        key={team.id}
+                        value={team.id}
+                      >
+                        {team.shortName} - {team.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Pega un jugador por línea con las columnas:
-                Nombre, País y Fecha de nacimiento.
-                Si estás importando una selección, puedes activar
-                la opción "País para todos" y no tendrás que repetir
-                el país en cada línea.
-                El sistema comprobará cuáles existen
-                y creará automáticamente los nuevos.
-              </p>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  Fuente
+                </label>
+                <select
+                  value={importSource}
+                  onChange={(event) => {
+                    setImportSource(
+                      event.target.value as
+                        | "Marca"
+                        | "AS"
+                        | "SofaScore"
+                        | "FlashScore"
+                    );
+                    resetImport();
+                  }}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none focus:border-slate-500"
+                >
+                  <option value="Marca">Marca</option>
+                  <option value="AS">AS</option>
+                  <option value="SofaScore">SofaScore</option>
+                  <option value="FlashScore">FlashScore</option>
+                </select>
+              </div>
             </div>
 
+            <p className="mt-3 text-xs text-slate-500">
+              El importador reconoce jornadas y fases automáticamente:
+              J1, J2, J3..., Dieciseisavos, Octavos, Cuartos,
+              Semifinal y Final. También admite los formatos
+              numéricos 16, 8, 4, 2 y 1 de tus hojas.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-700">
+              2. Pegar datos de Google Sheets
+            </h3>
+
+            <p className="mb-4 text-xs text-slate-500">
+              Copia la tabla completa tal y como la tienes.
+              No necesitas eliminar MVP, P, AVERAGE ni TOTAL.
+            </p>
+
             <textarea
-              value={playerText}
-              onChange={(event) =>
-                setPlayerText(
-                  event.target.value
-                )
-              }
-              rows={12}
-              placeholder={`Josep Martínez\tEspaña\t27/05/1998
-Ivan Provedel\tItalia\t17/03/1994
-Raffaele Di Gennaro\tItalia\t03/10/1993
-Alessandro Bastoni\tItalia\t13/04/1999
-Yann Bisseck\tAlemania\t29/11/2000
-Manuel Akanji\tSuiza\t19/07/1995
-John Stones\tInglaterra\t28/05/1994
-Benjamin Pavard\tFrancia\t28/03/1996
-Federico Dimarco\tItalia\t10/11/1997
-Carlos Augusto\tBrasil\t07/01/1999
-Djed Spence\tInglaterra\t09/08/2000
-Marcos Llorente
-Pedro Porro`}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-500"
+              value={importText}
+              onChange={(event) => {
+                setImportText(event.target.value);
+                setImportAnalyzed(false);
+                setImportPreview([]);
+                setImportColumns([]);
+                setImportMessage("");
+                setError("");
+              }}
+              placeholder={`Pega aquí lo copiado desde Google Sheets.
+
+El sistema reconocerá automáticamente las jornadas y fases.
+
+Ejemplo:
+J1 | J2 | J3 | 16 | 8 | 4 | 2 | 1
+
+Los números 16, 8, 4, 2 y 1 se interpretan como
+Dieciseisavos, Octavos, Cuartos, Semifinal y Final.`}
+              rows={13}
+              className="w-full rounded-lg border border-slate-300 px-4 py-3 font-mono text-xs outline-none focus:border-slate-500"
             />
 
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={resetImport}
+                disabled={importing}
+                className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Limpiar
+              </button>
 
               <button
                 type="button"
-                onClick={
-                  handleAnalyse
-                }
+                onClick={analyzeImport}
                 disabled={
-                  analysing ||
-                  !playerText.trim()
+                  importing ||
+                  !competitionId ||
+                  !seasonId ||
+                  !teamId ||
+                  !importText.trim()
                 }
-                className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {analysing
-                  ? "Analizando..."
-                  : "Analizar jugadores"}
+                Analizar datos
               </button>
-
             </div>
           </div>
 
-          {/* RESULTADO */}
+          {importAnalyzed && (
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">
+                    3. Vista previa
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {importPreview.filter(
+                      (row) => row.status === "ok"
+                    ).length}{" "}
+                    valoraciones válidas de{" "}
+                    {importPreview.length} detectadas.
+                  </p>
+                </div>
 
-          {rows.length > 0 && (
-            <div className="rounded-xl border border-slate-200 p-5">
-
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-
-                <h3 className="text-base font-bold text-slate-800">
-                  Resultado
-                </h3>
-
-                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
-                  Existentes:{" "}
-                  {existingCount}
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  {importColumns.length} jornadas/fases detectadas
                 </span>
-
-                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
-                  Nuevos:{" "}
-                  {newCount}
-                </span>
-
-                {duplicateCount >
-                  0 && (
-                  <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">
-                    Duplicados:{" "}
-                    {
-                      duplicateCount
-                    }
-                  </span>
-                )}
-
               </div>
 
-              <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
-
-                <table className="w-full text-sm">
-
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left">
-                      <th className="px-3 py-3 font-semibold text-slate-600">
+              <div className="max-h-[520px] overflow-auto rounded-lg border border-slate-200">
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-100">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">
                         Jugador
                       </th>
-
-                      <th className="px-3 py-3 font-semibold text-slate-600">
-                        País
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">
+                        Jornada / fase
                       </th>
-
-                      <th className="px-3 py-3 font-semibold text-slate-600">
-                        Fecha de nacimiento
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">
+                        Partido
                       </th>
-
-                      <th className="px-3 py-3 font-semibold text-slate-600">
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">
+                        Participación
+                      </th>
+                      <th className="px-3 py-2 text-center font-semibold text-slate-700">
+                        {importSource}
+                      </th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700">
                         Estado
                       </th>
                     </tr>
                   </thead>
-
                   <tbody>
+                    {importPreview.map((row, index) => {
+                      const match =
+                        matches.find(
+                          (item) => item.id === row.matchId
+                        );
 
-                    {rows.map(
-                      (
-                        row,
-                        index
-                      ) => (
+                      const ok = row.status === "ok";
+
+                      return (
                         <tr
-                          key={`${row.normalizedName}-${index}`}
-                          className="border-b border-slate-100"
+                          key={`${row.playerName}-${row.stageId}-${index}`}
+                          className="border-t border-slate-100"
                         >
-
-                          <td className="px-3 py-3 font-medium text-slate-800">
-                            {
-                              row.inputName
-                            }
+                          <td className="px-3 py-2 font-medium text-slate-800">
+                            {row.playerName}
                           </td>
-
-                          <td className="px-3 py-3">
-
-                            {row.status ===
-                              "existing" && (
-                              <span className="font-medium text-green-600">
-                                ✓ Ya existe
-                              </span>
-                            )}
-
-                            {row.status ===
-                              "new" && (
-                              <span className="font-medium text-blue-600">
-                                + Se creará
-                              </span>
-                            )}
-
-                            {row.status ===
-                              "duplicate" && (
-                              <span className="font-medium text-red-600">
-                                ⚠ Revisar
-                              </span>
-                            )}
-
+                          <td className="px-3 py-2 text-slate-600">
+                            {row.stageName}
                           </td>
-
+                          <td className="px-3 py-2 text-slate-600">
+                            {match
+                              ? getMatchLabel(match)
+                              : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {row.participationId ?? "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center font-semibold text-slate-800">
+                            {row.rating ?? "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              title={row.message}
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                ok
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {ok
+                                ? "✓ OK"
+                                : "⚠ Revisar"}
+                            </span>
+                          </td>
                         </tr>
-                      )
-                    )}
-
+                      );
+                    })}
                   </tbody>
-
                 </table>
-
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-3">
+              {importPreview.some(
+                (row) => row.status !== "ok"
+              ) && (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  Hay filas que no pueden importarse.
+                  Solo se guardarán las valoraciones marcadas
+                  como OK.
+                </div>
+              )}
+
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={resetImport}
+                  disabled={importing}
+                  className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Volver a pegar
+                </button>
 
                 <button
                   type="button"
-                  onClick={
-                    handleCreatePlayersAndSquad
-                  }
+                  onClick={saveImport}
                   disabled={
-                    saving ||
-                    duplicateCount >
-                      0
+                    importing ||
+                    !importPreview.some(
+                      (row) => row.status === "ok"
+                    )
                   }
-                  className="rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {saving
-                    ? "Creando..."
-                    : `Crear jugadores y plantilla (${rows.length})`}
+                  {importing
+                    ? "Guardando..."
+                    : "Guardar valoraciones"}
                 </button>
-
               </div>
+            </div>
+          )}
+
+          <div className="flex justify-end border-t pt-6">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={importing}
+              className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          handleNext();
+        }}
+        className="space-y-6"
+      >
+
+        {/* ====================================================
+            FILTROS
+            ==================================================== */}
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+
+          <h3 className="mb-4 text-sm font-bold uppercase tracking-wide text-slate-700">
+            Selección del partido
+          </h3>
+
+          <div className="grid gap-5 md:grid-cols-3">
+
+            {/* TEMPORADA */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Temporada
+              </label>
+
+              <select
+                value={seasonId}
+                onChange={(event) =>
+                  handleSeasonChange(
+                    Number(event.target.value)
+                  )
+                }
+                disabled={seasonsLoading}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+              >
+                <option value={0}>
+                  {seasonsLoading
+                    ? "Cargando temporadas..."
+                    : "Seleccionar temporada"}
+                </option>
+                {availableSeasons.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {season.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* COMPETICIÓN */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Competición
+              </label>
+
+              <select
+                value={competitionId}
+                onChange={(event) =>
+                  handleCompetitionChange(
+                    Number(event.target.value)
+                  )
+                }
+                disabled={competitionsLoading || !seasonId}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+              >
+                <option value={0}>
+                  {!seasonId
+                    ? "Selecciona primero una temporada"
+                    : competitionsLoading
+                      ? "Cargando competiciones..."
+                      : "Seleccionar competición"}
+                </option>
+                {availableCompetitions.map((competition) => (
+                  <option key={competition.id} value={competition.id}>
+                    {competition.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* JORNADA */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Jornada / fase
+              </label>
+
+              <select
+                value={stageId}
+                onChange={(event) =>
+                  handleStageChange(
+                    Number(event.target.value)
+                  )
+                }
+                disabled={stagesLoading || !competitionId}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+              >
+                <option value={0}>
+                  {!competitionId
+                    ? "Selecciona primero una competición"
+                    : stagesLoading
+                      ? "Cargando jornadas..."
+                      : "Seleccionar jornada / fase"}
+                </option>
+                {availableStages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* PARTIDO Y EQUIPO */}
+
+          <div className="mt-5 grid gap-5 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Partido
+              </label>
+
+              <select
+                value={matchId}
+                onChange={(event) =>
+                  handleMatchChange(
+                    Number(event.target.value)
+                  )
+                }
+                disabled={!seasonId || !competitionId || !stageId}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+              >
+                <option value={0}>
+                  {!seasonId
+                    ? "Selecciona primero una temporada"
+                    : !competitionId
+                      ? "Selecciona primero una competición"
+                      : !stageId
+                        ? "Selecciona primero una jornada / fase"
+                        : "Seleccionar partido"}
+                </option>
+                {availableMatches.map((match) => (
+                  <option key={match.id} value={match.id}>
+                    {getMatchLabel(match)}
+                  </option>
+                ))}
+              </select>
+
+              {seasonId &&
+                competitionId &&
+                stageId &&
+                availableMatches.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    No hay partidos que coincidan con los filtros seleccionados.
+                  </p>
+                )}
+            </div>
+
+            {/* EQUIPO */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Equipo
+              </label>
+
+              <select
+                value={teamId}
+                onChange={(event) =>
+                  handleTeamChange(
+                    Number(event.target.value)
+                  )
+                }
+                disabled={!matchId || teamsLoading}
+                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 outline-none disabled:bg-slate-100 focus:border-slate-500"
+              >
+                <option value={0}>
+                  {!matchId
+                    ? "Selecciona primero un partido"
+                    : teamsLoading
+                      ? "Cargando equipos..."
+                      : "Seleccionar equipo"}
+                </option>
+                {availableMatchTeams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.shortName} - {team.name}
+                  </option>
+                ))}
+              </select>
+
+              <p className="mt-2 text-xs text-slate-500">
+                Selecciona el equipo cuyas valoraciones quieres introducir.
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ====================================================
+            JUGADOR ACTUAL
+            ==================================================== */}
+
+        {teamId > 0 && (
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wide text-slate-700">
+                  Valoración del jugador
+                </h3>
+
+                {totalParticipations >
+                  0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Jugador{" "}
+                    <strong>
+                      {currentProgress}
+                    </strong>{" "}
+                    de{" "}
+                    <strong>
+                      {totalParticipations}
+                    </strong>
+                  </p>
+                )}
+              </div>
+
+              {currentItem && (
+                <div className="rounded-lg bg-slate-100 px-4 py-2 text-right">
+
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Posición
+                  </p>
+
+                  <p className="font-bold text-slate-800">
+                    {getPositionLabel(
+                      currentItem.positionId
+                    )}
+                  </p>
+
+                </div>
+              )}
+
+            </div>
+
+            {historyLoading ||
+            participationsLoading ||
+            matchRatingsLoading ? (
+              <div className="rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500">
+                Cargando jugadores...
+              </div>
+            ) : orderedParticipations.length ===
+              0 ? (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+                {matchRating
+                  ? "No se ha encontrado la participación correspondiente a esta valoración."
+                  : "Todos los jugadores de este equipo ya tienen una valoración registrada para este partido."}
+              </div>
+            ) : currentItem ? (
+              <>
+
+                {/* DATOS DEL JUGADOR */}
+
+                <div className="mb-6 grid gap-4 rounded-lg bg-slate-50 p-5 md:grid-cols-4">
+
+                  <div>
+                    <span className="block text-xs font-medium uppercase text-slate-500">
+                      Jugador
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {currentPlayer?.name ??
+                        "Jugador desconocido"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block text-xs font-medium uppercase text-slate-500">
+                      Equipo
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {currentTeam?.shortName ??
+                        "—"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block text-xs font-medium uppercase text-slate-500">
+                      Minutos
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {
+                        currentParticipation?.minutesPlayed
+                      }
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block text-xs font-medium uppercase text-slate-500">
+                      Titular
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {currentParticipation?.isStartingXI
+                        ? "Sí"
+                        : "No"}
+                    </span>
+                  </div>
+
+                </div>
+
+                {/* NOTAS */}
+
+                <div className="grid gap-5 md:grid-cols-2">
+
+                  {/* MARCA */}
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Marca
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      max="3"
+                      step="0.1"
+                      value={marcaRating}
+                      onChange={(event) =>
+                        setMarcaRating(
+                          event.target.value
+                        )
+                      }
+                      placeholder="0 - 3"
+                      className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+                    />
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Escala Marca: 0 a 3.
+                    </p>
+                  </div>
+
+                  {/* AS */}
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      AS
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      max="4"
+                      step="0.1"
+                      value={asRating}
+                      onChange={(event) =>
+                        setAsRating(
+                          event.target.value
+                        )
+                      }
+                      placeholder="0 - 4"
+                      className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+                    />
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Escala AS: 0 a 4.
+                    </p>
+                  </div>
+
+                  {/* SOFASCORE */}
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      SofaScore
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.1"
+                      value={
+                        sofascoreRating
+                      }
+                      onChange={(event) =>
+                        setSofascoreRating(
+                          event.target.value
+                        )
+                      }
+                      placeholder="0 - 10"
+                      className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+                    />
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Escala SofaScore: 0 a 10.
+                    </p>
+                  </div>
+
+                  {/* FLASHSCORE */}
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      FlashScore
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.1"
+                      value={
+                        flashscoreRating
+                      }
+                      onChange={(event) =>
+                        setFlashscoreRating(
+                          event.target.value
+                        )
+                      }
+                      placeholder="0 - 10"
+                      className="w-full rounded-lg border border-slate-300 px-4 py-2 outline-none focus:border-slate-500"
+                    />
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      Escala FlashScore: 0 a 10.
+                    </p>
+                  </div>
+
+                </div>
+
+                {/* =================================================
+                    PROGRESO
+                    ================================================= */}
+
+                <div className="mt-6">
+
+                  <div className="mb-2 flex justify-between text-xs text-slate-500">
+
+                    <span>
+                      Progreso
+                    </span>
+
+                    <span>
+                      {currentProgress} /{" "}
+                      {totalParticipations}
+                    </span>
+
+                  </div>
+
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+
+                    <div
+                      className="h-full rounded-full bg-slate-800 transition-all duration-300"
+                      style={{
+                        width: `${progressPercentage}%`,
+                      }}
+                    />
+
+                  </div>
+
+                </div>
+
+              </>
+            ) : null}
+
+          </div>
+        )}
+
+        {/* ====================================================
+            AVISO
+            ==================================================== */}
+
+        {teamId > 0 &&
+          orderedParticipations.length >
+            0 && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+
+              <p className="font-semibold">
+                Carga secuencial
+              </p>
+
+              <p className="mt-1">
+                Los jugadores aparecen
+                ordenados por posición. Si
+                varios jugadores tienen la
+                misma posición, se ordenan
+                alfabéticamente.
+              </p>
+
+              <p className="mt-1">
+                Al pulsar{" "}
+                <strong>Siguiente</strong>,
+                se guarda la valoración y se
+                carga automáticamente el
+                siguiente jugador pendiente.
+              </p>
 
             </div>
           )}
 
-        </div>
-      )}
+        {/* ====================================================
+            BOTONES
+            ==================================================== */}
 
-      {/* ======================================================
-          PASO 2
-          ====================================================== */}
-
-      {step === "numbers" && (
-        <div className="space-y-6">
-
-          <div className="rounded-xl border border-slate-200 p-5">
-
-            <div className="mb-4">
-              <h3 className="text-base font-bold text-slate-800">
-                Paso 2 · Dorsales y posiciones
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Pega ahora la misma lista,
-                incluyendo dorsal y posición.
-                El sistema asociará automáticamente
-                el dorsal y la posición con cada
-                jugador. Si alguna posición no se
-                reconoce, podrás seleccionarla
-                manualmente.
-              </p>
-            </div>
-
-            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-              <strong>
-                Ejemplo:
-              </strong>
-
-              <pre className="mt-2 whitespace-pre-wrap font-sans">
-{`1. David Raya portero
-13. Joan Garcia portero
-23. Unai Simon portero
-2. Marc Pubill lateral derecho
-3. Alejandro Grimaldo lateral izquierdo
-4. Eric García central
-5. Marcos Llorente mediocentro
-12. Pedro Porro lateral derecho`}
-              </pre>
-            </div>
-
-            <textarea
-              value={
-                shirtNumberText
-              }
-              onChange={(event) =>
-                setShirtNumberText(
-                  event.target.value
-                )
-              }
-              rows={12}
-              placeholder={`1. David Raya portero
-13. Joan Garcia portero
-23. Unai Simon portero
-2. Marc Pubill lateral derecho`}
-              className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-500"
-            />
-
-            <div className="mt-4 flex flex-wrap gap-3">
-
-              <button
-                type="button"
-                onClick={
-                  handleAnalyseShirtNumbers
-                }
-                disabled={
-                  !shirtNumberText.trim()
-                }
-                className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Reconocer dorsales y posiciones
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  handleBackToPlayers
-                }
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Volver al paso 1
-              </button>
-
-            </div>
-
-          </div>
-
-          {/* ==================================================
-              TABLA DORSALES + POSICIONES
-              ================================================== */}
-
-          <div className="rounded-xl border border-slate-200 p-5">
-
-            <div className="mb-4">
-              <h3 className="text-base font-bold text-slate-800">
-                Plantilla · Dorsales y posiciones
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Los dorsales y las posiciones
-                reconocidas se rellenan
-                automáticamente. Puedes corregir
-                cualquier dato manualmente.
-              </p>
-            </div>
-
-            <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
-
-              <table className="w-full text-sm">
-
-                <thead>
-                  <tr className="border-b border-slate-200 text-left">
-
-                    <th className="px-3 py-3 font-semibold text-slate-600">
-                      Jugador
-                    </th>
-
-                    <th className="w-32 px-3 py-3 text-center font-semibold text-slate-600">
-                      Dorsal
-                    </th>
-
-                    <th className="w-64 px-3 py-3 font-semibold text-slate-600">
-                      Posición
-                    </th>
-
-                  </tr>
-                </thead>
-
-                <tbody>
-
-                  {squadRows.map(
-                    (row) => (
-                      <tr
-                        key={
-                          row.playerId
-                        }
-                        className="border-b border-slate-100"
-                      >
-
-                        <td className="px-3 py-3 font-medium text-slate-800">
-                          {
-                            row.playerName
-                          }
-                        </td>
-
-                        <td className="px-3 py-3 text-center">
-
-                          <input
-                            type="number"
-                            min={1}
-                            max={99}
-                            value={
-                              row.shirtNumber
-                            }
-                            onChange={(
-                              event
-                            ) => {
-                              const value =
-                                event.target
-                                  .value;
-
-                              setSquadRows(
-                                (
-                                  current
-                                ) =>
-                                  current.map(
-                                    (
-                                      item
-                                    ) =>
-                                      item.playerId ===
-                                      row.playerId
-                                        ? {
-                                            ...item,
-                                            shirtNumber:
-                                              value,
-                                          }
-                                        : item
-                                  )
-                              );
-                            }}
-                            className="w-20 rounded-lg border border-slate-300 px-2 py-2 text-center"
-                          />
-
-                        </td>
-
-                        <td className="px-3 py-3">
-
-                          <select
-                            value={
-                              row.positionId
-                            }
-                            onChange={(
-                              event
-                            ) =>
-                              handlePositionChange(
-                                row.playerId,
-                                Number(
-                                  event.target
-                                    .value
-                                )
-                              )
-                            }
-                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-                          >
-
-                            <option value={0}>
-                              Selecciona posición
-                            </option>
-
-                            {sortedPositions.map(
-                              (
-                                position
-                              ) => (
-                                  <option
-                                    key={
-                                      position.id
-                                    }
-                                    value={
-                                      position.id
-                                    }
-                                  >
-                                    {
-                                      position.name
-                                    }
-                                  </option>
-                                )
-                              )}
-
-                          </select>
-
-                        </td>
-
-                      </tr>
-                    )
-                  )}
-
-                </tbody>
-
-              </table>
-
-            </div>
-
-            {squadRows.length >
-              0 && (
-              <div className="mt-5 flex flex-wrap gap-3">
-
-                <button
-                  type="button"
-                  onClick={
-                    handleSaveNumbersAndPositions
-                  }
-                  disabled={
-                    saving
-                  }
-                  className="rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {saving
-                    ? "Guardando..."
-                    : "Guardar dorsales y posiciones"}
-                </button>
-
-              </div>
-            )}
-
-          </div>
-
-        </div>
-      )}
-
-      {/* ======================================================
-          CANCELAR
-          ====================================================== */}
-
-      {onCancel && (
-        <div className="mt-6 border-t border-slate-200 pt-5">
+        <div className="flex justify-end gap-3 border-t pt-6">
 
           <button
             type="button"
-            onClick={
-              onCancel
-            }
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={onCancel}
+            disabled={saving}
+            className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancelar
           </button>
 
-        </div>
-      )}
+          {!matchRating &&
+            teamId > 0 &&
+            orderedParticipations.length >
+              0 && (
+              <button
+                type="submit"
+                disabled={
+                  saving ||
+                  historyLoading ||
+                  matchRatingsLoading ||
+                  !currentParticipation
+                }
+                className="rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving
+                  ? "Guardando..."
+                  : currentPlayerIndex >=
+                      orderedParticipations.length -
+                        1
+                    ? "Finalizar"
+                    : "Siguiente"}
+              </button>
+            )}
 
+          {matchRating && (
+            <button
+              type="submit"
+              disabled={
+                saving ||
+                !currentParticipation
+              }
+              className="rounded-lg bg-slate-800 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving
+                ? "Guardando..."
+                : "Guardar cambios"}
+            </button>
+          )}
+
+        </div>
+
+      </form>
+        </>
+      )}
     </div>
   );
 }
