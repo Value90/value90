@@ -157,8 +157,13 @@ export default function MatchForm({
     match?.awayScore?.toString() ?? "0"
   );
 
+  // La fecha y la hora se mantienen separadas en el formulario.
+  // Así evitamos construir accidentalmente valores como:
+  // 2026-10-20T18:45:00T18:45:00
   const [date, setDate] = useState(
-    match?.date ?? ""
+    match?.date?.includes("T")
+      ? match.date.split("T")[0] ?? ""
+      : match?.date ?? ""
   );
 
   const [time, setTime] = useState(
@@ -475,6 +480,8 @@ export default function MatchForm({
       }
     }
 
+    // date contiene únicamente YYYY-MM-DD y time únicamente HH:mm.
+    // Construimos el valor datetime una sola vez al guardar.
     const dateTime = time
       ? `${date}T${time}:00`
       : date;
@@ -682,20 +689,10 @@ export default function MatchForm({
 
               <input
                 type="date"
-                value={
-                  date.includes("T")
-                    ? date.split("T")[0]
-                    : date
-                }
+                value={date}
                 onChange={(event) => {
-                  const newDate =
-                    event.target.value;
-
-                  setDate(
-                    time
-                      ? `${newDate}T${time}:00`
-                      : newDate
-                  );
+                  // Guardamos solo la fecha.
+                  setDate(event.target.value);
                 }}
                 className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
                 required
@@ -714,21 +711,10 @@ export default function MatchForm({
                   const newTime =
                     event.target.value;
 
+                  // La hora se guarda por separado.
+                  // No modificamos `date` aquí para evitar duplicar la hora
+                  // al hacer submit.
                   setTime(newTime);
-
-                  const currentDate =
-                    date.includes("T")
-                      ? date.split("T")[0]
-                      : date;
-
-                  if (
-                    currentDate &&
-                    newTime
-                  ) {
-                    setDate(
-                      `${currentDate}T${newTime}:00`
-                    );
-                  }
                 }}
                 className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-500 sm:px-4 sm:py-3"
               />
