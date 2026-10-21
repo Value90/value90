@@ -199,7 +199,60 @@ function normalizeName(value: string): string {
     .trim();
 }
 
-function fileToDataUrl(file: File): Promise<string> {
+const MAX_ANALYSIS_IMAGE_EDGE = 2560;
+const MAX_UNCOMPRESSED_IMAGE_BYTES = 2 * 1024 * 1024;
+
+async function fileToDataUrl(file: File): Promise<string> {
+  let imageFile = file;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const largestEdge = Math.max(bitmap.width, bitmap.height);
+
+    if (
+      file.size > MAX_UNCOMPRESSED_IMAGE_BYTES ||
+      largestEdge > MAX_ANALYSIS_IMAGE_EDGE
+    ) {
+      const scale = Math.min(1, MAX_ANALYSIS_IMAGE_EDGE / largestEdge);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        bitmap.close();
+        throw new Error("No se pudo preparar una imagen para el análisis.");
+      }
+
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+
+      const compressed = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (blob) =>
+            blob
+              ? resolve(blob)
+              : reject(new Error("No se pudo reducir el tamaño de una imagen.")),
+          "image/jpeg",
+          0.92,
+        );
+      });
+
+      imageFile = new File(
+        [compressed],
+        file.name.replace(/\.[^.]+$/, ".jpg"),
+        { type: "image/jpeg", lastModified: file.lastModified },
+      );
+    } else {
+      bitmap.close();
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("No se pudo")) {
+      throw error;
+    }
+    // Si el navegador no ofrece createImageBitmap, se conserva el archivo original.
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -220,8 +273,26 @@ function fileToDataUrl(file: File): Promise<string> {
       );
     };
 
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(imageFile);
   });
+}
+
+async function readJsonResponse(response: Response) {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    if (response.status === 401 || response.redirected) {
+      throw new Error("La sesión puede haber caducado. Recarga la página e inicia sesión de nuevo.");
+    }
+
+    if (response.status === 413) {
+      throw new Error("Las imágenes superan el tamaño permitido. Prueba con capturas más pequeñas.");
+    }
+
+    throw new Error(`El servidor devolvió una respuesta inesperada (${response.status}). Inténtalo de nuevo.`);
+  }
+
+  return response.json();
 }
 
 /* ============================================================
@@ -902,7 +973,7 @@ export default function MatchDataPage() {
         }
       );
 
-      const data = await response.json();
+      const data = await readJsonResponse(response);
 
       if (!response.ok) {
         throw new Error(

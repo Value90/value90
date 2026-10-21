@@ -43,6 +43,13 @@ export async function middleware(request: NextRequest) {
   const isPublicFile = pathname.startsWith("/_next/") || pathname === "/favicon.ico";
 
   if (!isPublicFile && !user && !isLoginPage) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "La sesión ha expirado o el usuario no está autenticado." },
+        { status: 401 },
+      );
+    }
+
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
