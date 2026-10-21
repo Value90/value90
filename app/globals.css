@@ -127,3 +127,18 @@
     @apply font-sans;
     }
 }
+
+/* Controles fáciles de pulsar en tabletas y móviles con pantalla táctil. */
+@media (pointer: coarse) {
+  button,
+  input:not([type="checkbox"]):not([type="radio"]),
+  select {
+    min-height: 44px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: 20px;
+    min-height: 20px;
+  }
+}

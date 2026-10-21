@@ -7,7 +7,7 @@ import {
 } from "react";
 
 import {
-  getMatchRatings,
+  getMatchRatingsByMatchId,
   getMatchRatingByParticipationId,
   addMatchRating,
   updateMatchRating,
@@ -36,7 +36,7 @@ import {
 } from "@/services/stage.service";
 
 import {
-  getParticipations,
+  getParticipationsByMatchId,
   type Participation,
 } from "@/services/participation.service";
 
@@ -353,15 +353,11 @@ export default function MatchRatingForm({
         const [
           matchesData,
           stagesData,
-          participationsData,
           playersData,
-          matchRatingsData,
         ] = await Promise.all([
           getMatches(),
           getStages(),
-          getParticipations(),
           getPlayers(),
-          getMatchRatings(),
         ]);
 
         if (!mounted) {
@@ -370,13 +366,7 @@ export default function MatchRatingForm({
 
         setMatches(matchesData);
         setStages(stagesData);
-        setParticipations(
-          participationsData
-        );
         setPlayers(playersData);
-        setMatchRatings(
-          matchRatingsData
-        );
       } catch (error) {
         console.error(
           "Error cargando datos del formulario:",
@@ -389,14 +379,10 @@ export default function MatchRatingForm({
 
         setMatches([]);
         setStages([]);
-        setParticipations([]);
         setPlayers([]);
-        setMatchRatings([]);
       } finally {
         if (mounted) {
           setStagesLoading(false);
-          setParticipationsLoading(false);
-          setMatchRatingsLoading(false);
         }
       }
     }
@@ -407,6 +393,51 @@ export default function MatchRatingForm({
       mounted = false;
     };
   }, []);
+
+  // Solo se descargan participaciones y valoraciones del partido elegido.
+  useEffect(() => {
+    let mounted = true;
+
+    if (!matchId) {
+      setParticipations([]);
+      setMatchRatings([]);
+      setParticipationsLoading(false);
+      setMatchRatingsLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setParticipationsLoading(true);
+    setMatchRatingsLoading(true);
+    Promise.all([
+      getParticipationsByMatchId(matchId),
+      getMatchRatingsByMatchId(matchId),
+    ])
+      .then(([participationData, ratingData]) => {
+        if (mounted) {
+          setParticipations(participationData);
+          setMatchRatings(ratingData);
+        }
+      })
+      .catch((loadError) => {
+        console.error("Error cargando los datos del partido:", loadError);
+        if (mounted) {
+          setParticipations([]);
+          setMatchRatings([]);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setParticipationsLoading(false);
+          setMatchRatingsLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [matchId]);
 
   /*
    * ============================================================

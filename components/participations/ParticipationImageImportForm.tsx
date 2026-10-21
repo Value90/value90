@@ -49,15 +49,13 @@ import {
 } from "@/services/hist-player-team.service";
 
 import {
-  getParticipations,
-  addParticipation,
-  updateParticipation,
-  type Participation,
+  addParticipations,
 } from "@/services/participation.service";
 
 import {
   recordRecognitionCorrectionsBatch,
 } from "@/services/ai.feedback.service";
+import RecognitionAccuracySummary from "@/components/shared/RecognitionAccuracySummary";
 
 /* ============================================================
    TIPOS
@@ -144,8 +142,6 @@ export default function ParticipationImageImportForm({
   const [positions, setPositions] = useState<Position[]>([]);
   const [histPlayerTeams, setHistPlayerTeams] =
     useState<HistPlayerTeam[]>([]);
-  const [existingParticipations, setExistingParticipations] =
-    useState<Participation[]>([]);
 
   /* ==========================================================
      SELECCIÓN
@@ -172,6 +168,9 @@ export default function ParticipationImageImportForm({
 
   const [originalDetectedPlayers, setOriginalDetectedPlayers] =
     useState<DetectedPlayer[]>([]);
+
+  const [recognitionResultId, setRecognitionResultId] =
+    useState<number | null>(null);
 
   /* ==========================================================
      ESTADO
@@ -204,7 +203,6 @@ export default function ParticipationImageImportForm({
           teamsData,
           positionsData,
           historyData,
-          participationsData,
         ] = await Promise.all([
           getSeasons(),
           getCompetitions(),
@@ -214,7 +212,6 @@ export default function ParticipationImageImportForm({
           getTeams(),
           getPositions(),
           getHistPlayerTeams(),
-          getParticipations(),
         ]);
 
         if (!mounted) return;
@@ -227,7 +224,6 @@ export default function ParticipationImageImportForm({
         setTeams(teamsData);
         setPositions(positionsData);
         setHistPlayerTeams(historyData);
-        setExistingParticipations(participationsData);
       } catch (err) {
         console.error("Error cargando datos:", err);
 
@@ -469,6 +465,8 @@ export default function ParticipationImageImportForm({
     setImagePreview("");
     setImageDataUrl("");
     setDetectedPlayers([]);
+    setOriginalDetectedPlayers([]);
+    setRecognitionResultId(null);
     setError("");
     setMessage("");
   };
@@ -519,6 +517,8 @@ export default function ParticipationImageImportForm({
     setError("");
     setMessage("");
     setDetectedPlayers([]);
+    setOriginalDetectedPlayers([]);
+    setRecognitionResultId(null);
 
     if (!file) {
       setImagePreview("");
@@ -640,6 +640,12 @@ export default function ParticipationImageImportForm({
           "La respuesta del análisis no tiene un formato válido."
         );
       }
+
+      setRecognitionResultId(
+        Number.isInteger(data.recognitionResultId)
+          ? data.recognitionResultId
+          : null
+      );
 
       const detectedByPlayerId = new Map<
         number,
@@ -1019,15 +1025,9 @@ export default function ParticipationImageImportForm({
     setSaving(true);
 
     try {
-      let savedCount = 0;
-
-      for (const item of playersWithMinutes) {
+      const participationRows = playersWithMinutes.map((item) => {
         const player = item.player;
-
-        const participationData: Omit<
-          Participation,
-          "id"
-        > = {
+        return {
           matchId: selectedMatch.id,
           playerId: player.playerId,
           teamId: player.teamId,
@@ -1041,30 +1041,15 @@ export default function ParticipationImageImportForm({
           substituteOutMinute:
             player.substituteOutMinute,
         };
+      });
 
-        const existing =
-          existingParticipations.find(
-            (participation) =>
-              participation.matchId === selectedMatch.id &&
-              participation.teamId === player.teamId &&
-              participation.playerId === player.playerId
-          );
-
-        if (existing) {
-          await updateParticipation(
-            existing.id,
-            participationData
-          );
-        } else {
-          await addParticipation(participationData);
-        }
-
-        savedCount += 1;
-      }
+      await addParticipations(participationRows);
+      const savedCount = participationRows.length;
 
       const corrections = [] as Parameters<
         typeof recordRecognitionCorrectionsBatch
       >[0];
+      let feedbackSaved = false;
 
       for (const current of detectedPlayers) {
         const original = originalDetectedPlayers.find(
@@ -1084,39 +1069,41 @@ export default function ParticipationImageImportForm({
           const detectedValue = original[field.name as keyof DetectedPlayer];
           const correctedValue = current[field.name as keyof DetectedPlayer];
 
-          if (JSON.stringify(detectedValue) !== JSON.stringify(correctedValue)) {
-            corrections.push({
-              matchId: selectedMatch.id,
-              playerId: current.playerId,
-              fieldName: field.name,
-              detectedValue,
-              correctedValue,
-              correctionType: field.type,
-              confidence: current.confidence,
-              status: "pending",
-            });
-          }
+          corrections.push({
+            resultId: recognitionResultId,
+            matchId: selectedMatch.id,
+            playerId: current.playerId,
+            fieldName: field.name,
+            detectedValue,
+            correctedValue,
+            correctionType: field.type,
+            confidence: current.confidence,
+            // Guardar la revisión equivale a confirmar el resultado corregido.
+            status: "confirmed",
+          });
         }
       }
 
-      if (corrections.length > 0) {
+      if (recognitionResultId !== null && corrections.length > 0) {
         try {
           await recordRecognitionCorrectionsBatch(corrections);
+          feedbackSaved = true;
         } catch (feedbackError) {
           console.error("Error registrando correcciones de IA:", feedbackError);
         }
       }
 
-      const refreshed = await getParticipations();
-
-      setExistingParticipations(refreshed);
       setDetectedPlayers([]);
       setOriginalDetectedPlayers([]);
+      setRecognitionResultId(null);
       setImagePreview("");
       setImageDataUrl("");
 
       setMessage(
-        `Se han guardado correctamente ${savedCount} participaciones.`
+        `Se han guardado correctamente ${savedCount} participaciones.` +
+          (feedbackSaved
+            ? ""
+            : " No se pudo vincular la revisión al aprendizaje de IA.")
       );
 
       await onSaved();
@@ -1221,9 +1208,16 @@ export default function ParticipationImageImportForm({
           </div>
         </div>
 
+        <p className="border-b border-slate-100 px-4 py-2 text-xs leading-5 text-slate-600 sm:px-5">
+          Revisa todos los jugadores antes de guardar. El porcentaje de IA es una estimación, no una precisión verificada.
+        </p>
+
         {/* CONTENEDOR HORIZONTAL */}
 
         <div className="w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain [scrollbar-width:thin]">
+          <p className="px-3 py-2 text-xs text-slate-500 sm:hidden">
+            Desliza la tabla horizontalmente para revisar todas las columnas.
+          </p>
           <div
             className="w-max min-w-full"
           >
@@ -1898,6 +1892,8 @@ export default function ParticipationImageImportForm({
           con minutos jugados.
         </div>
       )}
+
+      <RecognitionAccuracySummary />
 
       {/* BOTONES */}
 

@@ -22,6 +22,12 @@ interface PlayerFormProps {
   onSaved: () => void;
 }
 
+function suggestShortName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return "";
+  return `${parts[0][0].toLocaleUpperCase("es")}. ${parts[parts.length - 1]}`;
+}
+
 export default function PlayerForm({
   player,
   onCancel,
@@ -55,6 +61,9 @@ export default function PlayerForm({
     useState(
       player?.shortName ?? ""
     );
+
+  const [shortNameManuallyEdited, setShortNameManuallyEdited] =
+    useState(Boolean(player?.shortName));
 
   const [countryId, setCountryId] =
     useState(
@@ -391,9 +400,13 @@ export default function PlayerForm({
             type="text"
             value={name}
             onChange={(event) =>
-              setName(
-                event.target.value
-              )
+              {
+                const value = event.target.value;
+                setName(value);
+                if (!player && !shortNameManuallyEdited) {
+                  setShortName(suggestShortName(value));
+                }
+              }
             }
             placeholder="Ej. Lamine Yamal"
             className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
@@ -419,13 +432,20 @@ export default function PlayerForm({
             type="text"
             value={shortName}
             onChange={(event) =>
-              setShortName(
-                event.target.value
-              )
+              {
+                setShortNameManuallyEdited(true);
+                setShortName(event.target.value);
+              }
             }
             placeholder="Ej. L. Yamal"
             className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
           />
+
+          {!player && !shortNameManuallyEdited && (
+            <p className="mt-1 text-xs text-slate-500">
+              Sugerido a partir del nombre; puedes modificarlo.
+            </p>
+          )}
 
         </div>
 

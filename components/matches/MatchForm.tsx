@@ -47,6 +47,7 @@ export default function MatchForm({
   const [teamCompetitions, setTeamCompetitions] = useState<TeamCompetition[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [teamsLoading, setTeamsLoading] = useState(true);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     const loadData = async () => {
@@ -66,6 +67,21 @@ export default function MatchForm({
         setCompetitions(competitionsData);
         setSeasons(seasonsData);
         setStages(stagesData);
+
+        if (!match) {
+          const defaultSeason = seasonsData
+            .filter((season) => season.active)
+            .sort((a, b) =>
+              b.name.localeCompare(a.name, "es", {
+                numeric: true,
+                sensitivity: "base",
+              })
+            )[0];
+
+          if (defaultSeason) {
+            setSeasonId(String(defaultSeason.id));
+          }
+        }
       } catch (error) {
         console.error(
           "Error cargando datos del formulario de partidos:",
@@ -369,37 +385,38 @@ export default function MatchForm({
     event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
+    setFormError("");
 
     if (!competitionId) {
-      alert(
+      setFormError(
         "Selecciona una competición."
       );
       return;
     }
 
     if (!seasonId) {
-      alert(
+      setFormError(
         "Selecciona una temporada."
       );
       return;
     }
 
     if (!stageId) {
-      alert(
+      setFormError(
         "Selecciona una fase o jornada."
       );
       return;
     }
 
     if (!homeTeamId) {
-      alert(
+      setFormError(
         "Selecciona el equipo local."
       );
       return;
     }
 
     if (!awayTeamId) {
-      alert(
+      setFormError(
         "Selecciona el equipo visitante."
       );
       return;
@@ -408,14 +425,14 @@ export default function MatchForm({
     if (
       homeTeamId === awayTeamId
     ) {
-      alert(
+      setFormError(
         "El equipo local y el visitante no pueden ser el mismo."
       );
       return;
     }
 
     if (!date) {
-      alert(
+      setFormError(
         "Selecciona la fecha del partido."
       );
       return;
@@ -425,7 +442,7 @@ export default function MatchForm({
       selectedHomeTeam?.type === "Club" &&
       !stadium.trim()
     ) {
-      alert(
+      setFormError(
         "El equipo local es un club y necesita tener un estadio."
       );
       return;
@@ -435,7 +452,7 @@ export default function MatchForm({
       matchDuration !== 90 &&
       matchDuration !== 120
     ) {
-      alert(
+      setFormError(
         "La duración del partido debe ser de 90 o 120 minutos."
       );
       return;
@@ -446,7 +463,7 @@ export default function MatchForm({
         homePenaltyScore === "" ||
         awayPenaltyScore === ""
       ) {
-        alert(
+        setFormError(
           "Introduce el resultado de la tanda de penaltis para ambos equipos."
         );
         return;
@@ -464,7 +481,7 @@ export default function MatchForm({
         homePenalties < 0 ||
         awayPenalties < 0
       ) {
-        alert(
+        setFormError(
           "El resultado de los penaltis debe ser un número entero igual o superior a 0."
         );
         return;
@@ -473,7 +490,7 @@ export default function MatchForm({
       if (
         homePenalties === awayPenalties
       ) {
-        alert(
+        setFormError(
           "La tanda de penaltis no puede terminar empatada."
         );
         return;
@@ -539,6 +556,11 @@ export default function MatchForm({
       onSubmit={handleSubmit}
       className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 md:p-6 lg:p-8"
     >
+      {formError && (
+        <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:p-4" role="alert">
+          {formError}
+        </div>
+      )}
       <div className="mb-6 sm:mb-8">
         <h2 className="text-xl font-bold sm:text-2xl">
           {match

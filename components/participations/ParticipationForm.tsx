@@ -7,9 +7,9 @@ import {
 } from "react";
 
 import {
-  addParticipation,
+  addParticipations,
   updateParticipation,
-  getParticipations,
+  getParticipationsByMatchId,
   type Participation,
 } from "@/services/participation.service";
 
@@ -99,6 +99,10 @@ export default function ParticipationForm({
 
   const [existingParticipations, setExistingParticipations] =
     useState<Participation[]>([]);
+  const [loadedParticipationMatchId, setLoadedParticipationMatchId] =
+    useState(0);
+  const [participationsForMatchLoading, setParticipationsForMatchLoading] =
+    useState(false);
 
   /*
    * ============================================================
@@ -170,6 +174,9 @@ export default function ParticipationForm({
   const [saving, setSaving] =
     useState(false);
 
+  const [formError, setFormError] =
+    useState("");
+
   /*
    * ============================================================
    * CARGAR DATOS
@@ -190,7 +197,6 @@ export default function ParticipationForm({
           matchesData,
           playersData,
           historyData,
-          participationsData,
         ] = await Promise.all([
           getCompetitions(),
           getSeasons(),
@@ -198,7 +204,6 @@ export default function ParticipationForm({
           getMatches(),
           getPlayers(),
           getHistPlayerTeams(),
-          getParticipations(),
         ]);
 
         if (!mounted) {
@@ -212,6 +217,21 @@ export default function ParticipationForm({
         setSeasons(
           seasonsData
         );
+
+        if (!participation) {
+          const defaultSeason = seasonsData
+            .filter((season) => season.active)
+            .sort((a, b) =>
+              b.name.localeCompare(a.name, "es", {
+                numeric: true,
+                sensitivity: "base",
+              })
+            )[0];
+
+          if (defaultSeason) {
+            setSeasonId(defaultSeason.id);
+          }
+        }
 
         setStages(
           stagesData
@@ -229,9 +249,6 @@ export default function ParticipationForm({
           historyData
         );
 
-        setExistingParticipations(
-          participationsData
-        );
       } catch (error) {
         console.error(
           "Error cargando datos de participación:",
@@ -261,6 +278,43 @@ export default function ParticipationForm({
       mounted = false;
     };
   }, []);
+
+  // Trae únicamente las participaciones del partido seleccionado.
+  useEffect(() => {
+    let mounted = true;
+
+    if (!matchId) {
+      setExistingParticipations([]);
+      setLoadedParticipationMatchId(0);
+      setParticipationsForMatchLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setLoadedParticipationMatchId(0);
+    setParticipationsForMatchLoading(true);
+    getParticipationsByMatchId(matchId)
+      .then((data) => {
+        if (mounted) {
+          setExistingParticipations(data);
+          setLoadedParticipationMatchId(matchId);
+          setParticipationsForMatchLoading(false);
+        }
+      })
+      .catch((loadError) => {
+        console.error("Error cargando participaciones del partido:", loadError);
+        if (mounted) {
+          setDataError("No se pudieron cargar las participaciones existentes de este partido.");
+          setExistingParticipations([]);
+          setParticipationsForMatchLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [matchId]);
 
   /*
    * ============================================================
@@ -623,6 +677,10 @@ export default function ParticipationForm({
       return;
     }
 
+    if (loadedParticipationMatchId !== matchId) {
+      return;
+    }
+
     const rows: PlayerParticipationRow[] =
       availablePlayers.map(
         ({
@@ -726,6 +784,7 @@ export default function ParticipationForm({
     matchId,
     availablePlayers,
     existingParticipations,
+    loadedParticipationMatchId,
     participation,
   ]);
 
@@ -1181,37 +1240,38 @@ export default function ParticipationForm({
     event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
+    setFormError("");
 
     if (!competitionId) {
-      alert(
+      setFormError(
         "Selecciona una competición."
       );
       return;
     }
 
     if (!seasonId) {
-      alert(
+      setFormError(
         "Selecciona una temporada."
       );
       return;
     }
 
     if (!stageId) {
-      alert(
+      setFormError(
         "Selecciona una jornada o fase."
       );
       return;
     }
 
     if (!matchId) {
-      alert(
+      setFormError(
         "Selecciona un partido."
       );
       return;
     }
 
     if (!teamId) {
-      alert(
+      setFormError(
         "Selecciona un equipo."
       );
       return;
@@ -1220,7 +1280,7 @@ export default function ParticipationForm({
     if (
       playerRows.length === 0
     ) {
-      alert(
+      setFormError(
         "No hay jugadores para guardar."
       );
       return;
@@ -1233,7 +1293,7 @@ export default function ParticipationForm({
       );
 
     if (!currentMatch) {
-      alert(
+      setFormError(
         "No se ha encontrado el partido seleccionado."
       );
       return;
@@ -1243,7 +1303,7 @@ export default function ParticipationForm({
       currentMatch.seasonId !==
       seasonId
     ) {
-      alert(
+      setFormError(
         "El partido no pertenece a la temporada seleccionada."
       );
       return;
@@ -1259,7 +1319,7 @@ export default function ParticipationForm({
         teamId
       )
     ) {
-      alert(
+      setFormError(
         "El equipo seleccionado no pertenece a este partido."
       );
       return;
@@ -1288,7 +1348,7 @@ export default function ParticipationForm({
         );
 
       if (!history) {
-        alert(
+        setFormError(
           `El jugador ${
             player?.name ??
             row.playerId
@@ -1304,7 +1364,7 @@ export default function ParticipationForm({
         ) ||
         row.positionId <= 0
       ) {
-        alert(
+        setFormError(
           `La posición de ${
             player?.name ??
             row.playerId
@@ -1317,7 +1377,7 @@ export default function ParticipationForm({
         row.shirtNumber < 1 ||
         row.shirtNumber > 99
       ) {
-        alert(
+        setFormError(
           `El dorsal de ${
             player?.name ??
             row.playerId
@@ -1342,7 +1402,7 @@ export default function ParticipationForm({
           minuteIn < 0 ||
           minuteIn > 120
         ) {
-          alert(
+          setFormError(
             `El minuto de entrada de ${
               player?.name ??
               row.playerId
@@ -1368,7 +1428,7 @@ export default function ParticipationForm({
           minuteOut < 0 ||
           minuteOut > 120
         ) {
-          alert(
+          setFormError(
             `El minuto de salida de ${
               player?.name ??
               row.playerId
@@ -1390,7 +1450,7 @@ export default function ParticipationForm({
             row.substituteInMinute
           )
       ) {
-        alert(
+        setFormError(
           `El minuto de salida de ${
             player?.name ??
             row.playerId
@@ -1406,7 +1466,7 @@ export default function ParticipationForm({
       ).length;
 
     if (captainCount > 1) {
-      alert(
+      setFormError(
         "Solo puede haber un capitán por equipo en el partido."
       );
       return;
@@ -1420,7 +1480,7 @@ export default function ParticipationForm({
           playerRows[0];
 
         if (!row) {
-          alert(
+          setFormError(
             "No hay datos para guardar."
           );
           return;
@@ -1480,7 +1540,7 @@ export default function ParticipationForm({
         return;
       }
 
-      const participationPromises =
+      const participationRows =
         playerRows
           .map((row) => {
             const minutesPlayed =
@@ -1543,45 +1603,21 @@ export default function ParticipationForm({
                       : null,
                 };
 
-              const existingParticipation =
-                existingParticipations.find(
-                  (item) =>
-                    item.matchId ===
-                      matchId &&
-                    item.teamId ===
-                      teamId &&
-                    item.playerId ===
-                      row.playerId
-                );
-
-              if (
-                existingParticipation
-              ) {
-                return updateParticipation(
-                  existingParticipation.id,
-                  participationData
-                );
-              }
-
-              return addParticipation(
-                participationData
-              );
+              return participationData;
             }
           );
 
       if (
-        participationPromises.length ===
+        participationRows.length ===
         0
       ) {
-        alert(
+        setFormError(
           "No hay jugadores con minutos jugados para guardar."
         );
         return;
       }
 
-      await Promise.all(
-        participationPromises
-      );
+      await addParticipations(participationRows);
 
       await onSaved();
     } catch (error) {
@@ -1590,7 +1626,7 @@ export default function ParticipationForm({
         error
       );
 
-      alert(
+      setFormError(
         "No se pudieron guardar las participaciones."
       );
     } finally {
@@ -1609,7 +1645,8 @@ export default function ParticipationForm({
     seasonsLoading ||
     stagesLoading ||
     teamsLoading ||
-    historyLoading
+    historyLoading ||
+    participationsForMatchLoading
   ) {
     return (
       <div className="w-full min-w-0 rounded-xl border bg-white p-3 shadow sm:p-4 md:p-6">
@@ -1692,6 +1729,12 @@ export default function ParticipationForm({
         onSubmit={handleSubmit}
         className="space-y-4 sm:space-y-6"
       >
+
+        {formError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 sm:p-4" role="alert">
+            {formError}
+          </div>
+        )}
 
         <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-5">
 

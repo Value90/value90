@@ -145,6 +145,9 @@ export default function TeamForm({
 
   const [error, setError] = useState("");
 
+  const [pendingCreatedTeam, setPendingCreatedTeam] =
+    useState<Team | null>(null);
+
   const [saving, setSaving] =
     useState(false);
 
@@ -659,8 +662,9 @@ export default function TeamForm({
        */
 
       let savedTeamId: number;
+      const teamToUpdate = team ?? pendingCreatedTeam;
 
-      if (!team) {
+      if (!teamToUpdate) {
         const createdTeam = await addTeam({
           name: name.trim(),
 
@@ -685,9 +689,10 @@ export default function TeamForm({
         });
 
         savedTeamId = createdTeam.id;
+        setPendingCreatedTeam(createdTeam);
       } else {
         await updateTeam(
-          team.id,
+          teamToUpdate.id,
           {
             name: name.trim(),
 
@@ -710,11 +715,13 @@ export default function TeamForm({
 
             active,
 
-            displayOrder,
+            displayOrder: team
+              ? displayOrder
+              : teamToUpdate.displayOrder,
           }
         );
 
-        savedTeamId = team.id;
+        savedTeamId = teamToUpdate.id;
       }
 
       /*
@@ -740,16 +747,8 @@ export default function TeamForm({
             )
         );
 
-      await Promise.all(
-        relationsToDelete.map((relation) =>
-          deleteTeamCompetition(
-            savedTeamId,
-            relation.competitionId,
-            seasonId
-          )
-        )
-      );
-
+      // Primero garantizamos las relaciones seleccionadas; si algo falla,
+      // no se eliminan las relaciones anteriores del equipo.
       if (selectedCompetitionIds.length > 0) {
         await saveTeamCompetitions(
           selectedCompetitionIds.map(
@@ -763,6 +762,18 @@ export default function TeamForm({
           )
         );
       }
+
+      await Promise.all(
+        relationsToDelete.map((relation) =>
+          deleteTeamCompetition(
+            savedTeamId,
+            relation.competitionId,
+            seasonId
+          )
+        )
+      );
+
+      setPendingCreatedTeam(null);
 
       /*
        * ========================================================

@@ -19,7 +19,10 @@ import { getPlayers } from "@/services/player.service";
 import { getCompetitions } from "@/services/competition.service";
 import { getSeasons } from "@/services/season.service";
 import { getStages } from "@/services/stage.service";
-import { getParticipations } from "@/services/participation.service";
+import {
+  getParticipationsByMatchId,
+  type Participation,
+} from "@/services/participation.service";
 
 import { useTeams } from "@/hooks/useTeams";
 
@@ -58,7 +61,7 @@ type StatField =
 
 interface OrderedParticipation {
   participation: Awaited<
-    ReturnType<typeof getParticipations>
+    ReturnType<typeof getParticipationsByMatchId>
   >[number];
 
   player:
@@ -335,11 +338,7 @@ export default function PlayerMatchStatForm({
     >([]);
 
   const [participations, setParticipations] =
-    useState<
-      Awaited<
-        ReturnType<typeof getParticipations>
-      >
-    >([]);
+    useState<Participation[]>([]);
 
   const { teams } = useTeams();
 
@@ -420,6 +419,9 @@ export default function PlayerMatchStatForm({
   const [loading, setLoading] =
     useState(true);
 
+  const [participationsLoading, setParticipationsLoading] =
+    useState(false);
+
   const [
     playersLoading,
     setPlayersLoading,
@@ -451,14 +453,12 @@ export default function PlayerMatchStatForm({
           competitionsData,
           seasonsData,
           stagesData,
-          participationsData,
         ] = await Promise.all([
           getMatches(),
           getPlayers(),
           getCompetitions(),
           getSeasons(),
           getStages(),
-          getParticipations(),
         ]);
 
         if (!mounted) {
@@ -481,9 +481,6 @@ export default function PlayerMatchStatForm({
           stagesData
         );
 
-        setParticipations(
-          participationsData
-        );
       } catch (loadError) {
         console.error(
           "Error cargando datos de estadísticas:",
@@ -508,6 +505,39 @@ export default function PlayerMatchStatForm({
       mounted = false;
     };
   }, []);
+
+  // Participations are needed only for the selected match.
+  useEffect(() => {
+    let mounted = true;
+
+    if (!matchId) {
+      setParticipations([]);
+      setParticipationsLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setParticipationsLoading(true);
+    getParticipationsByMatchId(matchId)
+      .then((data) => {
+        if (mounted) setParticipations(data);
+      })
+      .catch((loadError) => {
+        console.error("Error cargando participaciones del partido:", loadError);
+        if (mounted) {
+          setParticipations([]);
+          setError("No se pudieron cargar las participaciones de este partido.");
+        }
+      })
+      .finally(() => {
+        if (mounted) setParticipationsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [matchId]);
 
   /*
    * ============================================================
@@ -1917,7 +1947,7 @@ export default function PlayerMatchStatForm({
    * ============================================================
    */
 
-  if (loading) {
+  if (loading || participationsLoading) {
     return (
       <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 md:p-6">
         <h2 className="text-lg font-bold text-slate-800 sm:text-xl">

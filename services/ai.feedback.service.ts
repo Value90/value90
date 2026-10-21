@@ -58,6 +58,14 @@ interface ConfirmedCorrection {
   created_at: string;
 }
 
+export interface RecognitionAccuracyMetric {
+  recognitionType: RecognitionType;
+  fieldName: string;
+  reviewed: number;
+  correct: number;
+  accuracy: number;
+}
+
 function isMissingResultRelation(error: {
   code?: string;
   message?: string;
@@ -142,39 +150,12 @@ export async function recordRecognitionCorrectionsBatch(
     return [];
   }
 
-  // COMPROBACIÓN PROVISIONAL DE SESIÓN
-  const {
-    data: { user },
-    error: sessionError,
-  } = await client.auth.getUser();
-
-  console.log(
-    "Usuario de Supabase:",
-    user?.id ?? "SIN SESIÓN",
-  );
-
-  console.log(
-    "Error de sesión:",
-    sessionError,
-  );
-
-  if (!user) {
-    console.warn(
-      "No se ha detectado un usuario autenticado al guardar las correcciones.",
-    );
-  }
-
   const { data, error } = await client
     .from("ai_recognition_corrections")
     .insert(inputs.map(correctionRow))
     .select("*");
 
   if (error) {
-    console.error(
-      "Error original de Supabase al guardar correcciones:",
-      error,
-    );
-
     throw new Error(
       `Error registrando correcciones de reconocimiento: ${error.message}`,
     );
@@ -334,4 +315,106 @@ export async function getLearningContext(
   });
 
   return lines.join("\n").slice(0, maxCharacters);
+}
+
+/**
+ * Calcula el acierto observado en las últimas revisiones confirmadas.
+ * Una revisión se considera correcta cuando el valor detectado coincide
+ * con el valor final guardado por la persona.
+ */
+export async function getRecognitionAccuracySummary(
+  client: SupabaseClient = supabase,
+): Promise<RecognitionAccuracyMetric[]> {
+  const sampleLimit = 500;
+  const { data, error } = await client
+    .from("ai_recognition_corrections")
+    .select(
+      "field_name,detected_value,corrected_value,result:ai_recognition_results!inner(recognition_type)",
+    )
+    .eq("status", "confirmed")
+    .order("created_at", { ascending: false })
+    .limit(sampleLimit * 2);
+
+  let rows: Array<{
+    field_name: string;
+    detected_value: unknown;
+    corrected_value: unknown;
+    recognition_type: RecognitionType;
+  }>;
+
+  if (!error) {
+    rows = (data ?? []).map((row: any) => ({
+      field_name: row.field_name,
+      detected_value: row.detected_value,
+      corrected_value: row.corrected_value,
+      recognition_type: Array.isArray(row.result)
+        ? row.result[0]?.recognition_type
+        : row.result?.recognition_type,
+    })).filter((row: any) =>
+      row.recognition_type === "participations" ||
+      row.recognition_type === "ratings"
+    );
+  } else if (isMissingResultRelation(error)) {
+    rows = [];
+
+    for (const recognitionType of ["participations", "ratings"] as const) {
+      const { data: results, error: resultsError } = await client
+        .from("ai_recognition_results")
+        .select("id")
+        .eq("recognition_type", recognitionType)
+        .order("id", { ascending: false })
+        .limit(sampleLimit);
+
+      if (resultsError) {
+        throw new Error(`Error obteniendo resultados de IA: ${resultsError.message}`);
+      }
+
+      const resultIds = (results ?? []).map((result) => result.id);
+      if (resultIds.length === 0) continue;
+
+      const { data: corrections, error: correctionsError } = await client
+        .from("ai_recognition_corrections")
+        .select("field_name,detected_value,corrected_value,result_id")
+        .eq("status", "confirmed")
+        .in("result_id", resultIds)
+        .order("created_at", { ascending: false })
+        .limit(sampleLimit);
+
+      if (correctionsError) {
+        throw new Error(`Error obteniendo revisiones de IA: ${correctionsError.message}`);
+      }
+
+      rows.push(...(corrections ?? []).map((row) => ({
+        field_name: row.field_name,
+        detected_value: row.detected_value,
+        corrected_value: row.corrected_value,
+        recognition_type: recognitionType,
+      })));
+    }
+  } else {
+    throw new Error(`Error calculando el acierto observado: ${error.message}`);
+  }
+
+  const groups = new Map<string, RecognitionAccuracyMetric>();
+  for (const row of rows) {
+    const key = `${row.recognition_type}:${row.field_name}`;
+    const metric = groups.get(key) ?? {
+      recognitionType: row.recognition_type,
+      fieldName: row.field_name,
+      reviewed: 0,
+      correct: 0,
+      accuracy: 0,
+    };
+    metric.reviewed += 1;
+    if (JSON.stringify(row.detected_value) === JSON.stringify(row.corrected_value)) {
+      metric.correct += 1;
+    }
+    metric.accuracy = Math.round((metric.correct / metric.reviewed) * 100);
+    groups.set(key, metric);
+  }
+
+  return [...groups.values()].sort((a, b) =>
+    a.recognitionType.localeCompare(b.recognitionType) ||
+    a.fieldName.localeCompare(b.fieldName)
+  );
 }

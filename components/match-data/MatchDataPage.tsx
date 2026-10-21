@@ -29,6 +29,7 @@ import {
 } from "@/services/team.service";
 
 import ParticipationImageImportForm from "@/components/participations/ParticipationImageImportForm";
+import RecognitionAccuracySummary from "@/components/shared/RecognitionAccuracySummary";
 
 import {
   getPlayers,
@@ -46,6 +47,10 @@ import {
   getMatchRatingsByMatchId,
   type MatchRating,
 } from "@/services/match-rating.service";
+
+import {
+  recordRecognitionCorrectionsBatch,
+} from "@/services/ai.feedback.service";
 
 /* ============================================================
    TIPOS
@@ -255,6 +260,12 @@ export default function MatchDataPage() {
 
   const [analysisPlayers, setAnalysisPlayers] =
     useState<AnalysisPlayer[]>([]);
+
+  const [originalAnalysisPlayers, setOriginalAnalysisPlayers] =
+    useState<AnalysisPlayer[]>([]);
+
+  const [recognitionResultId, setRecognitionResultId] =
+    useState<number | null>(null);
 
   const [analysisSources, setAnalysisSources] =
     useState<RatingSource[]>([]);
@@ -787,6 +798,8 @@ export default function MatchDataPage() {
     setError(null);
     setMessage(null);
     setAnalysisPlayers([]);
+    setOriginalAnalysisPlayers([]);
+    setRecognitionResultId(null);
     setAnalysisSources([]);
     setAnalyzing(true);
 
@@ -904,8 +917,15 @@ export default function MatchDataPage() {
         );
       }
 
-      setAnalysisPlayers(
-        data.players as AnalysisPlayer[]
+      const analyzedPlayers = data.players as AnalysisPlayer[];
+      setAnalysisPlayers(analyzedPlayers);
+      setOriginalAnalysisPlayers(
+        analyzedPlayers.map((player) => ({ ...player }))
+      );
+      setRecognitionResultId(
+        Number.isInteger(data.recognitionResultId)
+          ? data.recognitionResultId
+          : null
       );
 
       setAnalysisSources(
@@ -948,6 +968,8 @@ export default function MatchDataPage() {
     revokeImagePreviewUrls(images);
     setImages({});
     setAnalysisPlayers([]);
+    setOriginalAnalysisPlayers([]);
+    setRecognitionResultId(null);
     setAnalysisSources([]);
   }
 
@@ -974,6 +996,8 @@ export default function MatchDataPage() {
     setMatches([]);
     setImages({});
     setAnalysisPlayers([]);
+    setOriginalAnalysisPlayers([]);
+    setRecognitionResultId(null);
     setAnalysisSources([]);
     setParticipations([]);
     setExistingRatings([]);
@@ -1014,69 +1038,72 @@ export default function MatchDataPage() {
     setError(null);
     setMessage(null);
 
-    let saved = 0;
-    const failed: string[] = [];
-
     try {
-      // Cada jugador se guarda de forma independiente.
-      // Si falla uno, continuamos con los demás.
-      for (const player of teamPlayers) {
-        try {
-          const resolvedPlayer =
-            resolvePlayer(player);
+      // Guardamos en paralelo: un error individual no bloquea al resto.
+      const outcomes = await Promise.all(
+        teamPlayers.map(async (player) => {
+          try {
+            const resolvedPlayer =
+              resolvePlayer(player);
 
-          const participation =
-            getLinkedParticipation(player);
+            const participation =
+              getLinkedParticipation(player);
 
-          if (!resolvedPlayer || !participation) {
-            throw new Error(
-              `No se ha podido vincular a ${player.playerName}.`
+            if (!resolvedPlayer || !participation) {
+              throw new Error(
+                `No se ha podido vincular a ${player.playerName}.`
+              );
+            }
+
+            const payload = {
+              matchId: Number(selectedMatchId),
+              playerId: resolvedPlayer.id,
+              participationId: participation.id,
+              marcaRating: player.marca,
+              asRating: player.as,
+              sofascoreRating: player.sofascore,
+              flashscoreRating: player.flashscore,
+              externalAverage: null,
+              value90MatchRating: null,
+              finalMatchRating: null,
+              confidence: null,
+              calculationVersion: null,
+              calculatedAt: null,
+            };
+
+            const existing = existingRatings.find(
+              (rating) =>
+                rating.playerId === resolvedPlayer.id ||
+                rating.participationId === participation.id
             );
-          }
 
-          const payload = {
-            matchId: Number(selectedMatchId),
-            playerId: resolvedPlayer.id,
-            participationId: participation.id,
-            marcaRating: player.marca,
-            asRating: player.as,
-            sofascoreRating: player.sofascore,
-            flashscoreRating: player.flashscore,
-            externalAverage: null,
-            value90MatchRating: null,
-            finalMatchRating: null,
-            confidence: null,
-            calculationVersion: null,
-            calculatedAt: null,
-          };
+            if (existing) {
+              await updateMatchRating(
+                existing.id,
+                payload
+              );
+            } else {
+              await addMatchRating(payload);
+            }
 
-          const existing = existingRatings.find(
-            (rating) =>
-              rating.playerId === resolvedPlayer.id ||
-              rating.participationId === participation.id
-          );
-
-          if (existing) {
-            await updateMatchRating(
-              existing.id,
-              payload
+            return { player, saved: true };
+          } catch (playerError) {
+            console.error(
+              `Error guardando a ${player.playerName}:`,
+              playerError
             );
-          } else {
-            await addMatchRating(payload);
+            return { player, saved: false };
           }
+        })
+      );
 
-          saved += 1;
-        } catch (playerError) {
-          console.error(
-            `Error guardando a ${player.playerName}:`,
-            playerError
-          );
-
-          failed.push(
-            player.playerName || "Jugador desconocido"
-          );
-        }
-      }
+      const savedPlayers = outcomes
+        .filter((outcome) => outcome.saved)
+        .map((outcome) => outcome.player);
+      const failed = outcomes
+        .filter((outcome) => !outcome.saved)
+        .map((outcome) => outcome.player.playerName || "Jugador desconocido");
+      const saved = savedPlayers.length;
 
       if (saved === 0) {
         setError(
@@ -1085,17 +1112,64 @@ export default function MatchDataPage() {
         return;
       }
 
+      // Cada fila confirmada por el usuario queda vinculada a su análisis.
+      // Esto permite medir acierto por fuente y reutilizar correcciones revisadas.
+      let feedbackSaved = false;
+      if (recognitionResultId !== null) {
+        const ratingFields: Array<{
+          field: "marca" | "as" | "sofascore" | "flashscore";
+          source: RatingSource;
+        }> = [
+          { field: "marca", source: "marca" },
+          { field: "as", source: "as" },
+          { field: "sofascore", source: "sofascore" },
+          { field: "flashscore", source: "flashscore" },
+        ];
+        const corrections = savedPlayers.flatMap((player) => {
+          const original = originalAnalysisPlayers.find(
+            (item) => item.playerId === player.playerId
+          );
+
+          return ratingFields
+            .filter(({ source }) => analysisSources.includes(source))
+            .map(({ field }) => ({
+              resultId: recognitionResultId,
+              matchId: Number(selectedMatchId),
+              playerId: player.playerId ?? null,
+              participationId: player.participationId ?? null,
+              fieldName: field,
+              detectedValue: original?.[field] ?? null,
+              correctedValue: player[field] ?? null,
+              correctionType: "rating" as const,
+              status: "confirmed" as const,
+            }));
+        });
+
+        try {
+          await recordRecognitionCorrectionsBatch(corrections);
+          feedbackSaved = true;
+        } catch (feedbackError) {
+          console.error("No se pudo guardar la revisión de IA:", feedbackError);
+        }
+      }
+
+      const feedbackNotice = feedbackSaved
+        ? ""
+        : " No se pudo vincular esta revisión al aprendizaje de IA.";
+
       if (failed.length > 0) {
         setMessage(
           `Se han guardado ${saved} valoración(es) del equipo ` +
             `${teamSide === "home" ? "local" : "visitante"}. ` +
             `No se pudieron guardar ${failed.length}: ` +
-            `${failed.join(", ")}.`
+            `${failed.join(", ")}.` +
+            feedbackNotice
         );
       } else {
         setMessage(
           `Se han guardado ${saved} valoración(es) del equipo ` +
-            `${teamSide === "home" ? "local" : "visitante"} correctamente.`
+            `${teamSide === "home" ? "local" : "visitante"} correctamente.` +
+            feedbackNotice
         );
       }
 
@@ -1314,6 +1388,8 @@ export default function MatchDataPage() {
                 setParticipationsSaved(false);
     setSavedTeams({ home: false, away: false });
                 setAnalysisPlayers([]);
+                setOriginalAnalysisPlayers([]);
+                setRecognitionResultId(null);
                 setAnalysisSources([]);
                 setImages({});
                 setMessage(null);
@@ -1909,6 +1985,8 @@ export default function MatchDataPage() {
               type="button"
               onClick={() => {
                 setAnalysisPlayers([]);
+                setOriginalAnalysisPlayers([]);
+                setRecognitionResultId(null);
                 setAnalysisSources([]);
                 setError(null);
                 setSavedTeams({ home: false, away: false });
@@ -1928,6 +2006,8 @@ export default function MatchDataPage() {
           </p>
         </section>
       )}
+
+      <RecognitionAccuracySummary />
     </div>
   );
 }
