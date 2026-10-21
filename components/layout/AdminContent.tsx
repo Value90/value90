@@ -13,75 +13,73 @@ function AdminPageLoading() {
   );
 }
 
-const dynamicOptions = { loading: AdminPageLoading };
-
 const Dashboard = dynamic(
   () => import("@/components/layout/Dashboard"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const CountriesPage = dynamic(
   () => import("@/components/countries/CountriesPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const CompetitionsPage = dynamic(
   () => import("@/components/competitions/CompetitionsPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const TeamsPage = dynamic(
   () => import("@/components/teams/TeamsPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const HistPlayerTeamPage = dynamic(
   () => import("@/components/hist-player-teams/HistPlayerTeamPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const PlayersPage = dynamic(
   () => import("@/components/players/PlayersPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const PositionsPage = dynamic(
   () => import("@/components/positions/PositionsPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const MatchesPage = dynamic(
   () => import("@/components/matches/MatchesPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const SeasonsPage = dynamic(
   () => import("@/components/seasons/SeasonsPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const StagesPage = dynamic(
   () => import("@/components/stages/StagesPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const ParticipationsPage = dynamic(
   () => import("@/components/participations/ParticipationsPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const PlayerMatchStatsPage = dynamic(
   () => import("@/components/player-match-stats/PlayerMatchStatsPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const MatchRatingsPage = dynamic(
   () => import("@/components/match-ratings/MatchRatingsPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const MatchDataPage = dynamic(
   () => import("@/components/match-data/MatchDataPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const DatosV90Page = dynamic(
   () => import("@/components/dashboard/DatosV90Page"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const ProgresoPage = dynamic(
   () => import("@/components/dashboard/ProgresoPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 const RankingsPage = dynamic(
   () => import("@/components/rankings/RankingsPage"),
-  dynamicOptions,
+  { loading: AdminPageLoading },
 );
 
 interface AdminContentProps {
