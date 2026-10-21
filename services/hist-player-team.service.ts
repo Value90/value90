@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 import type { HistPlayerTeam } from "@/types/hist-player-team";
@@ -10,7 +11,7 @@ export type { HistPlayerTeam } from "@/types/hist-player-team";
  * ============================================================
  */
 
-export async function getHistPlayerTeams(): Promise<
+async function fetchHistPlayerTeams(): Promise<
   HistPlayerTeam[]
 > {
   /*
@@ -399,4 +400,7 @@ export async function deleteHistPlayerTeam(
   }
 
   return true;
+}
+export function getHistPlayerTeams(): ReturnType<typeof fetchHistPlayerTeams> {
+  return dedupeRequest("hist-player-team.service.ts:getHistPlayerTeams", fetchHistPlayerTeams);
 }

@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 import type { Season } from "@/types/season";
@@ -10,7 +11,7 @@ export type { Season } from "@/types/season";
  * ============================================================
  */
 
-export async function getSeasons(): Promise<Season[]> {
+async function fetchSeasons(): Promise<Season[]> {
   const { data, error } = await supabase
     .from("seasons")
     .select("*")
@@ -142,4 +143,7 @@ export async function deleteSeason(
   }
 
   return true;
+}
+export function getSeasons(): ReturnType<typeof fetchSeasons> {
+  return dedupeRequest("season.service.ts:getSeasons", fetchSeasons);
 }

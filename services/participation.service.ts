@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 
 import { supabase } from "@/lib/supabase";
 
@@ -78,7 +79,7 @@ function toSupabaseRow(
  * ============================================================
  */
 
-export async function getParticipations(): Promise<
+async function fetchParticipations(): Promise<
   Participation[]
 > {
   const PAGE_SIZE = 1000;
@@ -299,4 +300,7 @@ export async function deleteParticipation(
   }
 
   return true;
+}
+export function getParticipations(): ReturnType<typeof fetchParticipations> {
+  return dedupeRequest("participation.service.ts:getParticipations", fetchParticipations);
 }

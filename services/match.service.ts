@@ -1,8 +1,20 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 import type { Match } from "@/types/match";
 
 export type { Match } from "@/types/match";
+
+export interface PublicMatch {
+  id: number;
+  competitionId: number;
+  homeTeamId: number;
+  awayTeamId: number;
+  homeScore: number | null;
+  awayScore: number | null;
+  date: string;
+  status: Match["status"];
+}
 
 /*
  * ============================================================
@@ -71,7 +83,7 @@ function mapMatch(match: any): Match {
  * ============================================================
  */
 
-export async function getMatches(): Promise<Match[]> {
+async function fetchMatches(): Promise<Match[]> {
   const allMatches: Match[] = [];
 
   let from = 0;
@@ -339,4 +351,41 @@ export async function deleteMatch(
   }
 
   return true;
+}
+export function getMatches(): ReturnType<typeof fetchMatches> {
+  return dedupeRequest("match.service.ts:getMatches", fetchMatches);
+}
+
+async function fetchPublicMatches(): Promise<PublicMatch[]> {
+  const matches: PublicMatch[] = [];
+
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("matches")
+      .select("id,competition_id,home_team_id,away_team_id,home_score,away_score,date,status")
+      .order("date", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw error;
+
+    const page = data ?? [];
+    matches.push(...page.map((match) => ({
+      id: Number(match.id),
+      competitionId: Number(match.competition_id),
+      homeTeamId: Number(match.home_team_id),
+      awayTeamId: Number(match.away_team_id),
+      homeScore: match.home_score,
+      awayScore: match.away_score,
+      date: match.date,
+      status: match.status as Match["status"],
+    })));
+
+    if (page.length < PAGE_SIZE) break;
+  }
+
+  return matches;
+}
+
+export function getPublicMatches(): ReturnType<typeof fetchPublicMatches> {
+  return dedupeRequest("match.service.ts:getPublicMatches", fetchPublicMatches);
 }

@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 import type { PlayerMatchStat } from "@/types/player-match-stat";
@@ -277,7 +278,7 @@ function validatePlayerMatchStat(
  * ============================================================
  */
 
-export async function getPlayerMatchStats(): Promise<
+async function fetchPlayerMatchStats(): Promise<
   PlayerMatchStat[]
 > {
   /*
@@ -666,4 +667,7 @@ export async function deletePlayerMatchStat(
   }
 
   return true;
+}
+export function getPlayerMatchStats(): ReturnType<typeof fetchPlayerMatchStats> {
+  return dedupeRequest("player-match-stat.service.ts:getPlayerMatchStats", fetchPlayerMatchStats);
 }

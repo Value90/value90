@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 import type { Position } from "@/types/positions";
@@ -10,7 +11,7 @@ export type { Position } from "@/types/positions";
  * ============================================================
  */
 
-export async function getPositions(): Promise<Position[]> {
+async function fetchPositions(): Promise<Position[]> {
   const { data, error } = await supabase
     .from("positions")
     .select("*")
@@ -143,4 +144,7 @@ export async function deletePosition(
   }
 
   return true;
+}
+export function getPositions(): ReturnType<typeof fetchPositions> {
+  return dedupeRequest("position.service.ts:getPositions", fetchPositions);
 }

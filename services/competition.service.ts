@@ -1,8 +1,15 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 import type { Competition } from "@/types/competition";
 
 export type { Competition } from "@/types/competition";
+
+export interface PublicCompetition {
+  id: number;
+  name: string;
+  active: boolean;
+}
 
 /*
  * ============================================================
@@ -10,7 +17,7 @@ export type { Competition } from "@/types/competition";
  * ============================================================
  */
 
-export async function getCompetitions(): Promise<Competition[]> {
+async function fetchCompetitions(): Promise<Competition[]> {
   const { data, error } = await supabase
     .from("competitions")
     .select("*")
@@ -218,4 +225,27 @@ export async function deleteCompetition(
   }
 
   return true;
+}
+
+export function getCompetitions(): ReturnType<typeof fetchCompetitions> {
+  return dedupeRequest("competition.service.ts:getCompetitions", fetchCompetitions);
+}
+
+async function fetchPublicCompetitions(): Promise<PublicCompetition[]> {
+  const { data, error } = await supabase
+    .from("competitions")
+    .select("id,name,active")
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map((competition) => ({
+    id: Number(competition.id),
+    name: competition.name,
+    active: Boolean(competition.active),
+  }));
+}
+
+export function getPublicCompetitions(): ReturnType<typeof fetchPublicCompetitions> {
+  return dedupeRequest("competition.service.ts:getPublicCompetitions", fetchPublicCompetitions);
 }

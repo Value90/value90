@@ -1,8 +1,15 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 import type { Team } from "@/types/team";
 
 export type { Team } from "@/types/team";
+
+export interface PublicTeam {
+  id: number;
+  name: string;
+  shortName: string;
+}
 
 type NewTeam = Omit<
   Team,
@@ -15,7 +22,7 @@ type NewTeam = Omit<
  * ============================================================
  */
 
-export async function getTeams(): Promise<Team[]> {
+async function fetchTeams(): Promise<Team[]> {
   const { data, error } = await supabase
     .from("teams")
     .select("*")
@@ -316,4 +323,26 @@ export async function deleteTeam(
   }
 
   return true;
+}
+export function getTeams(): ReturnType<typeof fetchTeams> {
+  return dedupeRequest("team.service.ts:getTeams", fetchTeams);
+}
+
+async function fetchPublicTeams(): Promise<PublicTeam[]> {
+  const { data, error } = await supabase
+    .from("teams")
+    .select("id,name,short_name")
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map((team) => ({
+    id: Number(team.id),
+    name: team.name,
+    shortName: team.short_name,
+  }));
+}
+
+export function getPublicTeams(): ReturnType<typeof fetchPublicTeams> {
+  return dedupeRequest("team.service.ts:getPublicTeams", fetchPublicTeams);
 }

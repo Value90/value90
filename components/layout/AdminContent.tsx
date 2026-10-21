@@ -1,27 +1,88 @@
 
-import Dashboard from "@/components/layout/Dashboard";
+import dynamic from "next/dynamic";
 
-import CountriesPage from "@/components/countries/CountriesPage";
-import CompetitionsPage from "@/components/competitions/CompetitionsPage";
-import TeamsPage from "@/components/teams/TeamsPage";
-import HistPlayerTeamPage from "@/components/hist-player-teams/HistPlayerTeamPage";
-import PlayersPage from "@/components/players/PlayersPage";
-import PositionsPage from "@/components/positions/PositionsPage";
+function AdminPageLoading() {
+  return (
+    <div
+      className="p-4 text-sm text-slate-500 sm:p-6"
+      role="status"
+      aria-live="polite"
+    >
+      Cargando sección...
+    </div>
+  );
+}
 
-import MatchesPage from "@/components/matches/MatchesPage";
-import SeasonsPage from "@/components/seasons/SeasonsPage";
-import StagesPage from "@/components/stages/StagesPage";
+const dynamicOptions = { loading: AdminPageLoading };
 
-import ParticipationsPage from "@/components/participations/ParticipationsPage";
-import PlayerMatchStatsPage from "@/components/player-match-stats/PlayerMatchStatsPage";
-import MatchRatingsPage from "@/components/match-ratings/MatchRatingsPage";
-
-// Nueva pantalla de datos del partido
-import MatchDataPage from "@/components/match-data/MatchDataPage";
-
-import DatosV90Page from "@/components/dashboard/DatosV90Page";
-import ProgresoPage from "@/components/dashboard/ProgresoPage";
-import RankingsPage from "@/components/rankings/RankingsPage";
+const Dashboard = dynamic(
+  () => import("@/components/layout/Dashboard"),
+  dynamicOptions,
+);
+const CountriesPage = dynamic(
+  () => import("@/components/countries/CountriesPage"),
+  dynamicOptions,
+);
+const CompetitionsPage = dynamic(
+  () => import("@/components/competitions/CompetitionsPage"),
+  dynamicOptions,
+);
+const TeamsPage = dynamic(
+  () => import("@/components/teams/TeamsPage"),
+  dynamicOptions,
+);
+const HistPlayerTeamPage = dynamic(
+  () => import("@/components/hist-player-teams/HistPlayerTeamPage"),
+  dynamicOptions,
+);
+const PlayersPage = dynamic(
+  () => import("@/components/players/PlayersPage"),
+  dynamicOptions,
+);
+const PositionsPage = dynamic(
+  () => import("@/components/positions/PositionsPage"),
+  dynamicOptions,
+);
+const MatchesPage = dynamic(
+  () => import("@/components/matches/MatchesPage"),
+  dynamicOptions,
+);
+const SeasonsPage = dynamic(
+  () => import("@/components/seasons/SeasonsPage"),
+  dynamicOptions,
+);
+const StagesPage = dynamic(
+  () => import("@/components/stages/StagesPage"),
+  dynamicOptions,
+);
+const ParticipationsPage = dynamic(
+  () => import("@/components/participations/ParticipationsPage"),
+  dynamicOptions,
+);
+const PlayerMatchStatsPage = dynamic(
+  () => import("@/components/player-match-stats/PlayerMatchStatsPage"),
+  dynamicOptions,
+);
+const MatchRatingsPage = dynamic(
+  () => import("@/components/match-ratings/MatchRatingsPage"),
+  dynamicOptions,
+);
+const MatchDataPage = dynamic(
+  () => import("@/components/match-data/MatchDataPage"),
+  dynamicOptions,
+);
+const DatosV90Page = dynamic(
+  () => import("@/components/dashboard/DatosV90Page"),
+  dynamicOptions,
+);
+const ProgresoPage = dynamic(
+  () => import("@/components/dashboard/ProgresoPage"),
+  dynamicOptions,
+);
+const RankingsPage = dynamic(
+  () => import("@/components/rankings/RankingsPage"),
+  dynamicOptions,
+);
 
 interface AdminContentProps {
   page: string;

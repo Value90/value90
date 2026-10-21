@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 import type { MatchRating } from "@/types/match-rating";
@@ -151,7 +152,7 @@ function mapMatchRating(
  * ============================================================
  */
 
-export async function getMatchRatings(): Promise<
+async function fetchMatchRatings(): Promise<
   MatchRating[]
 > {
   const PAGE_SIZE = 1000;
@@ -497,4 +498,7 @@ export async function deleteMatchRating(
   }
 
   return true;
+}
+export function getMatchRatings(): ReturnType<typeof fetchMatchRatings> {
+  return dedupeRequest("match-rating.service.ts:getMatchRatings", fetchMatchRatings);
 }

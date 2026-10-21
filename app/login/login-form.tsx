@@ -13,7 +13,14 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const redirectTo = searchParams.get("redirect") || "/";
+  const requestedRedirect =
+    searchParams.get("next") ?? searchParams.get("redirect");
+  const redirectTo =
+    requestedRedirect?.startsWith("/") &&
+    !requestedRedirect.startsWith("//") &&
+    !requestedRedirect.includes("\\")
+      ? requestedRedirect
+      : "/";
 
   const supabase = createClient();
 

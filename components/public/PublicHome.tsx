@@ -3,20 +3,20 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { getPlayers, type Player } from "@/services/player.service";
-import { getTeams, type Team } from "@/services/team.service";
+import { getPublicPlayers, type PublicPlayer } from "@/services/player.service";
+import { getPublicTeams, type PublicTeam } from "@/services/team.service";
 import {
-  getCompetitions,
-  type Competition,
+  getPublicCompetitions,
+  type PublicCompetition,
 } from "@/services/competition.service";
-import { getMatches, type Match } from "@/services/match.service";
+import { getPublicMatches, type PublicMatch } from "@/services/match.service";
 import {
-  getPlayerV90MatchFacts,
-  type PlayerV90MatchFact,
+  getPublicPlayerV90MatchFacts,
+  type PublicPlayerV90MatchFact,
 } from "@/services/v90-match.service";
 
 interface FeaturedPlayer {
-  player: Player;
+  player: PublicPlayer;
   teamName: string;
   v90: number;
   variation: number | null;
@@ -62,7 +62,7 @@ function getInitials(name: string) {
     .join("");
 }
 
-function getScore(match: Match) {
+function getScore(match: PublicMatch) {
   const home = match.homeScore ?? 0;
   const away = match.awayScore ?? 0;
 
@@ -193,11 +193,11 @@ function BigTrendChart({ values }: { values: number[] }) {
 }
 
 export default function PublicHome() {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [competitions, setCompetitions] = useState<Competition[]>([]);
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [facts, setFacts] = useState<PlayerV90MatchFact[]>([]);
+  const [players, setPlayers] = useState<PublicPlayer[]>([]);
+  const [teams, setTeams] = useState<PublicTeam[]>([]);
+  const [competitions, setCompetitions] = useState<PublicCompetition[]>([]);
+  const [matches, setMatches] = useState<PublicMatch[]>([]);
+  const [facts, setFacts] = useState<PublicPlayerV90MatchFact[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -216,11 +216,11 @@ export default function PublicHome() {
           matchesData,
           factsData,
         ] = await Promise.all([
-          getPlayers(),
-          getTeams(),
-          getCompetitions(),
-          getMatches(),
-          getPlayerV90MatchFacts(),
+          getPublicPlayers(),
+          getPublicTeams(),
+          getPublicCompetitions(),
+          getPublicMatches(),
+          getPublicPlayerV90MatchFacts(),
         ]);
 
         if (!mounted) return;
@@ -229,14 +229,7 @@ export default function PublicHome() {
         setTeams(teamsData);
         setCompetitions(competitionsData);
         setMatches(matchesData);
-        setFacts(
-          factsData.filter(
-            (fact) =>
-              fact.active &&
-              fact.status === "CALCULATED" &&
-              Number.isFinite(fact.v90Match)
-          )
-        );
+        setFacts(factsData.filter((fact) => Number.isFinite(fact.v90Match)));
       } catch (error) {
         console.error("Error cargando Home pública:", error);
 

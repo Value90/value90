@@ -2,6 +2,14 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const isPublicRoute = pathname === "/public" || pathname.startsWith("/public/");
+
+  // Public pages do not need a Supabase auth round trip on every navigation.
+  if (isPublicRoute) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -31,7 +39,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
   const isLoginPage = pathname === "/login";
   const isPublicFile = pathname.startsWith("/_next/") || pathname === "/favicon.ico";
 

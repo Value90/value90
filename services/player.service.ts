@@ -1,8 +1,14 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 import type { Player } from "@/types/player";
 
 export type { Player } from "@/types/player";
+
+export interface PublicPlayer {
+  id: number;
+  name: string;
+}
 
 /*
  * ============================================================
@@ -44,7 +50,7 @@ function mapPlayer(
  * ============================================================
  */
 
-export async function getPlayers(): Promise<Player[]> {
+async function fetchPlayers(): Promise<Player[]> {
   const PAGE_SIZE = 1000;
 
   const allPlayers: Player[] = [];
@@ -226,4 +232,36 @@ export async function deletePlayer(
   }
 
   return true;
+}
+export function getPlayers(): ReturnType<typeof fetchPlayers> {
+  return dedupeRequest("player.service.ts:getPlayers", fetchPlayers);
+}
+
+async function fetchPublicPlayers(): Promise<PublicPlayer[]> {
+  const pageSize = 1000;
+  const players: PublicPlayer[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("players")
+      .select("id,name")
+      .order("name", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+
+    const page = data ?? [];
+    players.push(...page.map((player) => ({
+      id: Number(player.id),
+      name: player.name,
+    })));
+
+    if (page.length < pageSize) break;
+  }
+
+  return players;
+}
+
+export function getPublicPlayers(): ReturnType<typeof fetchPublicPlayers> {
+  return dedupeRequest("player.service.ts:getPublicPlayers", fetchPublicPlayers);
 }

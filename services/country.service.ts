@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 export interface Country {
@@ -14,7 +15,7 @@ export interface Country {
  * ============================================================
  */
 
-export async function getCountries(): Promise<Country[]> {
+async function fetchCountries(): Promise<Country[]> {
   const { data, error } = await supabase
     .from("countries")
     .select("*")
@@ -144,4 +145,7 @@ export async function deleteCountry(
   }
 
   return true;
+}
+export function getCountries(): ReturnType<typeof fetchCountries> {
+  return dedupeRequest("country.service.ts:getCountries", fetchCountries);
 }

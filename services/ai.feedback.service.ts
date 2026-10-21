@@ -58,6 +58,17 @@ interface ConfirmedCorrection {
   created_at: string;
 }
 
+function isMissingResultRelation(error: {
+  code?: string;
+  message?: string;
+}) {
+  return (
+    error.code === "PGRST200" ||
+    error.code === "PGRST201" ||
+    error.message?.includes("Could not find a relationship") === true
+  );
+}
+
 function resultRow(input: CreateRecognitionResultInput) {
   return {
     match_id: input.matchId ?? null,
@@ -248,43 +259,63 @@ export async function getLearningContext(
     20_000,
   );
 
-  const { data: results, error: resultsError } = await client
-    .from("ai_recognition_results")
-    .select("id")
-    .eq("recognition_type", recognitionType);
-
-  if (resultsError) {
-    throw new Error(
-      `Error obteniendo resultados de aprendizaje: ${resultsError.message}`,
-    );
-  }
-
-  const resultIds = (results ?? [])
-    .map((item: { id: number }) => item.id)
-    .filter((id: number) => Number.isInteger(id));
-
-  if (resultIds.length === 0) {
-    return "";
-  }
-
-  const { data: corrections, error: correctionsError } = await client
+  const { data: joinedCorrections, error: joinError } = await client
     .from("ai_recognition_corrections")
     .select(
-      "id,result_id,match_id,player_id,participation_id,field_name,detected_value,corrected_value,correction_type,confidence,created_at",
+      "id,result_id,match_id,player_id,participation_id,field_name,detected_value,corrected_value,correction_type,confidence,created_at,result:ai_recognition_results!inner(recognition_type)",
     )
     .eq("status", "confirmed")
-    .in("result_id", resultIds)
+    .eq("result.recognition_type", recognitionType)
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (correctionsError) {
+  let corrections: ConfirmedCorrection[];
+
+  if (!joinError) {
+    corrections = (joinedCorrections ?? []) as ConfirmedCorrection[];
+  } else if (isMissingResultRelation(joinError)) {
+    // Keep the established behavior for projects without an exposed FK relation.
+    const { data: results, error: resultsError } = await client
+      .from("ai_recognition_results")
+      .select("id")
+      .eq("recognition_type", recognitionType);
+
+    if (resultsError) {
+      throw new Error(
+        `Error obteniendo resultados de aprendizaje: ${resultsError.message}`,
+      );
+    }
+
+    const resultIds = (results ?? [])
+      .map((item: { id: number }) => item.id)
+      .filter((id: number) => Number.isInteger(id));
+
+    if (resultIds.length === 0) return "";
+
+    const { data: fallbackCorrections, error: correctionsError } = await client
+      .from("ai_recognition_corrections")
+      .select(
+        "id,result_id,match_id,player_id,participation_id,field_name,detected_value,corrected_value,correction_type,confidence,created_at",
+      )
+      .eq("status", "confirmed")
+      .in("result_id", resultIds)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (correctionsError) {
+      throw new Error(
+        `Error obteniendo correcciones de aprendizaje: ${correctionsError.message}`,
+      );
+    }
+
+    corrections = (fallbackCorrections ?? []) as ConfirmedCorrection[];
+  } else {
     throw new Error(
-      `Error obteniendo correcciones de aprendizaje: ${correctionsError.message}`,
+      `Error obteniendo correcciones de aprendizaje: ${joinError.message}`,
     );
   }
 
-  const safeCorrections =
-    (corrections ?? []) as ConfirmedCorrection[];
+  const safeCorrections = corrections;
 
   if (safeCorrections.length === 0) {
     return "";

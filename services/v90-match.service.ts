@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 export interface PlayerV90MatchFact {
@@ -40,6 +41,16 @@ interface PlayerV90MatchFactRow {
   active: boolean;
 }
 
+export interface PublicPlayerV90MatchFact {
+  playerId: number;
+  matchId: number;
+  teamId: number;
+  totalWeight: number;
+  weightedContribution: number;
+  v90Match: number;
+  calculatedAt: string;
+}
+
 function mapFact(row: PlayerV90MatchFactRow): PlayerV90MatchFact {
   return {
     id: Number(row.id),
@@ -78,7 +89,7 @@ export interface PlayerV90MatchSummary {
  * Esta función se utiliza en Ranking y en otras vistas que necesitan
  * el detalle completo de cada FACT.
  */
-export async function getPlayerV90MatchFacts(): Promise<PlayerV90MatchFact[]> {
+async function fetchPlayerV90MatchFacts(): Promise<PlayerV90MatchFact[]> {
   const pageSize = 1000;
   const facts: PlayerV90MatchFact[] = [];
   let from = 0;
@@ -151,7 +162,7 @@ export async function getPlayerV90MatchFacts(): Promise<PlayerV90MatchFact[]> {
  * independientes. Hace una lectura paginada de los registros activos y
  * calcula los contadores y medias en memoria.
  */
-export async function getPlayerV90MatchSummary(): Promise<PlayerV90MatchSummary> {
+async function fetchPlayerV90MatchSummary(): Promise<PlayerV90MatchSummary> {
   const pageSize = 1000;
   let from = 0;
   let page = 0;
@@ -274,4 +285,53 @@ export async function getPlayerV90MatchSummary(): Promise<PlayerV90MatchSummary>
     v90MatchAverage,
     playerV90Average,
   };
+}
+
+export function getPlayerV90MatchFacts(): ReturnType<typeof fetchPlayerV90MatchFacts> {
+  return dedupeRequest("v90-match.service.ts:getPlayerV90MatchFacts", fetchPlayerV90MatchFacts);
+}
+
+export function getPlayerV90MatchSummary(): ReturnType<typeof fetchPlayerV90MatchSummary> {
+  return dedupeRequest("v90-match.service.ts:getPlayerV90MatchSummary", fetchPlayerV90MatchSummary);
+}
+
+async function fetchPublicPlayerV90MatchFacts(): Promise<PublicPlayerV90MatchFact[]> {
+  const pageSize = 1000;
+  const facts: PublicPlayerV90MatchFact[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("fact_player_v90_match")
+      .select("player_id,match_id,team_id,total_weight,weighted_contribution,v90_match,calculated_at")
+      .eq("active", true)
+      .eq("status", "CALCULATED")
+      .order("id", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Error obteniendo datos públicos V90: ${error.message}`);
+    }
+
+    const page = data ?? [];
+    facts.push(...page.map((fact) => ({
+      playerId: Number(fact.player_id),
+      matchId: Number(fact.match_id),
+      teamId: Number(fact.team_id),
+      totalWeight: Number(fact.total_weight),
+      weightedContribution: Number(fact.weighted_contribution),
+      v90Match: Number(fact.v90_match),
+      calculatedAt: fact.calculated_at,
+    })));
+
+    if (page.length < pageSize) break;
+  }
+
+  return facts;
+}
+
+export function getPublicPlayerV90MatchFacts(): ReturnType<typeof fetchPublicPlayerV90MatchFacts> {
+  return dedupeRequest(
+    "v90-match.service.ts:getPublicPlayerV90MatchFacts",
+    fetchPublicPlayerV90MatchFacts,
+  );
 }

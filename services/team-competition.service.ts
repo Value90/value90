@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 /*
@@ -40,7 +41,7 @@ function mapTeamCompetition(
  * ============================================================
  */
 
-export async function getTeamCompetitions(): Promise<
+async function fetchTeamCompetitions(): Promise<
   TeamCompetition[]
 > {
   const { data, error } = await supabase
@@ -289,4 +290,7 @@ export async function saveTeamCompetitions(
   return (data ?? []).map(
     mapTeamCompetition
   );
+}
+export function getTeamCompetitions(): ReturnType<typeof fetchTeamCompetitions> {
+  return dedupeRequest("team-competition.service.ts:getTeamCompetitions", fetchTeamCompetitions);
 }

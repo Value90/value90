@@ -1,3 +1,4 @@
+import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
 
 /*
@@ -32,7 +33,7 @@ export interface Stage {
  * ============================================================
  */
 
-export async function getStages(): Promise<Stage[]> {
+async function fetchStages(): Promise<Stage[]> {
   const { data, error } = await supabase
     .from("stages")
     .select(
@@ -185,4 +186,7 @@ export async function deleteStage(
 
     throw error;
   }
+}
+export function getStages(): ReturnType<typeof fetchStages> {
+  return dedupeRequest("stage.service.ts:getStages", fetchStages);
 }
