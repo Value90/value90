@@ -81,6 +81,10 @@ const RankingsPage = dynamic(
   () => import("@/components/rankings/RankingsPage"),
   { loading: AdminPageLoading },
 );
+const MarketPage = dynamic(
+  () => import("@/components/market/MarketPage"),
+  { loading: AdminPageLoading },
+);
 
 interface AdminContentProps {
   page: string;
@@ -143,18 +147,7 @@ export default function AdminContent({
      */
 
     case "market":
-      return (
-        <div className="w-full min-w-0 p-3 sm:p-5 md:p-8">
-          <h1 className="text-2xl font-bold text-slate-800 sm:text-3xl">
-            Mercado
-          </h1>
-
-          <p className="mt-2 text-sm text-slate-600 sm:text-base">
-            Esta sección se desarrollará cuando el motor V90 disponga de
-            datos suficientes para generar valores de mercado.
-          </p>
-        </div>
-      );
+      return <MarketPage />;
 
     /*
      * ============================================================

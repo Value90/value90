@@ -774,7 +774,7 @@ export default function MatchRatingsTable({
                 3
               )} · Versión: ${fact.calculationVersion}`}
             >
-              {fact.v90Match.toFixed(2)}
+              {fact.v90Match.toFixed(3)}
             </span>
           );
         },

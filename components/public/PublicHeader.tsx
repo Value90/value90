@@ -3,214 +3,69 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import PublicAdSense from "@/components/public/PublicAdSense";
+
+const navigation = [
+  { label: "Inicio", href: "/public" },
+  { label: "Jugadores", href: "/public/jugadores" },
+  { label: "Equipos", href: "/public/equipos" },
+  { label: "Partidos", href: "/public/partidos" },
+  { label: "Rankings", href: "/public/rankings" },
+];
 
 export default function PublicHeader() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navigation = [
-    { label: "Inicio", href: "/public" },
-    { label: "Jugadores", href: "/public/jugadores" },
-    { label: "Equipos", href: "/public/equipos" },
-    { label: "Partidos", href: "/public/partidos" },
-    { label: "Rankings", href: "/public/rankings" },
-    { label: "Estadísticas", href: "/public/estadisticas" },
-  ];
-
-  const isActive = (href: string) => {
-    if (href === "/public") {
-      return pathname === "/public";
-    }
-
-    return pathname.startsWith(href);
-  };
-
-  const handleMobileNavigation = () => {
-    setMobileMenuOpen(false);
-  };
-
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-10">
-
-        {/* LOGO */}
-        <Link
-          href="/public"
-          className="group flex items-center gap-2"
-          aria-label="Value90 inicio"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-lg font-black tracking-tight text-white transition group-hover:bg-emerald-700">
-            V
-          </div>
-
-          <div className="leading-none">
-            <div className="text-[21px] font-extrabold tracking-[-0.04em] text-slate-900">
-              VALUE<span className="text-emerald-600">90</span>
-            </div>
-
-            <div className="mt-1 hidden text-[8px] font-semibold tracking-[0.16em] text-slate-400 sm:block">
-              FOOTBALL DATA & PLAYER VALUE
-            </div>
-          </div>
+    <>
+    <PublicAdSense />
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div className="mx-auto flex min-h-[52px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-8 lg:px-10">
+        <Link href="/public" className="flex shrink-0 items-center gap-2" aria-label="Value90, inicio">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-sm font-black text-white">V</span>
+          <span className="text-lg font-black tracking-tight text-slate-900">VALUE<span className="text-emerald-600">90</span></span>
         </Link>
 
-        {/* MENÚ ESCRITORIO */}
-        <nav className="hidden items-center gap-5 lg:flex xl:gap-7">
+        <nav className="hidden items-center gap-4 xl:flex" aria-label="Navegación principal">
           {navigation.map((item) => {
-            const active = isActive(item.href);
-
+            const active = item.href === "/public" ? pathname === item.href : pathname.startsWith(item.href);
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`text-sm transition ${
-                  active
-                    ? "font-bold text-emerald-600"
-                    : "font-medium text-slate-600 hover:text-emerald-600"
-                }`}
-              >
+              <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined}
+                className={`whitespace-nowrap text-sm transition ${active ? "font-bold text-emerald-700" : "font-medium text-slate-600 hover:text-emerald-700"}`}>
                 {item.label}
               </Link>
             );
           })}
         </nav>
 
-        {/* ACCIONES DERECHA */}
-        <div className="hidden items-center gap-2 lg:flex">
-
-          {/* BUSCAR */}
-          <button
-            type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-            aria-label="Buscar"
-          >
-            <svg
-              width="19"
-              height="19"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-4-4" />
-            </svg>
-          </button>
-
-          {/* TEMA */}
-          <button
-            type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-            aria-label="Cambiar tema"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2" />
-              <path d="M12 20v2" />
-              <path d="m4.93 4.93 1.41 1.41" />
-              <path d="m17.66 17.66 1.41 1.41" />
-              <path d="M2 12h2" />
-              <path d="M20 12h2" />
-              <path d="m6.34 17.66-1.41 1.41" />
-              <path d="m19.07 4.93-1.41 1.41" />
-            </svg>
-          </button>
-
-          {/* ACCEDER */}
-          <button
-            type="button"
-            className="ml-1 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700"
-          >
+        <div className="flex shrink-0 items-center gap-2">
+          <Link href="/login" className="hidden rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 sm:inline-flex">
             Acceder
+          </Link>
+          <button type="button" onClick={() => setMobileMenuOpen((open) => !open)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 xl:hidden"
+            aria-label={mobileMenuOpen ? "Cerrar menú" : "Abrir menú"} aria-expanded={mobileMenuOpen} aria-controls="public-mobile-menu">
+            <span aria-hidden="true" className="text-2xl leading-none">{mobileMenuOpen ? "×" : "☰"}</span>
           </button>
         </div>
-
-        {/* BOTÓN MENÚ MÓVIL */}
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen((value) => !value)}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 lg:hidden"
-          aria-label="Abrir menú"
-          aria-expanded={mobileMenuOpen}
-        >
-          {mobileMenuOpen ? (
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </svg>
-          ) : (
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M4 6h16" />
-              <path d="M4 12h16" />
-              <path d="M4 18h16" />
-            </svg>
-          )}
-        </button>
       </div>
 
-      {/* MENÚ MÓVIL */}
       {mobileMenuOpen && (
-        <div className="border-t border-slate-200 bg-white lg:hidden">
-          <nav className="mx-auto flex max-w-[1440px] flex-col px-5 py-4 sm:px-8">
-
+        <nav id="public-mobile-menu" className="border-t border-slate-200 bg-white px-4 py-3 sm:px-8 xl:hidden" aria-label="Navegación móvil">
+          <div className="mx-auto flex max-w-[1440px] flex-col">
             {navigation.map((item) => {
-              const active = isActive(item.href);
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={handleMobileNavigation}
-                  className={`border-b border-slate-100 py-3 text-sm last:border-b-0 ${
-                    active
-                      ? "font-bold text-emerald-600"
-                      : "font-medium text-slate-700 hover:text-emerald-600"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
+              const active = item.href === "/public" ? pathname === item.href : pathname.startsWith(item.href);
+              return <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)} aria-current={active ? "page" : undefined}
+                className={`border-b border-slate-100 py-3 text-sm last:border-0 ${active ? "font-bold text-emerald-700" : "font-medium text-slate-700"}`}>
+                {item.label}
+              </Link>;
             })}
-
-            <button
-              type="button"
-              className="mt-4 rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white"
-            >
-              Acceder
-            </button>
-
-          </nav>
-        </div>
+            <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="mt-3 rounded-lg bg-emerald-600 px-4 py-3 text-center text-sm font-bold text-white sm:hidden">Acceder</Link>
+          </div>
+        </nav>
       )}
     </header>
+    </>
   );
 }

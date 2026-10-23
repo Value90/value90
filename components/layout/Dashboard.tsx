@@ -558,7 +558,7 @@ export default function Dashboard() {
     matchRatingsLoading
       ? "..."
       : externalAverage !== null
-        ? externalAverage.toFixed(2)
+        ? externalAverage.toFixed(3)
         : "—";
 
   /*
@@ -612,7 +612,7 @@ export default function Dashboard() {
               v90Loading
                 ? "..."
                 : v90Summary.playerV90Average !== null
-                  ? v90Summary.playerV90Average.toFixed(2)
+                  ? v90Summary.playerV90Average.toFixed(3)
                   : "—"
             }
           />
@@ -623,7 +623,7 @@ export default function Dashboard() {
               v90Loading
                 ? "..."
                 : v90Summary.v90MatchAverage !== null
-                  ? v90Summary.v90MatchAverage.toFixed(2)
+                  ? v90Summary.v90MatchAverage.toFixed(3)
                   : "—"
             }
           />

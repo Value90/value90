@@ -54,6 +54,10 @@ async function fetchTeams(): Promise<Team[]> {
 
     stadium: team.stadium,
 
+    foundationYear: team.foundation_year == null ? null : Number(team.foundation_year),
+
+    stadiumCapacity: team.stadium_capacity == null ? null : Number(team.stadium_capacity),
+
     type: team.type,
 
     active: team.active,
@@ -135,6 +139,10 @@ export async function addTeam(
         stadium:
           team.stadium,
 
+        foundation_year: team.foundationYear,
+
+        stadium_capacity: team.stadiumCapacity,
+
         type:
           team.type,
 
@@ -182,6 +190,10 @@ export async function addTeam(
     stadium:
       data.stadium,
 
+    foundationYear: data.foundation_year == null ? null : Number(data.foundation_year),
+
+    stadiumCapacity: data.stadium_capacity == null ? null : Number(data.stadium_capacity),
+
     type: data.type,
 
     active: data.active,
@@ -225,6 +237,10 @@ export async function updateTeam(
 
         stadium:
           changes.stadium,
+
+        foundation_year: changes.foundationYear,
+
+        stadium_capacity: changes.stadiumCapacity,
 
         type:
           changes.type,
@@ -279,6 +295,10 @@ export async function updateTeam(
 
     stadium:
       data.stadium,
+
+    foundationYear: data.foundation_year == null ? null : Number(data.foundation_year),
+
+    stadiumCapacity: data.stadium_capacity == null ? null : Number(data.stadium_capacity),
 
     type:
       data.type,

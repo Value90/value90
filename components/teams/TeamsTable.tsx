@@ -128,18 +128,13 @@ export default function TeamsTable({
       header: "Estadio",
     },
 
+    { accessorKey: "foundationYear", header: "Fundación", cell: ({ getValue }) => getValue<number | null>() ?? "—" },
+
+    { accessorKey: "stadiumCapacity", header: "Aforo", cell: ({ getValue }) => { const value = getValue<number | null>(); return value == null ? "—" : value.toLocaleString("es-ES"); } },
+
     {
       accessorKey: "type",
       header: "Tipo",
-    },
-
-    {
-      accessorKey: "active",
-      header: "Estado",
-      cell: ({ getValue }) =>
-        getValue<boolean>()
-          ? "Activo"
-          : "Inactivo",
     },
 
     {

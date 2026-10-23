@@ -13,6 +13,10 @@ export interface Team {
 
   stadium: string;
 
+  foundationYear: number | null;
+
+  stadiumCapacity: number | null;
+
   type: "Club" | "Selección";
 
   active: boolean;

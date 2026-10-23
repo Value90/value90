@@ -1367,7 +1367,7 @@ export default function RankingsPage() {
       return "—";
     }
 
-    return value.toFixed(2);
+    return value.toFixed(3);
   };
 
   const formatThreeDecimals = (

@@ -20,7 +20,7 @@ export default function LoginForm() {
     !requestedRedirect.startsWith("//") &&
     !requestedRedirect.includes("\\")
       ? requestedRedirect
-      : "/";
+      : "/admin";
 
   const supabase = createClient();
 

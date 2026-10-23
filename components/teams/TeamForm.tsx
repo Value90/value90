@@ -110,6 +110,14 @@ export default function TeamForm({
     team?.stadium ?? ""
   );
 
+  const [foundationYear, setFoundationYear] = useState(
+    team?.foundationYear == null ? "" : String(team.foundationYear)
+  );
+
+  const [stadiumCapacity, setStadiumCapacity] = useState(
+    team?.stadiumCapacity == null ? "" : String(team.stadiumCapacity)
+  );
+
   const [type, setType] = useState<
     "Club" | "Selección"
   >(
@@ -524,6 +532,18 @@ export default function TeamForm({
       return;
     }
 
+    const parsedFoundationYear = foundationYear ? Number(foundationYear) : null;
+    const parsedStadiumCapacity = stadiumCapacity ? Number(stadiumCapacity) : null;
+    const currentYear = new Date().getFullYear();
+    if (parsedFoundationYear !== null && (!Number.isInteger(parsedFoundationYear) || parsedFoundationYear < 1800 || parsedFoundationYear > currentYear)) {
+      setError(`El año de fundación debe estar entre 1800 y ${currentYear}.`);
+      return;
+    }
+    if (parsedStadiumCapacity !== null && (!Number.isSafeInteger(parsedStadiumCapacity) || parsedStadiumCapacity < 0)) {
+      setError("El aforo debe ser un número entero igual o superior a cero.");
+      return;
+    }
+
     /*
      * ==========================================================
      * LIGA
@@ -683,6 +703,10 @@ export default function TeamForm({
           stadium:
             stadium.trim(),
 
+          foundationYear: parsedFoundationYear,
+
+          stadiumCapacity: parsedStadiumCapacity,
+
           type,
 
           active,
@@ -710,6 +734,10 @@ export default function TeamForm({
 
             stadium:
               stadium.trim(),
+
+            foundationYear: parsedFoundationYear,
+
+            stadiumCapacity: parsedStadiumCapacity,
 
             type,
 
@@ -882,6 +910,18 @@ export default function TeamForm({
             className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4"
           />
 
+        </div>
+
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+          <label className="min-w-0">
+            <span className="mb-2 block text-sm font-medium text-slate-700">Año de fundación</span>
+            <input type="number" inputMode="numeric" min="1800" max={new Date().getFullYear()} value={foundationYear} onChange={(event) => setFoundationYear(event.target.value)} placeholder="Ej. 1899" className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4" />
+          </label>
+          <label className="min-w-0">
+            <span className="mb-2 block text-sm font-medium text-slate-700">Aforo del estadio</span>
+            <input type="number" inputMode="numeric" min="0" step="1" value={stadiumCapacity} onChange={(event) => setStadiumCapacity(event.target.value)} placeholder="Ej. 60000" className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-500 sm:px-4" />
+            <span className="mt-1 block text-xs text-slate-500">Plazas máximas del estadio indicado.</span>
+          </label>
         </div>
 
         {/* ====================================================

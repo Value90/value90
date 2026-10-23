@@ -3,10 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  const isPublicRoute = pathname === "/public" || pathname.startsWith("/public/");
+  const isPublicRoute = pathname === "/" || pathname === "/public" || pathname.startsWith("/public/");
+  const isPublicApiRoute = pathname === "/api/public" || pathname.startsWith("/api/public/");
 
   // Public pages do not need a Supabase auth round trip on every navigation.
-  if (isPublicRoute) {
+  if (isPublicRoute || isPublicApiRoute) {
     return NextResponse.next({ request });
   }
 
@@ -58,7 +59,7 @@ export async function middleware(request: NextRequest) {
 
   if (user && isLoginPage) {
     const homeUrl = request.nextUrl.clone();
-    homeUrl.pathname = "/";
+    homeUrl.pathname = "/admin";
     homeUrl.search = "";
     return NextResponse.redirect(homeUrl);
   }

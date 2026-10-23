@@ -1,45 +1,18 @@
-import PublicHeader from "@/components/public/PublicHeader";
-import PublicPageHeader from "@/components/public/PublicPageHeader";
+import type { Metadata } from "next";
+import PublicDirectory from "@/components/public/PublicDirectory";
+import { getPublicFilters, getPublicTeams } from "@/services/public-data.server";
 
-export default function PublicTeamsPage() {
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <PublicHeader />
+export const dynamic = "force-dynamic";
 
-      <main>
-        <PublicPageHeader
-          eyebrow="Equipos"
-          title="Equipos"
-          description="Consulta equipos, plantillas, rendimiento y valoración de sus jugadores."
-        />
+export const metadata: Metadata = { title: "Equipos", description: "Explora los equipos activos registrados en Value90." };
 
-        <section className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 lg:px-10 lg:py-14">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-xl font-bold tracking-tight text-slate-900">
-              Buscar equipo
-            </h2>
-
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Busca equipos por nombre, país o competición.
-            </p>
-
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <input
-                type="text"
-                placeholder="Ej. Real Madrid"
-                className="h-11 flex-1 rounded-xl border border-slate-200 bg-white px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              />
-
-              <button
-                type="button"
-                className="h-11 rounded-xl bg-emerald-600 px-6 text-sm font-bold text-white transition hover:bg-emerald-700"
-              >
-                Buscar
-              </button>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
-  );
+export default async function PublicTeamsPage() {
+  let initialFilters;
+  let initialResult;
+  try {
+    [initialFilters, initialResult] = await Promise.all([
+      getPublicFilters(), getPublicTeams(new URLSearchParams("page=1&limit=24&type=Club")),
+    ]);
+  } catch (error) { console.error("No se pudieron precargar los equipos:", error); }
+  return <PublicDirectory kind="teams" initialFilters={initialFilters} initialResult={initialResult} />;
 }
