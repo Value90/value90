@@ -84,7 +84,7 @@ export default function RecognitionAccuracySummary() {
                       <span className="text-lg font-bold text-slate-900">{metric.accuracy}%</span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      {metric.recognitionType === "participations" ? "Participaciones" : "Valoraciones"} · {metric.correct} aciertos de {metric.reviewed} revisiones
+                      {metric.recognitionType === "participations" ? "Participaciones" : "Valoraciones"} · {metric.fieldName === "captain" ? `${metric.correct} aciertos de ${metric.reviewed} equipos` : `${metric.correct} aciertos de ${metric.reviewed} revisiones`}
                     </p>
                   </div>
                 ))}

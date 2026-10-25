@@ -88,9 +88,6 @@ export default function Dashboard() {
     setPlayerMatchStatsLoading,
   ] = useState(true);
 
-  const [matchRatingCount, setMatchRatingCount] =
-    useState(0);
-
   const [dashboardMatchRatings, setDashboardMatchRatings] =
     useState<Awaited<ReturnType<typeof getMatchRatings>>>([]);
 
@@ -117,9 +114,6 @@ export default function Dashboard() {
    * MEDIA EXTERNA
    * ============================================================
    */
-
-  const [externalAverage, setExternalAverage] =
-    useState<number | null>(null);
 
   /*
    * ============================================================
@@ -382,74 +376,13 @@ export default function Dashboard() {
         const matchRatings =
           await getMatchRatings();
 
-        /*
-         * ======================================================
-         * TOTAL DE MATCH RATINGS
-         * ======================================================
-         */
-
-        setMatchRatingCount(
-          matchRatings.length
-        );
         setDashboardMatchRatings(matchRatings);
-
-        /*
-         * ======================================================
-         * MEDIA EXTERNA
-         * ======================================================
-         *
-         * Solo utilizamos registros que tengan
-         * externalAverage calculado.
-         *
-         * Los valores null se ignoran.
-         * ======================================================
-         */
-
-        const externalValues =
-          matchRatings
-            .map(
-              (rating) =>
-                rating.externalAverage
-            )
-            .filter(
-              (
-                value
-              ): value is number =>
-                value !== null &&
-                value !== undefined &&
-                !Number.isNaN(value)
-            );
-
-        if (
-          externalValues.length ===
-          0
-        ) {
-          setExternalAverage(null);
-        } else {
-          const average =
-            externalValues.reduce(
-              (sum, value) =>
-                sum + value,
-              0
-            ) /
-            externalValues.length;
-
-          setExternalAverage(
-            Math.round(
-              (average +
-                Number.EPSILON) *
-                100
-            ) / 100
-          );
-        }
       } catch (error) {
         console.error(
           "Error obteniendo valoraciones de partido para el dashboard:",
           error
         );
 
-        setMatchRatingCount(0);
-        setExternalAverage(null);
       } finally {
         setMatchRatingsLoading(false);
       }
@@ -553,13 +486,6 @@ export default function Dashboard() {
         return competition.id === stageMatch?.competitionId;
       })
     : undefined;
-
-  const externalAverageDisplay =
-    matchRatingsLoading
-      ? "..."
-      : externalAverage !== null
-        ? externalAverage.toFixed(3)
-        : "—";
 
   /*
    * ============================================================

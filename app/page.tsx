@@ -4,7 +4,7 @@ import { getPublicOverview } from "@/services/public-data.server";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Value90 | Rendimiento y valor del fútbol", description: "Rankings y datos reales de rendimiento de jugadores, equipos y competiciones de fútbol." };
+export const metadata: Metadata = { title: "Value90 | Rendimiento y valor del fútbol", description: "Consulta rankings, partidos, jugadores y equipos con datos de rendimiento Value90." };
 
 export default async function Home() {
   let initialData;

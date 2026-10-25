@@ -338,7 +338,10 @@ IDENTIFICACIÓN:
 Devuelve exclusivamente el JSON solicitado.
 `;
 
-  const content: any[] = [
+  const content: Array<
+    | { type: "input_text"; text: string }
+    | { type: "input_image"; image_url: string; detail: "high" }
+  > = [
     {
       type: "input_text",
       text: prompt,

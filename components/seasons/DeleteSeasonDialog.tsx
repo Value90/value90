@@ -22,7 +22,7 @@ export default function DeleteSeasonDialog({
       <p className="mt-3 text-sm leading-6 text-slate-600">
         ¿Seguro que quieres eliminar la temporada{" "}
         <span className="font-semibold">
-          "{season.name}"
+          &quot;{season.name}&quot;
         </span>
         ?
       </p>

@@ -23,14 +23,22 @@ interface AnalyzeRequest {
   roster?: RosterPlayer[];
 }
 
-function extractOutputText(responseData: any): string {
-  if (typeof responseData?.output_text === "string") {
-    return responseData.output_text.trim();
+interface OpenAIResponsePayload {
+  output_text?: unknown;
+  output?: Array<{
+    content?: Array<{ type?: unknown; text?: unknown }>;
+  }>;
+}
+
+function extractOutputText(responseData: unknown): string {
+  const response = responseData as OpenAIResponsePayload;
+  if (typeof response.output_text === "string") {
+    return response.output_text.trim();
   }
 
   const parts: string[] = [];
 
-  for (const outputItem of responseData?.output ?? []) {
+  for (const outputItem of response.output ?? []) {
     for (const contentItem of outputItem?.content ?? []) {
       if (
         contentItem?.type === "output_text" &&
@@ -338,7 +346,7 @@ REGLAS IMPORTANTES:
     }
 
     const parsed = parseJson(outputText) as {
-      players?: unknown;
+      players?: unknown[];
     };
 
     if (!Array.isArray(parsed.players)) {
@@ -359,11 +367,11 @@ REGLAS IMPORTANTES:
 
     const seenIds = new Set<number>();
 
-    const players = parsed.players
-      .filter((item: any) => {
-        const playerId = Number(
-          item?.playerId,
-        );
+    const players = (parsed.players as unknown[])
+      .filter((item): item is Record<string, unknown> => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+        const player = item as Record<string, unknown>;
+        const playerId = Number(player.playerId);
 
         if (!Number.isInteger(playerId)) {
           return false;
@@ -381,7 +389,7 @@ REGLAS IMPORTANTES:
 
         return true;
       })
-      .map((item: any) => {
+      .map((item) => {
         const playerId = Number(
           item.playerId,
         );

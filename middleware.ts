@@ -5,9 +5,10 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isPublicRoute = pathname === "/" || pathname === "/public" || pathname.startsWith("/public/");
   const isPublicApiRoute = pathname === "/api/public" || pathname.startsWith("/api/public/");
+  const isPublicCrawlerFile = pathname === "/ads.txt" || pathname === "/robots.txt" || pathname === "/sitemap.xml";
 
   // Public pages do not need a Supabase auth round trip on every navigation.
-  if (isPublicRoute || isPublicApiRoute) {
+  if (isPublicRoute || isPublicApiRoute || isPublicCrawlerFile) {
     return NextResponse.next({ request });
   }
 

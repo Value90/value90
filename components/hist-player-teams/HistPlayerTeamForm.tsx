@@ -1218,7 +1218,7 @@ export default function HistPlayerTeamForm({
                     {playerSearch && (
                       <span className="break-words">
                         Filtrado por:{" "}
-                        <strong>"{playerSearch}"</strong>
+                        <strong>&quot;{playerSearch}&quot;</strong>
                       </span>
                     )}
                   </div>

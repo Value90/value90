@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   getSeasons,
@@ -331,6 +331,16 @@ export default function MatchDataPage() {
 
   const [analysisPlayers, setAnalysisPlayers] =
     useState<AnalysisPlayer[]>([]);
+  const ratingReviewSectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (analysisPlayers.length > 0) {
+      ratingReviewSectionRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    }
+  }, [analysisPlayers.length]);
 
   const [originalAnalysisPlayers, setOriginalAnalysisPlayers] =
     useState<AnalysisPlayer[]>([]);
@@ -1035,24 +1045,9 @@ export default function MatchDataPage() {
     });
   }
 
-  function clearAnalysisImages() {
-    revokeImagePreviewUrls(images);
-    setImages({});
-    setAnalysisPlayers([]);
-    setOriginalAnalysisPlayers([]);
-    setRecognitionResultId(null);
-    setAnalysisSources([]);
-  }
-
   function resetToNewRecord() {
     // Liberamos las URL de previsualización.
-    Object.values(images).forEach(
-      (sourceImages) => {
-        sourceImages?.forEach((image) => {
-          URL.revokeObjectURL(image.previewUrl);
-        });
-      }
-    );
+    revokeImagePreviewUrls(images);
 
     // Limpiamos también los mensajes anteriores.
     setError(null);
@@ -1770,7 +1765,7 @@ export default function MatchDataPage() {
           ======================================================== */}
 
       {analysisPlayers.length > 0 && (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <section ref={ratingReviewSectionRef} className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
             <div>
               <h2 className="text-lg font-semibold text-slate-800">

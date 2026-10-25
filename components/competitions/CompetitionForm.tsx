@@ -21,6 +21,22 @@ interface CompetitionFormProps {
   onSaved?: () => void;
 }
 
+function getDefaultV90Weight(
+  competitionName: string,
+  type: Competition["competitionType"],
+): number {
+  if (type !== "League") return 1;
+  const league1Names = new Set([
+    "laliga",
+    "la liga",
+    "premier league",
+    "serie a",
+    "bundesliga",
+    "ligue 1",
+  ]);
+  return league1Names.has(competitionName.trim().toLowerCase()) ? 1.08 : 1.05;
+}
+
 export default function CompetitionForm({
   competition,
   onClose,
@@ -138,34 +154,8 @@ export default function CompetitionForm({
    * ============================================================
    */
 
-  const getDefaultV90Weight = (
-    competitionName: string,
-    type: Competition["competitionType"]
-  ): number => {
-    if (type !== "League") {
-      return 1.00;
-    }
-
-    const league1Names = new Set([
-      "laliga",
-      "la liga",
-      "premier league",
-      "serie a",
-      "bundesliga",
-      "ligue 1",
-    ]);
-
-    const normalizedName = competitionName
-      .trim()
-      .toLowerCase();
-
-    return league1Names.has(normalizedName)
-      ? 1.08
-      : 1.05;
-  };
-
   const [v90Weight, setV90Weight] = useState(1.00);
-  const [weightLoading, setWeightLoading] = useState(false);
+  const [weightLoading, setWeightLoading] = useState(Boolean(competition));
 
   /*
    * ============================================================
@@ -174,6 +164,8 @@ export default function CompetitionForm({
    */
 
   useEffect(() => {
+    let mounted = true;
+
     if (competition) {
       setName(competition.name);
       setShortName(competition.shortName);
@@ -183,6 +175,20 @@ export default function CompetitionForm({
         competition.competitionType
       );
       setActive(competition.active);
+      setWeightLoading(true);
+      void getCompetitionWeight(competition.id)
+        .then((savedWeight) => {
+          if (mounted) {
+            setV90Weight(savedWeight ?? getDefaultV90Weight(competition.name, competition.competitionType));
+          }
+        })
+        .catch((loadError) => {
+          console.error("Error cargando el peso V90 de la competición:", loadError);
+          if (mounted) setV90Weight(getDefaultV90Weight(competition.name, competition.competitionType));
+        })
+        .finally(() => {
+          if (mounted) setWeightLoading(false);
+        });
     } else {
       setName("");
       setShortName("");
@@ -190,9 +196,12 @@ export default function CompetitionForm({
       setConfederation("");
       setCompetitionType("League");
       setActive(true);
+      setV90Weight(getDefaultV90Weight("", "League"));
+      setWeightLoading(false);
     }
 
     setError("");
+    return () => { mounted = false; };
   }, [competition]);
 
   /*

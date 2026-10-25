@@ -38,11 +38,6 @@ import {
 } from "@/services/match.service";
 
 import {
-  getParticipations,
-  type Participation,
-} from "@/services/participation.service";
-
-import {
   getTeams,
   type Team,
 } from "@/services/team.service";
@@ -195,9 +190,6 @@ export default function DatosV90Page() {
   const [matches, setMatches] =
     useState<Match[]>([]);
 
-  const [participations, setParticipations] =
-    useState<Participation[]>([]);
-
   const [teams, setTeams] =
     useState<Team[]>([]);
 
@@ -332,14 +324,12 @@ export default function DatosV90Page() {
           competitionsData,
           stagesData,
           matchesData,
-          participationsData,
           teamsData,
         ] = await Promise.all([
           getSeasons(),
           getCompetitions(),
           getStages(),
           getMatches(),
-          getParticipations(),
           getTeams(),
         ]);
 
@@ -351,7 +341,6 @@ export default function DatosV90Page() {
         setCompetitions(competitionsData);
         setStages(stagesData);
         setMatches(matchesData);
-        setParticipations(participationsData);
         setTeams(teamsData);
       } catch (error) {
         console.error(
@@ -730,17 +719,6 @@ export default function DatosV90Page() {
    * MÉTRICAS DEL MOTOR V90
    * ============================================================
    */
-
-  const totalRatings =
-    matchRatings.length;
-
-  const ratingsWithExternalAverage =
-    useMemo(() => {
-      return matchRatings.filter(
-        (rating) =>
-          rating.externalAverage !== null
-      ).length;
-    }, [matchRatings]);
 
   const v90Total =
     v90Summary.total;

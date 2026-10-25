@@ -25,7 +25,7 @@ export default function DeletePlayerDialog({
         <p className="mt-3 text-sm leading-6 text-slate-600">
           ¿Seguro que quieres eliminar al jugador{" "}
           <span className="font-semibold text-slate-900">
-            "{player.name}"
+            &quot;{player.name}&quot;
           </span>
           ?
         </p>

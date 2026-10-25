@@ -5,6 +5,7 @@ import {
   ChangeEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -99,16 +100,6 @@ interface DetectedPlayer {
    UTILIDADES
    ============================================================ */
 
-function normalizeName(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[.'’`´]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function safeNumber(
   value: unknown,
   fallback = 0
@@ -165,6 +156,16 @@ export default function ParticipationImageImportForm({
 
   const [detectedPlayers, setDetectedPlayers] =
     useState<DetectedPlayer[]>([]);
+  const reviewSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (detectedPlayers.length > 0) {
+      reviewSectionRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    }
+  }, [detectedPlayers.length]);
 
   const [originalDetectedPlayers, setOriginalDetectedPlayers] =
     useState<DetectedPlayer[]>([]);
@@ -1845,7 +1846,7 @@ export default function ParticipationImageImportForm({
       {/* REVISIÓN */}
 
       {detectedPlayers.length > 0 && (
-        <div className="mb-5 sm:mb-6">
+        <div ref={reviewSectionRef} className="mb-5 scroll-mt-4 sm:mb-6">
           <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4">
             <p className="text-sm font-semibold text-amber-800">
               Revisión antes de guardar

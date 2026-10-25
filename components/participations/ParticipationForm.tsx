@@ -939,31 +939,6 @@ export default function ParticipationForm({
 
   /*
    * ============================================================
-   * ACTUALIZAR FILA
-   * ============================================================
-   */
-
-  const updatePlayerRow = (
-    playerId: number,
-    changes: Partial<PlayerParticipationRow>
-  ) => {
-    setPlayerRows(
-      (currentRows) =>
-        currentRows.map(
-          (row) =>
-            row.playerId ===
-            playerId
-              ? {
-                  ...row,
-                  ...changes,
-                }
-              : row
-        )
-    );
-  };
-
-  /*
-   * ============================================================
    * TITULAR
    * ============================================================
    */

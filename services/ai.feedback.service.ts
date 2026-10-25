@@ -397,6 +397,11 @@ export async function getRecognitionAccuracySummary(
 
   const groups = new Map<string, RecognitionAccuracyMetric>();
   for (const row of rows) {
+    // Count one captain review per team: only the manually confirmed captain
+    // is a denominator case; other players' false flags must not inflate it.
+    if (row.recognition_type === "participations" && row.field_name === "captain") {
+      if (row.corrected_value !== true) continue;
+    }
     const key = `${row.recognition_type}:${row.field_name}`;
     const metric = groups.get(key) ?? {
       recognitionType: row.recognition_type,
@@ -406,7 +411,11 @@ export async function getRecognitionAccuracySummary(
       accuracy: 0,
     };
     metric.reviewed += 1;
-    if (JSON.stringify(row.detected_value) === JSON.stringify(row.corrected_value)) {
+    const isCorrect =
+      row.recognition_type === "participations" && row.field_name === "captain"
+        ? row.detected_value === true
+        : JSON.stringify(row.detected_value) === JSON.stringify(row.corrected_value);
+    if (isCorrect) {
       metric.correct += 1;
     }
     metric.accuracy = Math.round((metric.correct / metric.reviewed) * 100);

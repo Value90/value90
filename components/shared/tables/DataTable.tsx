@@ -19,7 +19,7 @@ import {
 
 interface DataTableProps<TData> {
   data: TData[];
-  columns: ColumnDef<TData, any>[];
+  columns: ColumnDef<TData, unknown>[];
 
   /*
    * ============================================================

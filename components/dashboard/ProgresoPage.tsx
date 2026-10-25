@@ -334,7 +334,7 @@ export default function ProgresoPage() {
         });
     }
 
-    let filteredTeams = teams.filter((team) => {
+    const filteredTeams = teams.filter((team) => {
       if (selectedCompetitionId === "") {
         return (
           team.competitionId !== null &&

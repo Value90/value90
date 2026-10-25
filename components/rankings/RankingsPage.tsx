@@ -69,23 +69,6 @@ interface RankingTotal {
   matches: number;
 }
 
-interface RankingHistorical {
-  id: number;
-  playerId: number;
-  playerName: string;
-
-  match: string;
-  team: string;
-
-  marca: number | null;
-  as: number | null;
-  sofascore: number | null;
-  flashscore: number | null;
-  externalAverage: number | null;
-  value90MatchRating: number | null;
-  finalMatchRating: number | null;
-}
-
 export default function RankingsPage() {
   /*
    * ============================================================
