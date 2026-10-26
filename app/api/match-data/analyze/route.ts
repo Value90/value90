@@ -220,78 +220,42 @@ function sameTeam(
   );
 }
 
-function findRosterPlayer(
-  row: ExtractedRow,
-  roster: RosterPlayer[],
-): RosterPlayer | undefined {
-  const rowName = normalizeName(row.playerName);
-
-  if (row.shirtNumber !== null) {
-    const byShirt = roster.filter(
-      (player) =>
-        player.shirtNumber === row.shirtNumber &&
-        sameTeam(row, player),
-    );
-
-    if (byShirt.length === 1) {
-      return byShirt[0];
+function findRosterPlayer(row: ExtractedRow, roster: RosterPlayer[]): RosterPlayer | undefined {
+  const normalized = normalizeName(row.playerName);
+  const levenshtein = (left: string, right: string) => {
+    const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= left.length; i += 1) {
+      let diagonal = previous[0]; previous[0] = i;
+      for (let j = 1; j <= right.length; j += 1) {
+        const above = previous[j];
+        previous[j] = Math.min(previous[j] + 1, previous[j - 1] + 1, diagonal + (left[i - 1] === right[j - 1] ? 0 : 1));
+        diagonal = above;
+      }
     }
-  }
-
-  const exact = roster.filter((player) => {
-    const names = [
-      normalizeName(player.playerName),
-      normalizeName(player.shortName),
-    ];
-
-    return names.includes(rowName) && sameTeam(row, player);
-  });
-
-  if (exact.length === 1) {
-    return exact[0];
-  }
-
-  const words = rowName
-    .split(" ")
-    .filter((word) => word.length >= 3);
-
-  if (!words.length) {
-    return undefined;
-  }
-
-  const candidates = roster
-    .filter((player) => sameTeam(row, player))
-    .map((player) => {
-      const names = [
-        normalizeName(player.playerName),
-        normalizeName(player.shortName),
-      ];
-
-      const score = Math.max(
-        ...names.map((name) =>
-          words.filter((word) =>
-            name.split(" ").includes(word),
-          ).length,
-        ),
-      );
-
-      return {
-        player,
-        score,
-      };
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  if (
-    candidates.length === 1 ||
-    (candidates.length > 1 &&
-      candidates[0].score > candidates[1].score)
-  ) {
-    return candidates[0].player;
-  }
-
-  return undefined;
+    return previous[right.length];
+  };
+  const nameScore = (value: string) => {
+    const candidate = normalizeName(value);
+    if (!normalized || !candidate) return 0;
+    if (normalized === candidate) return 1;
+    if (normalized.length >= 4 && (candidate.includes(normalized) || normalized.includes(candidate))) return 0.88;
+    const leftWords = normalized.split(" ").filter((word) => word.length > 1);
+    const rightWords = candidate.split(" ").filter((word) => word.length > 1);
+    const tokens = leftWords.filter((word) => rightWords.includes(word)).length / Math.max(leftWords.length, rightWords.length, 1);
+    const left = normalized.replace(/\s/g, "");
+    const right = candidate.replace(/\s/g, "");
+    return Math.max(tokens, (1 - levenshtein(left, right) / Math.max(left.length, right.length, 1)) * 0.85);
+  };
+  const candidates = roster.filter((player) => sameTeam(row, player)).map((player) => {
+    const similarity = Math.max(nameScore(player.playerName), nameScore(player.shortName));
+    const shirtMatches = row.shirtNumber !== null && player.shirtNumber === row.shirtNumber;
+    return { player, similarity, score: similarity + (shirtMatches ? 0.35 : 0), shirtMatches };
+  }).sort((a, b) => b.score - a.score);
+  const best = candidates[0];
+  if (!best || best.score < 0.58) return undefined;
+  if (best.similarity < 0.5 && !(best.shirtMatches && best.similarity >= 0.25)) return undefined;
+  if (candidates[1] && best.score - candidates[1].score < 0.12) return undefined;
+  return best.player;
 }
 
 async function analyzeSource(
@@ -326,14 +290,16 @@ No copies un valor si no aparece respaldado por la imagen actual.
 
 ${sourceRules[source]}
 
-IDENTIFICACIÓN:
-- Usa el nombre visible y el dorsal si aparece.
+LECTURA DE LA CAPTURA:
+- Recorre todas las filas visibles, incluidas las situadas en los bordes.
+- Transcribe el nombre aunque sea parcial; no omitas una fila porque el dorsal no se lea.
+- Lee la valoración desde su columna o símbolo específico.
 - El equipo solo puede ser home, away o unknown.
 - Marca isCaptain=true únicamente si el nombre aparece precedido por '(c)' o una marca inequívoca equivalente.
 - No deduzcas el capitán por posición, brazalete u orden.
 - Si una fila no se puede leer con seguridad, conserva el jugador si se identifica, pero usa rating=null.
-- Las imágenes adjuntas son complementarias y no deben generar duplicados.
-- Si hay contradicción entre imágenes, usa rating=null y explica la contradicción.
+- Devuelve una sola fila por jugador si aparece repetido en esta captura.
+- No inventes filas ni valoraciones que no aparezcan en esta captura.
 
 Devuelve exclusivamente el JSON solicitado.
 `;
@@ -356,42 +322,26 @@ Devuelve exclusivamente el JSON solicitado.
     });
   }
 
-  const response = await openai.responses.create({
-    model: process.env.OPENAI_VISION_MODEL ?? "gpt-4o",
-    store: false,
-    input: [
-      {
-        role: "user",
-        content,
-      },
-    ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: `${source}_rating_extraction`,
-        strict: true,
-        schema: extractionSchema,
-      },
-    },
-  });
-
-  if (!response.output_text) {
-    throw new Error(
-      `El modelo no devolvió resultados para ${sourceLabels[source]}.`,
-    );
-  }
-
-  const parsed = JSON.parse(response.output_text) as {
-    players: ExtractedRow[];
+  const runExtraction = async (retry: boolean) => {
+    const requestContent = retry
+      ? [...content, { type: "input_text" as const, text: "Vuelve a revisar esta captura, prestando especial atencion a todas las filas y a la columna de valoraciones. Devuelve cada valor visible; usa null solo cuando el dato no aparezca o no se distinga." }]
+      : content;
+    const response = await openai.responses.create({
+      model: process.env.OPENAI_VISION_MODEL ?? "gpt-4o",
+      store: false,
+      input: [{ role: "user", content: requestContent }],
+      text: { format: { type: "json_schema", name: source + "_rating_extraction", strict: true, schema: extractionSchema } },
+    });
+    if (!response.output_text) throw new Error("El modelo no devolvio resultados para " + sourceLabels[source] + ".");
+    const parsed = JSON.parse(response.output_text) as { players: ExtractedRow[] };
+    return parsed.players.map((row) => ({ ...row, rating: normalizeRating(source, row.rating) }));
   };
-
-  return parsed.players.map((row) => ({
-    ...row,
-    rating: normalizeRating(source, row.rating),
-  }));
+  const firstPass = await runExtraction(false);
+  return firstPass.some((row) => row.rating !== null) ? firstPass : runExtraction(true);
 }
 
 export async function POST(request: Request) {
+  const analysisStartedAt = Date.now();
   try {
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -510,15 +460,14 @@ export async function POST(request: Request) {
       if (grouped[source].length > 0) {
         extractedBySource.set(
           source,
-          await analyzeSource(
-            source,
-            grouped[source],
-            {
-              ...body,
-              roster,
-            },
-            learningContext,
-          ),
+          (await Promise.all(
+            grouped[source].map((image) => analyzeSource(
+              source,
+              [image],
+              { ...body, roster },
+              learningContext,
+            )),
+          )).flat(),
         );
       }
     }
@@ -574,6 +523,19 @@ export async function POST(request: Request) {
       }
     }
 
+    const diagnostics = Object.fromEntries(
+      [...extractedBySource.entries()].map(([source, rows]) => [
+        source,
+        {
+          extractedRows: rows.length,
+          ratedRows: rows.filter((row) => row.rating !== null).length,
+          unmatchedPlayers: rows
+            .filter((row) => !findRosterPlayer(row, roster))
+            .map((row) => row.playerName || "Nombre ilegible"),
+        },
+      ]),
+    );
+
     let recognitionResultId: number | null = null;
 
     try {
@@ -587,6 +549,7 @@ export async function POST(request: Request) {
               extractedBySource,
             ),
             players: results,
+            diagnostics,
           },
           requestContext: {
             match: body.match,
@@ -616,8 +579,10 @@ export async function POST(request: Request) {
       success: true,
       recognitionResultId,
       players: results,
+      diagnostics,
       sourcesAnalyzed: [...extractedBySource.keys()],
       imagesAnalyzed: images.length,
+      analysisDurationMs: Date.now() - analysisStartedAt,
       imagesBySource: Object.fromEntries(
         Object.entries(grouped).map(
           ([source, sourceImages]) => [

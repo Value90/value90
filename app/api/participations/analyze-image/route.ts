@@ -119,11 +119,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!Array.isArray(body.roster) || body.roster.length === 0) {
+    if (!Array.isArray(body.roster)) {
       return NextResponse.json(
         {
           error:
-            "No se han recibido jugadores de las plantillas.",
+            "No se ha recibido una plantilla válida para analizar.",
         },
         { status: 400 },
       );
@@ -187,7 +187,7 @@ Utiliza este contexto únicamente como ayuda para evitar errores repetidos. No c
 
 REGLAS IMPORTANTES:
 
-1. Identifica a los jugadores utilizando EXCLUSIVAMENTE los playerId de la lista de plantillas proporcionada. No inventes IDs.
+1. En "players", usa exclusivamente playerId de la plantilla y no inventes IDs. Si un participante visible no coincide con ninguna persona de la plantilla, inclúyelo en "unmatchedPlayers" con nombre legible y teamSide home/away. No inventes nombres ni repitas personas entre las listas; omite nombres ilegibles.
 
 2. Identifica qué jugadores fueron titulares y cuáles fueron suplentes que realmente entraron al campo.
 
@@ -297,8 +297,27 @@ REGLAS IMPORTANTES:
                       ],
                     },
                   },
+                  unmatchedPlayers: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      properties: {
+                        name: { type: "string" },
+                        teamSide: { type: "string", enum: ["home", "away"] },
+                        shirtNumber: { type: ["integer", "null"] },
+                        isStartingXI: { type: "boolean" },
+                        substituteInMinute: { type: ["integer", "null"] },
+                        substituteOutMinute: { type: ["integer", "null"] },
+                        confidence: { type: "number" },
+                        captain: { type: "boolean" },
+                        captainConfidence: { type: "number" },
+                      },
+                      required: ["name", "teamSide", "shirtNumber", "isStartingXI", "substituteInMinute", "substituteOutMinute", "confidence", "captain", "captainConfidence"],
+                    },
+                  },
                 },
-                required: ["players"],
+                required: ["players", "unmatchedPlayers"],
               },
             },
           },
@@ -347,6 +366,7 @@ REGLAS IMPORTANTES:
 
     const parsed = parseJson(outputText) as {
       players?: unknown[];
+      unmatchedPlayers?: unknown[];
     };
 
     if (!Array.isArray(parsed.players)) {
@@ -465,6 +485,39 @@ REGLAS IMPORTANTES:
         };
       });
 
+    const normalizedRosterNames = new Set(
+      body.roster.map((player) => player.playerName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").replace(/[^a-z0-9]/g, "")),
+    );
+    const seenUnknownNames = new Set<string>();
+    const unmatchedPlayers = (parsed.unmatchedPlayers ?? []).flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const candidate = item as Record<string, unknown>;
+      const name = typeof candidate.name === "string" ? candidate.name.trim().replace(/\s+/g, " ") : "";
+      const teamSide = candidate.teamSide === "home" || candidate.teamSide === "away" ? candidate.teamSide : null;
+      const confidence = Number(candidate.confidence);
+      if (!name || !teamSide || !Number.isFinite(confidence) || confidence < 0.65) return [];
+      const normalizedName = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").replace(/[^a-z0-9]/g, "");
+      const dedupeKey = `${teamSide}:${normalizedName}`;
+      if (normalizedRosterNames.has(normalizedName) || seenUnknownNames.has(dedupeKey)) return [];
+      seenUnknownNames.add(dedupeKey);
+      const safeMinute = (value: unknown) => {
+        const minute = Number(value);
+        return Number.isInteger(minute) && minute >= 0 && minute <= matchDuration ? minute : null;
+      };
+      const shirtNumber = Number(candidate.shirtNumber);
+      const captainConfidence = Number(candidate.captainConfidence);
+      return [{
+        name,
+        teamSide,
+        shirtNumber: Number.isInteger(shirtNumber) && shirtNumber > 0 && shirtNumber <= 99 ? shirtNumber : null,
+        isStartingXI: candidate.isStartingXI === true,
+        substituteInMinute: safeMinute(candidate.substituteInMinute),
+        substituteOutMinute: safeMinute(candidate.substituteOutMinute),
+        confidence,
+        captain: candidate.captain === true,
+        captainConfidence: Number.isFinite(captainConfidence) ? Math.max(0, Math.min(1, captainConfidence)) : 0,
+      }];
+    }).slice(0, 30);
     let recognitionResultId:
       number | null = null;
 
@@ -491,6 +544,7 @@ REGLAS IMPORTANTES:
 
             rawResponse: {
               players,
+              unmatchedPlayers,
             },
 
             requestContext: {
@@ -560,6 +614,7 @@ REGLAS IMPORTANTES:
 
     return NextResponse.json({
       players,
+      unmatchedPlayers,
       recognitionResultId,
     });
   } catch (error) {

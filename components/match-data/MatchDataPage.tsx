@@ -1014,8 +1014,24 @@ export default function MatchDataPage() {
           []) as RatingSource[]
       );
 
+      const recognizedCount = Number(data.recognizedCount ?? 0);
+      const ratingDiagnostics = data.diagnostics as
+        | Record<string, { unmatchedPlayers?: string[]; ratedRows?: number }>
+        | undefined;
+      const sourceDiagnostics = Object.values(ratingDiagnostics ?? {});
+      const unmatchedNames = sourceDiagnostics.flatMap(
+        (source) => source.unmatchedPlayers ?? []
+      );
+      const extractedRatedCount = sourceDiagnostics.reduce(
+        (total, source) => total + Number(source.ratedRows ?? 0),
+        0
+      );
       setMessage(
-        `Análisis completado. Se han procesado ${imagePayload.length} imagen(es).`
+        recognizedCount > 0
+          ? "Análisis completado: " + recognizedCount + " jugador(es) con valoración asignada de " + extractedRatedCount + " lectura(s) válida(s). Tiempo de análisis: " + Number(data.analysisDurationMs ?? 0) + " ms. Se han procesado " + imagePayload.length + " imagen(es)." + (unmatchedNames.length ? " No se pudieron asociar " + unmatchedNames.length + " fila(s): " + [...new Set(unmatchedNames)].slice(0, 5).join(", ") + "." : "")
+          : extractedRatedCount > 0
+            ? "La IA detectó " + extractedRatedCount + " valoración(es), pero no pudo asociarlas a la plantilla cargada. Revisa participaciones, nombres y dorsales."
+            : "No se detectaron valoraciones legibles en " + imagePayload.length + " imagen(es). Comprueba que la columna de valoraciones se vea con claridad e inténtalo de nuevo."
       );
     } catch (err) {
       console.error(

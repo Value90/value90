@@ -9,6 +9,16 @@ interface SidebarProps {
   loggingOut?: boolean;
 }
 
+const configurationItems = [
+  { id: "settings", label: "General" },
+  { id: "countries", label: "Países" },
+  { id: "stages", label: "Jornadas / Fases" },
+  { id: "competitions", label: "Competiciones" },
+  { id: "seasons", label: "Temporadas" },
+  { id: "positions", label: "Posiciones" },
+];
+const configurationPages = ["settings", ...configurationItems.map((item) => item.id)];
+
 export default function Sidebar({
   page,
   setPage,
@@ -16,6 +26,9 @@ export default function Sidebar({
   loggingOut = false,
 }: SidebarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [configurationOpen, setConfigurationOpen] = useState(
+    configurationPages.includes(page)
+  );
 
   useEffect(() => {
     const handleNavigatePage = (event: Event) => {
@@ -34,9 +47,7 @@ export default function Sidebar({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && mobileMenuOpen) {
-        setMobileMenuOpen(false);
-      }
+      if (event.key === "Escape" && mobileMenuOpen) setMobileMenuOpen(false);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -49,6 +60,10 @@ export default function Sidebar({
       document.body.style.overflow = "";
     };
   }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (configurationPages.includes(page)) setConfigurationOpen(true);
+  }, [page]);
 
   const handlePageChange = (targetPage: string) => {
     setPage(targetPage);
@@ -68,12 +83,6 @@ export default function Sidebar({
     { id: "market", label: "Mercado" },
     { id: "players", label: "Jugadores" },
     { id: "teams", label: "Equipos" },
-    { id: "countries", label: "Países" },
-    { id: "stages", label: "Jornadas / Fases" },
-    { id: "competitions", label: "Competiciones" },
-    { id: "seasons", label: "Temporadas" },
-    { id: "positions", label: "Posiciones" },
-    { id: "settings", label: "Configuración" },
   ];
 
   return (
@@ -109,12 +118,13 @@ export default function Sidebar({
           </div>
         </div>
 
-        <nav className="flex flex-col gap-1 p-3">
+        <nav className="flex flex-col gap-1 p-3" aria-label="Navegación de administración">
           {menu.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => handlePageChange(item.id)}
+              aria-current={page === item.id ? "page" : undefined}
               className={`w-full cursor-pointer rounded-lg p-3 text-left text-sm transition ${
                 page === item.id
                   ? "bg-slate-700 text-white"
@@ -124,6 +134,43 @@ export default function Sidebar({
               {item.label}
             </button>
           ))}
+
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                setConfigurationOpen((open) => !open);
+              }}
+              aria-expanded={configurationOpen}
+              className={`flex w-full items-center justify-between rounded-lg p-3 text-left text-sm transition ${
+                configurationPages.includes(page)
+                  ? "bg-slate-700 text-white"
+                  : "text-slate-200 hover:bg-slate-700 hover:text-white"
+              }`}
+            >
+              <span>Configuración</span>
+              <span aria-hidden="true" className="text-xs">{configurationOpen ? "▲" : "▼"}</span>
+            </button>
+            {configurationOpen && (
+              <div className="ml-3 mt-1 space-y-1 border-l border-slate-600 pl-3">
+                {configurationItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handlePageChange(item.id)}
+                    aria-current={page === item.id ? "page" : undefined}
+                    className={`w-full rounded-lg p-3 text-left text-sm transition ${
+                      page === item.id
+                        ? "bg-slate-700 text-white"
+                        : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
 
         <div className="border-t border-slate-700 p-3">

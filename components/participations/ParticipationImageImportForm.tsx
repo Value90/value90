@@ -30,6 +30,8 @@ import {
 } from "@/services/match.service";
 
 import {
+  addPlayer,
+  deletePlayer,
   getPlayers,
   type Player,
 } from "@/services/player.service";
@@ -39,12 +41,15 @@ import {
   type Team,
 } from "@/services/team.service";
 
+import { getCountries, type Country } from "@/services/country.service";
+
 import {
   getPositions,
   type Position,
 } from "@/services/position.service";
 
 import {
+  addHistPlayerTeam,
   getHistPlayerTeams,
   type HistPlayerTeam,
 } from "@/services/hist-player-team.service";
@@ -79,6 +84,30 @@ interface RosterCandidate {
   positionId: number | null;
 }
 
+interface UnmatchedDetectedPlayer {
+  name: string;
+  teamSide: "home" | "away";
+  shirtNumber: number | null;
+  isStartingXI: boolean;
+  substituteInMinute: number | null;
+  substituteOutMinute: number | null;
+  confidence: number;
+  captain: boolean;
+  captainConfidence: number;
+}
+
+interface NewPlayerDraft {
+  name: string;
+  shortName: string;
+  countryId: string;
+  birthDate: string;
+  teamSide: "home" | "away";
+  shirtNumber: string;
+  positionId: string;
+  isStartingXI: boolean;
+  substituteInMinute: string;
+  substituteOutMinute: string;
+}
 interface DetectedPlayer {
   playerId: number;
   playerName: string;
@@ -109,6 +138,12 @@ function safeNumber(
   return Number.isFinite(number) ? number : fallback;
 }
 
+function suggestPlayerShortName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return fullName.trim();
+  return `${parts[0][0].toLocaleUpperCase("es")}. ${parts[parts.length - 1]}`;
+}
+
 /* ============================================================
    COMPONENTE
    ============================================================ */
@@ -131,6 +166,7 @@ export default function ParticipationImageImportForm({
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
   const [histPlayerTeams, setHistPlayerTeams] =
     useState<HistPlayerTeam[]>([]);
 
@@ -156,6 +192,10 @@ export default function ParticipationImageImportForm({
 
   const [detectedPlayers, setDetectedPlayers] =
     useState<DetectedPlayer[]>([]);
+  const [unmatchedPlayers, setUnmatchedPlayers] = useState<UnmatchedDetectedPlayer[]>([]);
+  const [unknownPlayerIndex, setUnknownPlayerIndex] = useState<number | null>(null);
+  const [unknownDraft, setUnknownDraft] = useState<NewPlayerDraft | null>(null);
+  const [unknownPlayerError, setUnknownPlayerError] = useState("");
   const reviewSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -167,6 +207,36 @@ export default function ParticipationImageImportForm({
     }
   }, [detectedPlayers.length]);
 
+  useEffect(() => {
+    if (unknownPlayerIndex === null) {
+      setUnknownDraft(null);
+      return;
+    }
+    const candidate = unmatchedPlayers[unknownPlayerIndex];
+    if (!candidate) return;
+    setUnknownPlayerError("");
+    setUnknownDraft({
+      name: candidate.name,
+      shortName: suggestPlayerShortName(candidate.name),
+      countryId: "",
+      birthDate: "",
+      teamSide: candidate.teamSide,
+      shirtNumber: candidate.shirtNumber?.toString() ?? "",
+      positionId: "",
+      isStartingXI: candidate.isStartingXI,
+      substituteInMinute: candidate.substituteInMinute?.toString() ?? "",
+      substituteOutMinute: candidate.substituteOutMinute?.toString() ?? "",
+    });
+  }, [unknownPlayerIndex, unmatchedPlayers]);
+
+  useEffect(() => {
+    if (unknownPlayerIndex === null) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [unknownPlayerIndex]);
   const [originalDetectedPlayers, setOriginalDetectedPlayers] =
     useState<DetectedPlayer[]>([]);
 
@@ -204,6 +274,7 @@ export default function ParticipationImageImportForm({
           teamsData,
           positionsData,
           historyData,
+          countriesData,
         ] = await Promise.all([
           getSeasons(),
           getCompetitions(),
@@ -213,6 +284,7 @@ export default function ParticipationImageImportForm({
           getTeams(),
           getPositions(),
           getHistPlayerTeams(),
+          getCountries(),
         ]);
 
         if (!mounted) return;
@@ -225,6 +297,7 @@ export default function ParticipationImageImportForm({
         setTeams(teamsData);
         setPositions(positionsData);
         setHistPlayerTeams(historyData);
+        setCountries(countriesData);
       } catch (err) {
         console.error("Error cargando datos:", err);
 
@@ -468,6 +541,10 @@ export default function ParticipationImageImportForm({
     setDetectedPlayers([]);
     setOriginalDetectedPlayers([]);
     setRecognitionResultId(null);
+    setUnmatchedPlayers([]);
+    setUnknownPlayerIndex(null);
+    setUnknownDraft(null);
+    setUnknownPlayerError("");
     setError("");
     setMessage("");
   };
@@ -520,6 +597,10 @@ export default function ParticipationImageImportForm({
     setDetectedPlayers([]);
     setOriginalDetectedPlayers([]);
     setRecognitionResultId(null);
+    setUnmatchedPlayers([]);
+    setUnknownPlayerIndex(null);
+    setUnknownDraft(null);
+    setUnknownPlayerError("");
 
     if (!file) {
       setImagePreview("");
@@ -593,14 +674,7 @@ export default function ParticipationImageImportForm({
       return;
     }
 
-    if (rosterCandidates.length === 0) {
-      setError(
-        "No hay jugadores registrados en las plantillas de los dos equipos para esta temporada."
-      );
-      return;
-    }
-
-    setAnalyzing(true);
+setAnalyzing(true);
 
     try {
       const response = await fetch(
@@ -642,6 +716,30 @@ export default function ParticipationImageImportForm({
         );
       }
 
+      const unknownCandidates: UnmatchedDetectedPlayer[] = Array.isArray(data.unmatchedPlayers)
+        ? data.unmatchedPlayers.flatMap((item: unknown) => {
+            if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+            const candidate = item as Record<string, unknown>;
+            if (typeof candidate.name !== "string" || !candidate.name.trim()) return [];
+            if (candidate.teamSide !== "home" && candidate.teamSide !== "away") return [];
+            const confidence = safeNumber(candidate.confidence);
+            if (confidence < 0.65) return [];
+            return [{
+              name: candidate.name.trim(),
+              teamSide: candidate.teamSide,
+              shirtNumber: Number.isInteger(Number(candidate.shirtNumber)) ? Number(candidate.shirtNumber) : null,
+              isStartingXI: candidate.isStartingXI === true,
+              substituteInMinute: Number.isInteger(Number(candidate.substituteInMinute)) ? Number(candidate.substituteInMinute) : null,
+              substituteOutMinute: Number.isInteger(Number(candidate.substituteOutMinute)) ? Number(candidate.substituteOutMinute) : null,
+              confidence,
+              captain: candidate.captain === true,
+              captainConfidence: safeNumber(candidate.captainConfidence),
+            }];
+          })
+        : [];
+      setUnmatchedPlayers(unknownCandidates);
+      setUnknownPlayerIndex(unknownCandidates.length > 0 ? 0 : null);
+      setUnknownPlayerError("");
       setRecognitionResultId(
         Number.isInteger(data.recognitionResultId)
           ? data.recognitionResultId
@@ -780,7 +878,7 @@ export default function ParticipationImageImportForm({
       ).length;
 
       setMessage(
-        `Se han cargado ${detected.length} jugadores. La IA ha identificado ${recognizedCount}. Revisa los datos antes de guardar.`
+        `Se han cargado ${detected.length} jugadores de la plantilla. La IA ha identificado ${recognizedCount}${unknownCandidates.length > 0 ? ` y ha detectado ${unknownCandidates.length} posible(s) jugador(es) nuevo(s)` : ""}. Revisa los datos antes de guardar.`
       );
     } catch (err) {
       console.error("Error analizando imagen:", err);
@@ -916,6 +1014,88 @@ export default function ParticipationImageImportForm({
      GUARDAR PARTICIPACIONES
      ========================================================== */
 
+  const skipUnknownPlayer = () => {
+    if (unknownPlayerIndex === null) return;
+    const nextIndex = unknownPlayerIndex + 1;
+    setUnknownPlayerIndex(nextIndex < unmatchedPlayers.length ? nextIndex : null);
+  };
+
+  const handleCreateUnknownPlayer = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!unknownDraft || unknownPlayerIndex === null || !selectedMatch) return;
+    const name = unknownDraft.name.trim();
+    const shortName = unknownDraft.shortName.trim() || suggestPlayerShortName(name);
+    const positionId = Number(unknownDraft.positionId);
+    const shirtNumber = unknownDraft.shirtNumber ? Number(unknownDraft.shirtNumber) : null;
+    const substituteInMinute = unknownDraft.substituteInMinute ? Number(unknownDraft.substituteInMinute) : null;
+    const substituteOutMinute = unknownDraft.substituteOutMinute ? Number(unknownDraft.substituteOutMinute) : null;
+    if (!name) { setUnknownPlayerError("Introduce el nombre del jugador."); return; }
+    if (!Number.isInteger(positionId) || positionId <= 0) { setUnknownPlayerError("Selecciona la posición del jugador."); return; }
+    if (shirtNumber !== null && (!Number.isInteger(shirtNumber) || shirtNumber < 1 || shirtNumber > 99)) { setUnknownPlayerError("El dorsal debe estar entre 1 y 99."); return; }
+    if (!unknownDraft.isStartingXI && (!Number.isInteger(substituteInMinute) || substituteInMinute! < 0 || substituteInMinute! > matchDuration)) { setUnknownPlayerError("Indica el minuto en el que entró el suplente."); return; }
+    if (substituteOutMinute !== null && (!Number.isInteger(substituteOutMinute) || substituteOutMinute < 0 || substituteOutMinute > matchDuration)) { setUnknownPlayerError("El minuto de salida debe estar dentro de la duración del partido."); return; }
+
+    const teamId = unknownDraft.teamSide === "home" ? selectedMatch.homeTeamId : selectedMatch.awayTeamId;
+    const detected = unmatchedPlayers[unknownPlayerIndex];
+    let createdPlayer: Player | null = null;
+    setSaving(true);
+    setUnknownPlayerError("");
+    try {
+      createdPlayer = await addPlayer({
+        name,
+        shortName,
+        countryId: unknownDraft.countryId ? Number(unknownDraft.countryId) : null,
+        birthDate: unknownDraft.birthDate || null,
+        active: true,
+      });
+      let membership: HistPlayerTeam;
+      try {
+        membership = await addHistPlayerTeam({
+          playerId: createdPlayer.id,
+          teamId,
+          seasonId,
+          shirtNumber,
+          positionId,
+          startDate: selectedMatch.date ? new Date(selectedMatch.date).toISOString().slice(0, 10) : null,
+          endDate: null,
+          active: true,
+        });
+      } catch (membershipError) {
+        await deletePlayer(createdPlayer.id).catch((rollbackError) => {
+          console.error("No se pudo revertir el jugador sin plantilla:", rollbackError);
+        });
+        throw membershipError;
+      }
+      const playerRow: DetectedPlayer = {
+        playerId: createdPlayer.id,
+        playerName: createdPlayer.name,
+        shortName: createdPlayer.shortName,
+        teamId,
+        teamSide: unknownDraft.teamSide,
+        shirtNumber,
+        positionId,
+        isStartingXI: unknownDraft.isStartingXI,
+        participationState: unknownDraft.isStartingXI ? "starter" : "substitute",
+        substituteInMinute: unknownDraft.isStartingXI ? null : substituteInMinute,
+        substituteOutMinute,
+        confidence: detected.confidence,
+        captain: detected.captain,
+        captainConfidence: detected.captainConfidence,
+      };
+      setPlayers((current) => [...current, createdPlayer!]);
+      setHistPlayerTeams((current) => [...current, membership]);
+      setDetectedPlayers((current) => [...current, playerRow]);
+      setOriginalDetectedPlayers((current) => [...current, { ...playerRow }]);
+      setMessage(`${createdPlayer.name} se ha creado y añadido a la plantilla del equipo para esta temporada.`);
+      const nextIndex = unknownPlayerIndex + 1;
+      setUnknownPlayerIndex(nextIndex < unmatchedPlayers.length ? nextIndex : null);
+    } catch (saveError) {
+      console.error("Error creando jugador detectado en la captura:", saveError);
+      setUnknownPlayerError(saveError instanceof Error ? saveError.message : "No se pudo crear el jugador y asignarlo a la plantilla.");
+    } finally {
+      setSaving(false);
+    }
+  };
   const handleSave = async () => {
     setError("");
     setMessage("");
@@ -1894,6 +2074,89 @@ export default function ParticipationImageImportForm({
         </div>
       )}
 
+      {unknownPlayerIndex !== null && unknownDraft && selectedMatch && (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/60 p-0 sm:items-center sm:p-4" role="presentation">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-roster-player-title"
+            className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl sm:max-h-[90vh] sm:rounded-2xl sm:p-6"
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Jugador nuevo · {unknownPlayerIndex + 1} de {unmatchedPlayers.length}</p>
+                <h2 id="new-roster-player-title" className="mt-1 text-xl font-bold text-slate-900">Completar datos y añadir a plantilla</h2>
+                <p className="mt-1 text-sm text-slate-600">La IA no ha encontrado a este jugador en la plantilla. Confirma los datos y se guardará para este equipo y temporada.</p>
+              </div>
+            </div>
+
+            {unknownPlayerError && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{unknownPlayerError}</p>}
+
+            <form onSubmit={handleCreateUnknownPlayer} className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
+                  Nombre completo <span className="text-red-600">*</span>
+                  <input required autoFocus value={unknownDraft.name} onChange={(event) => setUnknownDraft((draft) => draft ? { ...draft, name: event.target.value, shortName: suggestPlayerShortName(event.target.value) } : draft)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3" />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Nombre corto
+                  <input value={unknownDraft.shortName} onChange={(event) => setUnknownDraft((draft) => draft ? { ...draft, shortName: event.target.value } : draft)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3" />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Equipo <span className="text-red-600">*</span>
+                  <select value={unknownDraft.teamSide} onChange={(event) => setUnknownDraft((draft) => draft ? { ...draft, teamSide: event.target.value as "home" | "away" } : draft)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3">
+                    <option value="home">Local · {homeTeam?.name ?? "Equipo local"}</option>
+                    <option value="away">Visitante · {awayTeam?.name ?? "Equipo visitante"}</option>
+                  </select>
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Posición <span className="text-red-600">*</span>
+                  <select required value={unknownDraft.positionId} onChange={(event) => setUnknownDraft((draft) => draft ? { ...draft, positionId: event.target.value } : draft)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3">
+                    <option value="">Selecciona una posición</option>
+                    {positions.map((position) => <option key={position.id} value={position.id}>{position.name}</option>)}
+                  </select>
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Dorsal
+                  <input type="number" min="1" max="99" inputMode="numeric" value={unknownDraft.shirtNumber} onChange={(event) => setUnknownDraft((draft) => draft ? { ...draft, shirtNumber: event.target.value } : draft)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3" />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  País (opcional)
+                  <select value={unknownDraft.countryId} onChange={(event) => setUnknownDraft((draft) => draft ? { ...draft, countryId: event.target.value } : draft)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3">
+                    <option value="">Sin especificar</option>
+                    {countries.map((country) => <option key={country.id} value={country.id}>{country.name}</option>)}
+                  </select>
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Fecha de nacimiento (opcional)
+                  <input type="date" value={unknownDraft.birthDate} onChange={(event) => setUnknownDraft((draft) => draft ? { ...draft, birthDate: event.target.value } : draft)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3" />
+                </label>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-4">
+                <label className="flex min-h-11 items-center gap-3 text-sm font-medium text-slate-700">
+                  <input type="checkbox" checked={unknownDraft.isStartingXI} onChange={(event) => setUnknownDraft((draft) => draft ? { ...draft, isStartingXI: event.target.checked, substituteInMinute: event.target.checked ? "" : draft.substituteInMinute } : draft)} className="h-5 w-5 rounded border-slate-300 text-emerald-600" />
+                  Fue titular
+                </label>
+                {!unknownDraft.isStartingXI && (
+                  <label className="mt-3 block text-sm font-medium text-slate-700">
+                    Minuto de entrada <span className="text-red-600">*</span>
+                    <input required type="number" min="0" max={matchDuration} inputMode="numeric" value={unknownDraft.substituteInMinute} onChange={(event) => setUnknownDraft((draft) => draft ? { ...draft, substituteInMinute: event.target.value } : draft)} className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 sm:max-w-xs" />
+                  </label>
+                )}
+                {unknownDraft.substituteOutMinute && (
+                  <p className="mt-2 text-xs text-slate-500">Minuto de salida reconocido: {unknownDraft.substituteOutMinute}. Podrás corregirlo en la revisión.</p>
+                )}
+              </div>
+
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:justify-between">
+                <button type="button" onClick={skipUnknownPlayer} disabled={saving} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">Omitir por ahora</button>
+                <button type="submit" disabled={saving} className="min-h-11 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60">{saving ? "Guardando jugador…" : "Guardar y añadir a plantilla"}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
       <RecognitionAccuracySummary />
 
       {/* BOTONES */}
