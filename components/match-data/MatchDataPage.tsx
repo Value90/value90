@@ -29,6 +29,7 @@ import {
 } from "@/services/team.service";
 
 import ParticipationImageImportForm from "@/components/participations/ParticipationImageImportForm";
+import { calculateV90Stage } from "@/services/v90-engine.service";
 import RecognitionAccuracySummary from "@/components/shared/RecognitionAccuracySummary";
 
 import {
@@ -1239,6 +1240,24 @@ export default function MatchDataPage() {
         ? ""
         : " No se pudo vincular esta revisión al aprendizaje de IA.";
 
+      let autoV90Notice = "";
+      if (selectedMatch.status === "Jugado") {
+        try {
+          const calculation = await calculateV90Stage([Number(selectedMatchId)]);
+          const matchCalculation = calculation.matches[0];
+          autoV90Notice = matchCalculation
+            ? " Cálculo V90 automático: " + matchCalculation.calculated + "/" + matchCalculation.participationCount + " participaciones calculadas" + (matchCalculation.pending ? ", " + matchCalculation.pending + " pendientes" : "") + (matchCalculation.errors ? ", " + matchCalculation.errors + " con error" : "") + "."
+            : " El motor V90 no devolvió resultado; queda pendiente de revisión.";
+        } catch (calculationError) {
+          console.error("Error generando V90 automáticamente:", calculationError);
+          autoV90Notice = " Las valoraciones se guardaron, pero V90 no pudo calcularse automáticamente; puedes reintentarlo desde Datos V90.";
+        }
+      } else if (selectedMatch.status === "Cancelado") {
+        autoV90Notice = " El partido está cancelado/suspendido y se deja registrado como incidencia sin generar V90.";
+      } else {
+        autoV90Notice = " V90 se calculará automáticamente cuando el partido esté marcado como Jugado.";
+      }
+
       if (failed.length > 0) {
         setMessage(
           `Se han guardado ${saved} valoración(es) del equipo ` +
@@ -1266,6 +1285,13 @@ export default function MatchDataPage() {
       // el punto 1: Seleccionar partido.
       if (teamSide === "away") {
         resetToNewRecord();
+        setMessage(
+          "Se han guardado " + saved + " valoración(es) del equipo visitante." +
+          (failed.length ? " No se pudieron guardar " + failed.length + ": " + failed.join(", ") + "." : "") +
+          autoV90Notice + feedbackNotice
+        );
+      } else {
+        setMessage((current) => (current ?? "") + autoV90Notice);
       }
     } catch (err) {
       console.error(

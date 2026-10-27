@@ -6,6 +6,7 @@ import {
   addCompetition,
   updateCompetition,
   getCompetitionWeight,
+  getCompetitionWeightOptions,
   upsertCompetitionWeight,
   type Competition,
 } from "@/services/competition.service";
@@ -149,12 +150,14 @@ export default function CompetitionForm({
    *
    * El resto de ligas se consideran Liga 2.
    *
-   * Los pesos de competiciones que no son liga se dejan en
-   * 1.00 por defecto y pueden modificarse desde el formulario.
+   * El peso de la competición se selecciona de los valores configurados.
+   *
    * ============================================================
    */
 
   const [v90Weight, setV90Weight] = useState(1.00);
+  const [weightOptions, setWeightOptions] = useState<number[]>([]);
+  const [weightOptionsLoading, setWeightOptionsLoading] = useState(true);
   const [weightLoading, setWeightLoading] = useState(Boolean(competition));
 
   /*
@@ -162,6 +165,30 @@ export default function CompetitionForm({
    * CARGAR DATOS DE LA COMPETICIÓN
    * ============================================================
    */
+
+  useEffect(() => {
+    let mounted = true;
+    getCompetitionWeightOptions()
+      .then((weights) => {
+        if (mounted) {
+          setWeightOptions(weights);
+          if (!competition && weights.length) {
+            setV90Weight((current) => weights.includes(current) ? current : weights[0]);
+          }
+        }
+      })
+      .catch((loadError) => {
+        console.error("Error cargando los pesos de competición:", loadError);
+        if (mounted) setWeightOptions([1, 1.05, 1.08]);
+      })
+      .finally(() => { if (mounted) setWeightOptionsLoading(false); });
+    return () => { mounted = false; };
+  }, [competition]);
+
+  const availableWeightOptions = [...new Set([
+    ...(weightOptions.length ? weightOptions : [1, 1.05, 1.08]),
+    ...(competition ? [v90Weight] : []),
+  ])].sort((a, b) => a - b);
 
   useEffect(() => {
     let mounted = true;
@@ -543,22 +570,19 @@ export default function CompetitionForm({
             Peso V90 *
           </label>
 
-          <input
-            type="number"
-            min="0"
-            step="0.01"
+          <select
             value={v90Weight}
-            onChange={(event) =>
-              setV90Weight(
-                Number(event.target.value)
-              )
-            }
-            disabled={weightLoading}
+            onChange={(event) => setV90Weight(Number(event.target.value))}
+            disabled={weightLoading || weightOptionsLoading}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition disabled:bg-slate-100 focus:border-slate-500 sm:px-4"
-          />
+          >
+            {availableWeightOptions.map((weight) => (
+              <option key={weight} value={weight}>{weight.toFixed(2)}</option>
+            ))}
+          </select>
 
           <p className="mt-1.5 text-xs text-slate-500">
-            Liga 1: 1.08 · Liga 2: 1.05
+            Selecciona un peso V90 ya configurado.
           </p>
         </div>
 

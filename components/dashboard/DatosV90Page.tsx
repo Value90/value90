@@ -48,6 +48,8 @@ import {
 
 import {
   getPlayerV90MatchSummary,
+  getV90MatchStatusByMatch,
+  type V90MatchStatusSummary,
   type PlayerV90MatchSummary,
 } from "@/services/v90-match.service";
 
@@ -99,6 +101,8 @@ export default function DatosV90Page() {
   const [v90Loading, setV90Loading] =
     useState(true);
 
+  const [v90ByMatch, setV90ByMatch] = useState<Map<number, V90MatchStatusSummary>>(new Map());
+
   const [v90LoadError, setV90LoadError] =
     useState("");
 
@@ -107,6 +111,17 @@ export default function DatosV90Page() {
    * CARGAR DATOS DEL MOTOR V90
    * ============================================================
    */
+
+  useEffect(() => {
+    let mounted = true;
+    getV90MatchStatusByMatch()
+      .then((statusByMatch) => { if (mounted) setV90ByMatch(statusByMatch); })
+      .catch((error) => {
+        console.error("Error cargando incidencias V90 por partido:", error);
+        if (mounted) setV90ByMatch(new Map());
+      });
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -197,7 +212,7 @@ export default function DatosV90Page() {
     useState(true);
 
   const [calculatorOpen, setCalculatorOpen] =
-    useState(false);
+    useState(true);
 
   const [selectedSeasonId, setSelectedSeasonId] =
     useState<number | "">("");
@@ -445,6 +460,39 @@ export default function DatosV90Page() {
     stages,
   ]);
 
+  useEffect(() => {
+    if (!selectedSeasonId && availableSeasons.length) {
+      setSelectedSeasonId(availableSeasons[0].id);
+    }
+  }, [availableSeasons, selectedSeasonId]);
+
+  useEffect(() => {
+    if (selectedSeasonId && !selectedCompetitionId && availableCompetitions.length) {
+      const latestPlayedCompetition = availableCompetitions
+        .map((competition) => ({
+          competition,
+          latestPlayedDate: matches
+            .filter((match) => match.seasonId === selectedSeasonId && match.competitionId === competition.id && match.status === "Jugado" && new Date(match.date).getTime() <= Date.now())
+            .reduce((latest, match) => Math.max(latest, new Date(match.date).getTime()), 0),
+        }))
+        .sort((a, b) => b.latestPlayedDate - a.latestPlayedDate)[0]?.competition;
+      setSelectedCompetitionId((latestPlayedCompetition ?? availableCompetitions[0]).id);
+    }
+  }, [availableCompetitions, matches, selectedCompetitionId, selectedSeasonId]);
+
+  useEffect(() => {
+    if (selectedCompetitionId && !selectedStageId && availableStages.length) {
+      const latestPlayedStage = [...availableStages].reverse().find((stage) =>
+        matches.some((match) =>
+          match.stageId === stage.id &&
+          match.status === "Jugado" &&
+          new Date(match.date).getTime() <= Date.now()
+        )
+      );
+      setSelectedStageId((latestPlayedStage ?? availableStages[availableStages.length - 1]).id);
+    }
+  }, [availableStages, matches, selectedCompetitionId, selectedStageId]);
+
   const selectedSeason = useMemo(() => {
     return seasons.find(
       (season) => season.id === selectedSeasonId
@@ -471,6 +519,40 @@ export default function DatosV90Page() {
       `Equipo #${teamId}`
     );
   };
+
+  const selectedStageMatches = useMemo(
+    () => matches.filter((match) =>
+      match.seasonId === selectedSeasonId &&
+      match.competitionId === selectedCompetitionId &&
+      match.stageId === selectedStageId
+    ),
+    [matches, selectedCompetitionId, selectedSeasonId, selectedStageId],
+  );
+
+  const selectedStageSummary = useMemo(() => {
+    const statuses = selectedStageMatches.map((match) => ({
+      match,
+      status: v90ByMatch.get(match.id),
+    }));
+    return {
+      total: statuses.length,
+      calculated: statuses.filter(({ status }) => status && status.calculated > 0 && status.pending === 0 && status.errors === 0).length,
+      incidents: statuses.filter(({ match, status }) => new Date(match.date).getTime() < Date.now() && (match.status === "Cancelado" || match.status === "Programado" || (match.status === "Jugado" && (!status || status.pending > 0 || status.errors > 0)))).length,
+      average: statuses.flatMap(({ status }) => status?.average == null ? [] : [status.average]),
+    };
+  }, [selectedStageMatches, v90ByMatch]);
+
+  const pastIncidents = useMemo(() => {
+    const now = Date.now();
+    return matches
+      .filter((match) => {
+        if (match.seasonId !== selectedSeasonId || match.competitionId !== selectedCompetitionId || match.stageId !== selectedStageId) return false;
+        if (new Date(match.date).getTime() >= now) return false;
+        const status = v90ByMatch.get(match.id);
+        return match.status === "Cancelado" || match.status === "Programado" || (match.status === "Jugado" && (!status || status.pending > 0 || status.errors > 0));
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [matches, selectedCompetitionId, selectedSeasonId, selectedStageId, v90ByMatch]);
 
   const resetStageSelection = () => {
     setSelectedStageId("");
@@ -542,8 +624,27 @@ export default function DatosV90Page() {
        * realiza el cálculo en memoria. Esto evita lanzar una cadena
        * de consultas a Supabase por cada jugador.
        */
+      const playedMatches = stageMatches.filter((match) => match.status === "Jugado");
+      if (playedMatches.length === 0) {
+        setCalculationDurationMs(0);
+        setStageResults(stageMatches.map((match) => ({
+          match,
+          homeTeamName: getTeamName(match.homeTeamId),
+          awayTeamName: getTeamName(match.awayTeamId),
+          participationCount: 0,
+          participationCalculated: 0,
+          participationPending: 0,
+          participationErrors: 0,
+          ratingsCount: 0,
+          status: "PENDING" as const,
+          errors: [],
+          pendingMessages: [match.status === "Cancelado" ? "Partido cancelado o suspendido: no se genera V90." : "El partido aún no está marcado como Jugado."],
+        })));
+        return;
+      }
+
       const calculation = await calculateV90Stage(
-        stageMatches.map((match) => match.id)
+        playedMatches.map((match) => match.id)
       );
 
       setCalculationDurationMs(calculation.durationMs);
@@ -554,6 +655,22 @@ export default function DatosV90Page() {
       }
 
       const results: StageMatchResult[] = stageMatches.map((match) => {
+        if (match.status !== "Jugado") {
+          return {
+            match,
+            homeTeamName: getTeamName(match.homeTeamId),
+            awayTeamName: getTeamName(match.awayTeamId),
+            participationCount: 0,
+            participationCalculated: 0,
+            participationPending: 0,
+            participationErrors: 0,
+            ratingsCount: 0,
+            status: "PENDING" as const,
+            errors: [],
+            pendingMessages: [match.status === "Cancelado" ? "Partido cancelado o suspendido: no se genera V90." : "El partido aún no está marcado como Jugado."],
+          };
+        }
+
         const engineResult = calculation.matches.find(
           (result) => result.matchId === match.id
         );
@@ -630,6 +747,7 @@ export default function DatosV90Page() {
         ]);
 
       setMatchRatings(refreshedRatings);
+      setV90ByMatch(await getV90MatchStatusByMatch());
       setV90Summary(refreshedV90Summary);
     } catch (error) {
       console.error(
@@ -958,6 +1076,19 @@ export default function DatosV90Page() {
 
             </div>
 
+            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div><h3 className="font-bold text-slate-800">Resumen de la jornada seleccionada</h3><p className="text-sm text-slate-500">{selectedSeason?.name ?? "Temporada"} · {selectedCompetition?.name ?? "Competición"} · {selectedStage?.name ?? "Jornada"}</p></div>
+                <span className="text-xs text-slate-500">Se actualiza al guardar valoraciones o recalcular</span>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Partidos</p><p className="mt-1 text-xl font-bold text-slate-800">{selectedStageSummary.total}</p></div>
+                <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Partidos con V90 completo</p><p className="mt-1 text-xl font-bold text-emerald-700">{selectedStageSummary.calculated}</p></div>
+                <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">Pendientes o incidencias</p><p className="mt-1 text-xl font-bold text-amber-700">{selectedStageSummary.incidents}</p></div>
+                <div className="rounded-lg bg-white p-3"><p className="text-xs text-slate-500">V90 medio de jornada</p><p className="mt-1 text-xl font-bold text-slate-800">{selectedStageSummary.average.length ? (selectedStageSummary.average.reduce((sum, value) => sum + value, 0) / selectedStageSummary.average.length).toFixed(3) : "—"}</p></div>
+              </div>
+            </div>
+
             {calculatorError && (
               <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
                 {calculatorError}
@@ -1254,6 +1385,17 @@ export default function DatosV90Page() {
       {/* ======================================================
           4. RESUMEN DEL MOTOR
           ====================================================== */}
+
+      <section className="mb-8 sm:mb-10">
+        <div className="mb-4 sm:mb-5"><h2 className="text-lg font-bold text-slate-800 sm:text-xl">Incidencias de jornadas pasadas</h2><p className="mt-1 text-sm leading-5 text-slate-500">Partidos cancelados o jugados sin todos sus cálculos V90, según los datos registrados.</p></div>
+        <div className="space-y-3">
+          {pastIncidents.length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">No hay incidencias pasadas en la jornada seleccionada.</div> : pastIncidents.map((match) => {
+            const status = v90ByMatch.get(match.id);
+            const reason = match.status === "Cancelado" ? "Partido cancelado o suspendido: no se genera V90." : match.status === "Programado" ? "El partido ya pasó, pero continúa marcado como programado; confirma si fue aplazado o disputado." : !status ? "Sin cálculo V90 registrado; revisa participaciones y valoraciones." : status.errors > 0 ? status.errors + " cálculo(s) con error." : status.pending > 0 ? status.pending + " participación(es) pendiente(s) de datos necesarios." : "El cálculo del partido está incompleto.";
+            return <article key={match.id} className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="font-semibold text-slate-800">{getTeamName(match.homeTeamId)} vs {getTeamName(match.awayTeamId)}</p><p className="text-xs text-slate-500">{new Date(match.date).toLocaleDateString("es-ES")} · {selectedStage?.name}</p></div><p className="text-sm text-amber-800">{reason}</p></article>;
+          })}
+        </div>
+      </section>
 
       <section className="mb-8 sm:mb-10">
 

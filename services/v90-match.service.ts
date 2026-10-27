@@ -287,6 +287,54 @@ async function fetchPlayerV90MatchSummary(): Promise<PlayerV90MatchSummary> {
   };
 }
 
+export interface V90MatchStatusSummary {
+  calculated: number;
+  pending: number;
+  errors: number;
+  average: number | null;
+}
+
+async function fetchV90MatchStatusByMatch(): Promise<Map<number, V90MatchStatusSummary>> {
+  const pageSize = 1000;
+  const result = new Map<number, V90MatchStatusSummary>();
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("fact_player_v90_match")
+      .select("match_id,status,v90_match")
+      .eq("active", true)
+      .order("id", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw new Error("Error obteniendo incidencias V90: " + error.message);
+
+    const rows = data ?? [];
+    for (const row of rows) {
+      const matchId = Number(row.match_id);
+      const summary = result.get(matchId) ?? { calculated: 0, pending: 0, errors: 0, average: null };
+      if (row.status === "CALCULATED") {
+        summary.calculated += 1;
+        const value = Number(row.v90_match);
+        if (Number.isFinite(value)) {
+          const count = summary.calculated;
+          summary.average = ((summary.average ?? 0) * (count - 1) + value) / count;
+        }
+      } else if (row.status === "PENDING") {
+        summary.pending += 1;
+      } else if (row.status === "ERROR") {
+        summary.errors += 1;
+      }
+      result.set(matchId, summary);
+    }
+    if (rows.length < pageSize) break;
+  }
+  return result;
+}
+
+export function getV90MatchStatusByMatch(): ReturnType<typeof fetchV90MatchStatusByMatch> {
+  return dedupeRequest("v90-match.service.ts:getV90MatchStatusByMatch", fetchV90MatchStatusByMatch);
+}
+
 export function getPlayerV90MatchFacts(): ReturnType<typeof fetchPlayerV90MatchFacts> {
   return dedupeRequest("v90-match.service.ts:getPlayerV90MatchFacts", fetchPlayerV90MatchFacts);
 }

@@ -249,3 +249,19 @@ async function fetchPublicCompetitions(): Promise<PublicCompetition[]> {
 export function getPublicCompetitions(): ReturnType<typeof fetchPublicCompetitions> {
   return dedupeRequest("competition.service.ts:getPublicCompetitions", fetchPublicCompetitions);
 }
+
+/** Pesos activos ya utilizados para reutilizarlos al crear una competición. */
+export async function getCompetitionWeightOptions(): Promise<number[]> {
+  const { data, error } = await supabase
+    .from("competition_weights")
+    .select("peso_v90")
+    .eq("active", true)
+    .order("peso_v90", { ascending: true });
+
+  if (error) {
+    console.error("Error obteniendo pesos V90 disponibles:", error);
+    throw error;
+  }
+
+  return [...new Set((data ?? []).map((row) => Number(row.peso_v90)).filter(Number.isFinite))];
+}
