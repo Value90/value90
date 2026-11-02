@@ -7,9 +7,37 @@ export const dynamic = "force-dynamic";
 
 const SEASON_YEAR = 2026;
 const TARGETS = [
-  { scope: "laliga-november", leagueId: 119924, rounds: new Set([11, 12, 13, 14]), month: 11 },
-  { scope: "champions-november", leagueId: 2486, rounds: new Set([4, 5]), month: 11 },
+  { scope: "laliga-season-2026", leagueId: 119924, competition: "laliga" },
+  { scope: "champions-season-2026", leagueId: 2486, competition: "champions" },
 ] as const;
+
+const TEAM_ALIASES: Record<string, string[]> = {
+  "deportivo la coruna": ["RC. Deportivo de A Coruña"],
+  "real sociedad": ["Real Sociedad de Fútbol"],
+  "real betis": ["Real Betis Balompie"],
+  "bayern munich": ["FC Bayern München"],
+  "slovan bratislava": ["ŠK Slovan Bratislava"],
+  "porto": ["FC. Oporto"],
+  "fc porto": ["FC. Oporto"],
+  "napoli": ["Napoles"],
+  "espanyol": ["RCD. Espanyol"],
+  "alaves": ["Deportivo Alavés"],
+  "celta de vigo": ["RC. Celta de Vigo"],
+  "lille": ["LOSC Lille"],
+  "lens": ["RC Lens"],
+  "fenerbahce": ["Fenerbahçe"],
+  "inter": ["Inter de Milán"],
+  "como": ["Como 1907"],
+  "slavia praha": ["SK Slavia Praga"],
+  "sabah fa": ["Sabah FK"],
+  "viking": ["Viking FK"],
+  "feyenoord": ["Feyenoord Rotterdam"],
+  "aek athens fc": ["AEK Athens"],
+  "bodø/glimt": ["Bodo/Glimt"],
+  "lask linz": ["Linzer Athletik-Sport-Klub"],
+  "osasuna": ["CA. Osasuna"],
+  "levante": ["Levante UD."],
+};
 
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
@@ -21,8 +49,20 @@ function roundNumber(round: string) {
   return match ? Number(match[1]) : null;
 }
 
+function findTeam(teams: Array<{ id: number; name: string; short_name: string | null }>, name: string) {
+  const key = normalize(name);
+  return teams.find((team) => normalize(team.name) === key || normalize(team.short_name ?? "") === key)
+    ?? TEAM_ALIASES[name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()]
+      ?.map((alias) => teams.find((team) => normalize(team.name) === normalize(alias) || normalize(team.short_name ?? "") === normalize(alias)))
+      .find(Boolean);
+}
+
 function isFinished(match: HighlightlyMatch) {
-  return /finished|full.?time|after over time/i.test(match.state?.description ?? "");
+  return /finished|full.?time|after (penalt|over.?time)/i.test(match.state?.description ?? "");
+}
+
+function isCancelled(match: HighlightlyMatch) {
+  return /cancel|abandoned/i.test(match.state?.description ?? "");
 }
 
 function parseScore(value: string | null | undefined) {
@@ -66,7 +106,6 @@ export async function POST() {
     const missingTeams = new Set<string>();
 
     for (const target of targets) {
-      const skippedAtStart = skipped.length;
       const matches: HighlightlyMatch[] = [];
       let total = Number.POSITIVE_INFINITY;
       for (let offset = 0; offset < total; offset += 100) {
@@ -80,7 +119,7 @@ export async function POST() {
 
       const competition = (competitionsResult.data ?? []).find((item) => {
         const name = normalize(`${item.name} ${item.short_name ?? ""}`);
-        return target.scope.startsWith("laliga")
+        return target.competition === "laliga"
           ? name.includes("laliga") || name.includes("primeradivision")
           : name.includes("championsleague");
       });
@@ -88,20 +127,14 @@ export async function POST() {
         throw new Error(`Crea o activa la competición correspondiente a ${target.scope} antes de importar. No se ha marcado este bloque como completado.`);
       }
 
-      const targetMatches = matches.filter((match) => {
-        const date = new Date(match.date);
-        return date.getUTCFullYear() === SEASON_YEAR && date.getUTCMonth() + 1 === target.month
-          && target.rounds.has(roundNumber(match.round) ?? -1);
-      });
+      const targetMatches = matches.filter((match) => Number(match.league?.season) === SEASON_YEAR);
       if (targetMatches.length === 0) {
         throw new Error(`Highlightly no devolvió partidos para ${target.scope}; no se ha marcado como importado.`);
       }
 
       for (const match of targetMatches) {
-        const homeKey = normalize(match.homeTeam.name);
-        const awayKey = normalize(match.awayTeam.name);
-        const home = (teamsResult.data ?? []).find((team) => normalize(team.name) === homeKey || normalize(team.short_name ?? "") === homeKey);
-        const away = (teamsResult.data ?? []).find((team) => normalize(team.name) === awayKey || normalize(team.short_name ?? "") === awayKey);
+        const home = findTeam(teamsResult.data ?? [], match.homeTeam.name);
+        const away = findTeam(teamsResult.data ?? [], match.awayTeam.name);
         if (!home || !away) {
           if (!home) missingTeams.add(match.homeTeam.name);
           if (!away) missingTeams.add(match.awayTeam.name);
@@ -109,11 +142,14 @@ export async function POST() {
           continue;
         }
 
-        const round = roundNumber(match.round)!;
-        let stage = (stagesResult.data ?? []).find((item) => item.season_id === season.id && roundNumber(item.name) === round);
+        const round = roundNumber(match.round);
+        const stageName = target.competition === "laliga"
+          ? `Jornada ${round ?? match.round}`
+          : `Champions League - ${match.round}`;
+        let stage = (stagesResult.data ?? []).find((item) => item.season_id === season.id && item.name === stageName);
         if (!stage) {
           const displayOrder = Math.max(0, ...(stagesResult.data ?? []).filter((item) => item.season_id === season.id).map((item) => Number(item.display_order))) + 1;
-          const created = await supabase.from("stages").insert({ season_id: season.id, name: `Jornada ${round}`, display_order: displayOrder, active: true }).select("id,season_id,name,display_order,active").single();
+          const created = await supabase.from("stages").insert({ season_id: season.id, name: stageName, display_order: displayOrder, active: true }).select("id,season_id,name,display_order,active").single();
           if (created.error) throw new Error(`No se pudo crear la jornada ${round}: ${created.error.message}`);
           stage = created.data;
           stagesResult.data?.push(stage);
@@ -150,7 +186,7 @@ export async function POST() {
             away_penalty_score: null,
             date: match.date,
             stadium: null,
-            status: isFinished(match) ? "Jugado" : /cancel/i.test(match.state?.description ?? "") ? "Cancelado" : "Programado",
+            status: isFinished(match) ? "Jugado" : isCancelled(match) ? "Cancelado" : "Programado",
             match_duration: 90,
           }).select("id").single();
           if (insertError) throw new Error(`No se pudo crear ${match.homeTeam.name}–${match.awayTeam.name}: ${insertError.message}`);
@@ -169,11 +205,8 @@ export async function POST() {
         imported.push({ competition: competition.name, round: match.round, home: match.homeTeam.name, away: match.awayTeam.name, date: match.date });
       }
 
-      // Permite repetir el bloque mientras queden equipos o partidos por resolver.
-      if (skipped.length === skippedAtStart) {
-        const run = await supabase.from("external_match_import_runs").upsert({ provider: "highlightly", scope: target.scope, season_year: SEASON_YEAR, imported_count: imported.filter((item) => item.competition === competition.name).length, completed_at: new Date().toISOString() }, { onConflict: "provider,scope,season_year" });
-        if (run.error) throw new Error(run.error.message);
-      }
+      const run = await supabase.from("external_match_import_runs").upsert({ provider: "highlightly", scope: target.scope, season_year: SEASON_YEAR, imported_count: targetMatches.length, completed_at: new Date().toISOString() }, { onConflict: "provider,scope,season_year" });
+      if (run.error) throw new Error(run.error.message);
     }
 
     return NextResponse.json({
@@ -184,7 +217,7 @@ export async function POST() {
       importedMatches: imported,
       skippedMatches: skipped,
       missingTeams: [...missingTeams],
-      message: "Importación de calendario completada. Las alineaciones se sincronizarán antes del inicio según el proceso programado.",
+      message: "Calendario importado. El resultado, las alineaciones y los minutos de los suplentes se sincronizarán automáticamente entre 1 h 45 min y 2 h después del inicio.",
     });
   } catch (error) {
     console.error("Error importando calendario Highlightly:", error);

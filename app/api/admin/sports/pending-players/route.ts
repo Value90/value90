@@ -73,10 +73,14 @@ export async function GET() {
   const seasonIds = [...new Set(rows.map((row) => Number(row.season_id)))];
   const matchesResult = await supabase.from("matches").select("id,date,status,home_team_id,away_team_id").in("id", matchIds);
   if (matchesResult.error) return NextResponse.json({ error: matchesResult.error.message }, { status: 500 });
-  const rosterResult = await supabase.from("hist_player_teams").select("player_id,team_id,season_id,shirt_number,position_id")
-    .in("team_id", teamIds).in("season_id", seasonIds);
+  const rosterResult = await supabase.from("hist_player_teams").select("player_id,team_id,season_id,shirt_number,position_id,active")
+    .in("season_id", seasonIds);
   if (rosterResult.error) return NextResponse.json({ error: rosterResult.error.message }, { status: 500 });
-  const allTeamIds = [...new Set([...teamIds, ...(matchesResult.data ?? []).flatMap((match) => [Number(match.home_team_id), Number(match.away_team_id)])])];
+  const allTeamIds = [...new Set([
+    ...teamIds,
+    ...(matchesResult.data ?? []).flatMap((match) => [Number(match.home_team_id), Number(match.away_team_id)]),
+    ...(rosterResult.data ?? []).map((row) => Number(row.team_id)),
+  ])];
   const teamsResult = allTeamIds.length
     ? await supabase.from("teams").select("id,name").in("id", allTeamIds)
     : { data: [], error: null };
@@ -143,7 +147,15 @@ export async function GET() {
       position_id: positionId == null ? (safeRosterRow?.position_id == null ? null : Number(safeRosterRow.position_id)) : Number(positionId),
       is_starting_xi: Boolean(first.is_starting_xi),
       provisional_player: provisional ? { id: Number(provisional.id), name: String(provisional.name), shortName: String(provisional.short_name ?? ""), countryId: provisional.country_id == null ? null : Number(provisional.country_id), birthDate: provisional.birth_date ?? null, active: Boolean(provisional.active) } : null,
-      suggestions: playerSuggestions(String(first.source_name), players, provisionalId),
+      suggestions: playerSuggestions(String(first.source_name), players, provisionalId).map((candidate) => {
+        const roster = (rosterResult.data ?? []).filter((row) => Number(row.player_id) === candidate.id)
+          .sort((a, b) => Number(b.active) - Number(a.active) || Number(b.season_id) - Number(a.season_id))[0];
+        return {
+          ...candidate,
+          teamName: roster ? teams.get(Number(roster.team_id))?.name ?? null : null,
+          shirtNumber: roster?.shirt_number == null ? null : Number(roster.shirt_number),
+        };
+      }),
       auto_match: safePlayer && safeRosterRow?.position_id != null ? { player_id: safePlayerId, player_name: String(safePlayer.name), position_id: Number(safeRosterRow.position_id) } : null,
       occurrences: occurrences.map((item) => {
         const match = matches.get(Number(item.match_id));
@@ -166,8 +178,8 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Inicia sesión para asociar jugadores." }, { status: 401 });
-  const body = await request.json().catch(() => null) as { provider?: string; external_player_key?: string; player_id?: number; position_id?: number; decision?: "matched_existing" | "confirmed_new" } | null;
-  if (!body?.external_player_key || !Number.isInteger(body.player_id) || !["matched_existing", "confirmed_new"].includes(body.decision ?? "")) {
+  const body = await request.json().catch(() => null) as { provider?: string; external_player_key?: string; player_id?: number; position_id?: number; decision?: "matched_existing" | "confirmed_new" | "updated_existing"; target_team_id?: number; target_season_id?: number } | null;
+  if (!body?.external_player_key || !Number.isInteger(body.player_id) || !["matched_existing", "confirmed_new", "updated_existing"].includes(body.decision ?? "")) {
     return NextResponse.json({ error: "Selecciona una ficha y confirma si es existente o una nueva ficha revisada." }, { status: 400 });
   }
 
@@ -180,17 +192,26 @@ export async function POST(request: NextRequest) {
   if (mappings.some((mapping) => !mapping.position_id && !body.position_id)) {
     return NextResponse.json({ error: "Selecciona una posición para completar la ficha de participación." }, { status: 400 });
   }
+  if (body.decision === "updated_existing" && (!Number.isInteger(body.target_team_id) || !Number.isInteger(body.target_season_id)
+    || !mappings.some((mapping) => Number(mapping.team_id) === body.target_team_id && Number(mapping.season_id) === body.target_season_id))) {
+    return NextResponse.json({ error: "El equipo y la temporada por actualizar no coinciden con la incidencia." }, { status: 400 });
+  }
 
   const matchIds = [...new Set(mappings.map((item) => Number(item.match_id)))];
   const oldPlayerIds = [...new Set(mappings.map((item) => Number(item.player_id)).filter((id) => Number.isFinite(id) && id !== Number(player.id)))];
-  const [oldParticipationResult, existingRosterResult] = await Promise.all([
+  const [oldParticipationResult, existingRosterResult, playerSeasonRosterResult] = await Promise.all([
     oldPlayerIds.length ? supabase.from("participations").select("*").in("match_id", matchIds).in("player_id", oldPlayerIds) : Promise.resolve({ data: [], error: null }),
     supabase.from("hist_player_teams").select("id,player_id,team_id,season_id,position_id,shirt_number,active")
       .eq("player_id", player.id).in("team_id", [...new Set(mappings.map((item) => Number(item.team_id)))])
       .in("season_id", [...new Set(mappings.map((item) => Number(item.season_id)))]),
+    body.decision === "updated_existing"
+      ? supabase.from("hist_player_teams").select("id,player_id,team_id,season_id,position_id,shirt_number,active")
+        .eq("player_id", player.id).eq("season_id", body.target_season_id)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (oldParticipationResult.error) return NextResponse.json({ error: oldParticipationResult.error.message }, { status: 500 });
   if (existingRosterResult.error) return NextResponse.json({ error: existingRosterResult.error.message }, { status: 500 });
+  if (playerSeasonRosterResult.error) return NextResponse.json({ error: playerSeasonRosterResult.error.message }, { status: 500 });
   const oldParticipationByMatch = new Map((oldParticipationResult.data ?? []).map((row) => [Number(row.match_id), row]));
 
   const participationRows = mappings.flatMap((mapping) => {
@@ -227,16 +248,42 @@ export async function POST(request: NextRequest) {
     const key = `${mapping.team_id}:${mapping.season_id}`;
     if (rosterKeys.has(key)) return [];
     rosterKeys.add(key);
-    return [{ player_id: Number(player.id), team_id: Number(mapping.team_id), season_id: Number(mapping.season_id), position_id: Number(row.position_id), shirt_number: Number(row.shirt_number ?? 0), active: true }];
+    const isTargetRoster = body.decision !== "updated_existing"
+      || (Number(mapping.team_id) === body.target_team_id && Number(mapping.season_id) === body.target_season_id);
+    return [{ player_id: Number(player.id), team_id: Number(mapping.team_id), season_id: Number(mapping.season_id), position_id: Number(row.position_id), shirt_number: Number(row.shirt_number ?? 0), active: isTargetRoster }];
   });
+  if (body.decision === "updated_existing" && !rosterRows.some((row) => row.team_id === body.target_team_id && row.season_id === body.target_season_id)) {
+    const targetMapping = mappings.find((mapping) => Number(mapping.team_id) === body.target_team_id && Number(mapping.season_id) === body.target_season_id);
+    rosterRows.push({
+      player_id: Number(player.id),
+      team_id: Number(body.target_team_id),
+      season_id: Number(body.target_season_id),
+      position_id: Number(body.position_id ?? targetMapping?.position_id ?? 0),
+      shirt_number: Number(targetMapping?.shirt_number ?? 0),
+      active: true,
+    });
+  }
   const existingRoster = new Map((existingRosterResult.data ?? []).map((row) => [`${row.team_id}:${row.season_id}`, row]));
-  const reactivatedRosterIds = rosterRows.flatMap((row) => {
+  const reactivatedRosterIds = body.decision === "updated_existing" ? [] : rosterRows.flatMap((row) => {
     const existing = existingRoster.get(`${row.team_id}:${row.season_id}`);
     return existing && !existing.active ? [Number(existing.id)] : [];
   });
   if (reactivatedRosterIds.length) {
     const reactivated = await supabase.from("hist_player_teams").update({ active: true }).in("id", reactivatedRosterIds);
     if (reactivated.error) return NextResponse.json({ error: reactivated.error.message }, { status: 500 });
+  }
+  if (body.decision === "updated_existing") {
+    const targetTeam = Number(body.target_team_id);
+    const targetSeason = Number(body.target_season_id);
+    const targetNumber = Number(mappings.find((mapping) => Number(mapping.team_id) === targetTeam && Number(mapping.season_id) === targetSeason)?.shirt_number ?? 0);
+    const targetPosition = body.position_id ?? mappings.find((mapping) => Number(mapping.team_id) === targetTeam && Number(mapping.season_id) === targetSeason)?.position_id;
+    for (const roster of playerSeasonRosterResult.data ?? []) {
+      const isTarget = Number(roster.team_id) === targetTeam;
+      const update = await supabase.from("hist_player_teams").update(isTarget
+        ? { active: true, shirt_number: targetNumber, position_id: targetPosition }
+        : { active: false }).eq("id", roster.id);
+      if (update.error) return NextResponse.json({ error: update.error.message }, { status: 500 });
+    }
   }
   const missingRosterRows = rosterRows.filter((row) => !existingRoster.has(`${row.team_id}:${row.season_id}`));
   if (missingRosterRows.length) {

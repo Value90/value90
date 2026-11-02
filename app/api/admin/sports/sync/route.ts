@@ -334,7 +334,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminSupabaseClient();
     const { data: mappings, error } = await supabase.from("external_match_mappings")
       .select("provider,external_match_id,match_id,lineup_synced_at,final_synced_at,next_result_sync_at,result_attempts,last_sync_error,match:matches!inner(id,date,status,season_id,home_team_id,away_team_id)")
-      .eq("provider", "highlightly").limit(250);
+      .eq("provider", "highlightly").order("external_match_id", { ascending: true }).limit(1000);
     if (error) throw error;
     const now = Date.now();
     const results: Array<Record<string, unknown>> = [];
