@@ -22,6 +22,20 @@ function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function nameMatchesAbbreviation(sourceName: string, playerName: string, shortName = "") {
+  const source = normalize(sourceName);
+  if (source && (source === normalize(playerName) || (shortName && source === normalize(shortName)))) return true;
+  const parts = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es")
+    .replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
+  const sourceParts = parts(sourceName);
+  const playerParts = parts(playerName);
+  if (sourceParts.length < 2 || playerParts.length < 2) return false;
+  const sourceFirst = sourceParts[0];
+  const playerFirst = playerParts[0];
+  return sourceFirst.length === 1 && playerFirst.startsWith(sourceFirst)
+    && sourceParts[sourceParts.length - 1] === playerParts[playerParts.length - 1];
+}
+
 function positionMatches(providerPosition: string, localName: string, shortName: string) {
   const local = normalize(`${localName} ${shortName}`);
   const groups: Record<string, string[]> = {
@@ -75,6 +89,13 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
   const linkedPlayers = new Map((linkedPlayersResult.data ?? []).map((row) => [row.external_player_key, row]));
   const positions = positionsResult.data ?? [];
   const seasonId = Number(match.season_id);
+  const localTeamIds = [...teamMap.values()];
+  const rosterResult = localTeamIds.length
+    ? await supabase.from("hist_player_teams").select("player_id,team_id,season_id,shirt_number,position_id")
+      .eq("season_id", seasonId).in("team_id", localTeamIds)
+    : { data: [], error: null };
+  if (rosterResult.error) throw new Error(rosterResult.error.message);
+  const rosterRows = rosterResult.data ?? [];
   const participants: Array<Record<string, unknown>> = [];
   let pending = 0;
 
@@ -84,13 +105,22 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
     for (const entry of lineupPlayers(sourceTeam)) {
       const player = entry.player;
       const externalKey = player.id ? String(player.id) : `${sourceTeam.id}:${normalize(player.name)}`;
-      const candidates = (playersResult.data ?? []).filter((item) => normalize(item.name) === normalize(player.name) || normalize(item.short_name ?? "") === normalize(player.name));
       const linkedPlayer = linkedPlayers.get(externalKey)?.player_id
         ? (playersResult.data ?? []).find((item) => Number(item.id) === Number(linkedPlayers.get(externalKey)?.player_id)) ?? null
         : null;
-      const localPlayer = candidates.length === 1 ? candidates[0] : linkedPlayer;
+      const rosterCandidates = rosterRows.filter((row) => Number(row.team_id) === teamId
+        && Number(row.season_id) === seasonId && Number(row.shirt_number) === Number(player.number)
+        && (playersResult.data ?? []).some((item) => Number(item.id) === Number(row.player_id)
+          && nameMatchesAbbreviation(player.name, item.name, item.short_name ?? "")));
+      const strictCandidateIds = [...new Set(rosterCandidates.map((row) => Number(row.player_id)))];
+      const strictPlayer = strictCandidateIds.length === 1
+        ? (playersResult.data ?? []).find((item) => Number(item.id) === strictCandidateIds[0]) ?? null
+        : null;
+      const localPlayer = linkedPlayer ?? strictPlayer;
+      const rosterPositionId = rosterCandidates.find((row) => Number(row.player_id) === Number(localPlayer?.id))?.position_id
+        ?? linkedPlayers.get(externalKey)?.position_id;
       const position = positions.find((item) => positionMatches(player.position, item.name, item.short_name ?? ""))
-        ?? positions.find((item) => Number(item.id) === Number(linkedPlayers.get(externalKey)?.position_id))
+        ?? positions.find((item) => Number(item.id) === Number(rosterPositionId))
         ?? null;
       const mapRow = {
         provider: "highlightly",

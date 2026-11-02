@@ -10,7 +10,7 @@ type Candidate = { id: number; name: string; score: number; countryId: number | 
 type PendingPlayer = {
   provider: string; external_player_key: string; source_name: string; team_id: number; team_name: string; season_id: number;
   shirt_number: number | null; position_id: number | null; is_starting_xi: boolean; provisional_player: Player | null;
-  suggestions: Candidate[]; occurrences: PendingOccurrence[];
+  suggestions: Candidate[]; occurrences: PendingOccurrence[]; auto_match: { player_id: number; player_name: string; position_id: number } | null;
 };
 
 function incidentKey(item: PendingPlayer) { return `${item.provider}:${item.external_player_key}`; }
@@ -36,7 +36,25 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     const response = await fetch("/api/admin/sports/pending-players", { cache: "no-store" });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? "No se pudieron cargar las incidencias.");
-    setPending(payload.pending ?? []);
+    let rows: PendingPlayer[] = payload.pending ?? [];
+    let autoLinked = 0;
+    for (const item of rows) {
+      if (!item.auto_match) continue;
+      const linked = await fetch("/api/admin/sports/pending-players", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: item.provider, external_player_key: item.external_player_key, player_id: item.auto_match.player_id, position_id: item.auto_match.position_id, decision: "matched_existing" }),
+      });
+      if (linked.ok) autoLinked += 1;
+    }
+    if (autoLinked) {
+      const refreshed = await fetch("/api/admin/sports/pending-players", { cache: "no-store" });
+      const refreshedPayload = await refreshed.json();
+      if (!refreshed.ok) throw new Error(refreshedPayload.error ?? "No se pudieron actualizar las incidencias.");
+      rows = refreshedPayload.pending ?? [];
+      setMessage(`${autoLinked} jugador(es) se asignaron automáticamente: coincidían el nombre, el equipo y el dorsal.`);
+    }
+    setPending(rows);
+    return autoLinked;
   }, []);
 
   const loadPlayers = useCallback(async () => {
@@ -58,8 +76,8 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo importar el calendario.");
       if (!payload.alreadyImported) onImported?.();
-      await loadPending();
-      setMessage(payload.alreadyImported ? payload.message : `Importados o vinculados: ${payload.imported}. Pendientes de revisión: ${payload.skipped}. ${payload.missingTeams?.length ? `Equipos por crear/asociar: ${payload.missingTeams.join(", ")}.` : ""}`);
+      const autoLinked = await loadPending();
+      setMessage(payload.alreadyImported ? `${payload.message}${autoLinked ? ` Se asignaron ${autoLinked} coincidencia(s) seguras.` : ""}` : `Importados o vinculados: ${payload.imported}. Pendientes de revisión: ${payload.skipped}. Asignados por nombre, equipo y dorsal: ${autoLinked}. ${payload.missingTeams?.length ? `Equipos por crear/asociar: ${payload.missingTeams.join(", ")}.` : ""}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo importar el calendario.");
     } finally {

@@ -8,6 +8,18 @@ function normalize(value: string) {
     .replace(/\b(fc|cf|club|de|del|the|afc|sc)\b/g, " ").replace(/[^a-z0-9]/g, "");
 }
 
+function namesMatch(sourceName: string, playerName: string, shortName = "") {
+  const source = normalize(sourceName);
+  if (source && (source === normalize(playerName) || (shortName && source === normalize(shortName)))) return true;
+  const parts = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es")
+    .replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
+  const sourceParts = parts(sourceName);
+  const playerParts = parts(playerName);
+  if (sourceParts.length < 2 || playerParts.length < 2) return false;
+  return sourceParts[0].length === 1 && playerParts[0].startsWith(sourceParts[0])
+    && sourceParts[sourceParts.length - 1] === playerParts[playerParts.length - 1];
+}
+
 function editSimilarity(a: string, b: string) {
   if (a === b) return 1;
   if (!a.length || !b.length) return 0;
@@ -58,8 +70,12 @@ export async function GET() {
 
   const teamIds = [...new Set(rows.map((row) => Number(row.team_id)))];
   const matchIds = [...new Set(rows.map((row) => Number(row.match_id)))];
+  const seasonIds = [...new Set(rows.map((row) => Number(row.season_id)))];
   const matchesResult = await supabase.from("matches").select("id,date,status,home_team_id,away_team_id").in("id", matchIds);
   if (matchesResult.error) return NextResponse.json({ error: matchesResult.error.message }, { status: 500 });
+  const rosterResult = await supabase.from("hist_player_teams").select("player_id,team_id,season_id,shirt_number,position_id")
+    .in("team_id", teamIds).in("season_id", seasonIds);
+  if (rosterResult.error) return NextResponse.json({ error: rosterResult.error.message }, { status: 500 });
   const allTeamIds = [...new Set([...teamIds, ...(matchesResult.data ?? []).flatMap((match) => [Number(match.home_team_id), Number(match.away_team_id)])])];
   const teamsResult = allTeamIds.length
     ? await supabase.from("teams").select("id,name").in("id", allTeamIds)
@@ -89,6 +105,33 @@ export async function GET() {
     const provisionalIds = [...new Set(occurrences.map((item) => Number(item.player_id)).filter(Number.isFinite))];
     const provisionalId = provisionalIds.length === 1 ? provisionalIds[0] : null;
     const provisional = provisionalId == null ? null : playerById.get(provisionalId) ?? null;
+    let safePlayerIds: Set<number> | null = null;
+    for (const occurrence of occurrences) {
+      if (occurrence.shirt_number == null) { safePlayerIds = new Set<number>(); break; }
+      const occurrenceIds = new Set<number>();
+      for (const roster of rosterResult.data ?? []) {
+        const localPlayerId = Number(roster.player_id);
+        const localPlayer = playerById.get(localPlayerId);
+        const isProvisional = provisionalIds.includes(localPlayerId);
+        const identityMatches = localPlayer && namesMatch(String(occurrence.source_name), String(localPlayer.name), String(localPlayer.short_name ?? ""));
+        if (!isProvisional && identityMatches && Number(roster.team_id) === Number(occurrence.team_id)
+          && Number(roster.season_id) === Number(occurrence.season_id) && Number(roster.shirt_number) === Number(occurrence.shirt_number)) {
+          occurrenceIds.add(localPlayerId);
+        }
+      }
+      if (safePlayerIds == null) safePlayerIds = occurrenceIds;
+      else {
+        const intersection = new Set<number>();
+        for (const candidateId of safePlayerIds) if (occurrenceIds.has(candidateId)) intersection.add(candidateId);
+        safePlayerIds = intersection;
+      }
+      if (!safePlayerIds.size) break;
+    }
+    const safePlayerId = safePlayerIds?.size === 1 ? [...safePlayerIds][0] : null;
+    const safeRosterRow = safePlayerId == null ? null : (rosterResult.data ?? []).find((roster) => Number(roster.player_id) === safePlayerId
+      && Number(roster.team_id) === Number(first.team_id) && Number(roster.season_id) === Number(first.season_id)
+      && Number(roster.shirt_number) === Number(first.shirt_number));
+    const safePlayer = safePlayerId == null ? null : playerById.get(safePlayerId) ?? null;
     return {
       provider: first.provider,
       external_player_key: first.external_player_key,
@@ -97,10 +140,11 @@ export async function GET() {
       team_name: teams.get(Number(first.team_id))?.name ?? "Equipo por identificar",
       season_id: Number(first.season_id),
       shirt_number: first.shirt_number == null ? null : Number(first.shirt_number),
-      position_id: positionId == null ? null : Number(positionId),
+      position_id: positionId == null ? (safeRosterRow?.position_id == null ? null : Number(safeRosterRow.position_id)) : Number(positionId),
       is_starting_xi: Boolean(first.is_starting_xi),
       provisional_player: provisional ? { id: Number(provisional.id), name: String(provisional.name), shortName: String(provisional.short_name ?? ""), countryId: provisional.country_id == null ? null : Number(provisional.country_id), birthDate: provisional.birth_date ?? null, active: Boolean(provisional.active) } : null,
       suggestions: playerSuggestions(String(first.source_name), players, provisionalId),
+      auto_match: safePlayer && safeRosterRow?.position_id != null ? { player_id: safePlayerId, player_name: String(safePlayer.name), position_id: Number(safeRosterRow.position_id) } : null,
       occurrences: occurrences.map((item) => {
         const match = matches.get(Number(item.match_id));
         return {
