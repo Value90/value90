@@ -23,6 +23,8 @@ import {
   type Team,
 } from "@/services/team.service";
 
+import { getStages, type Stage } from "@/services/stage.service";
+
 import type { ColumnDef } from "@tanstack/react-table";
 
 interface MatchesTableProps {
@@ -86,6 +88,10 @@ export default function MatchesTable({
     setSelectedCompetitionId,
   ] = useState(0);
 
+  const [stages, setStages] = useState<Stage[]>([]);
+  const [stagesLoading, setStagesLoading] = useState(true);
+  const [selectedStageId, setSelectedStageId] = useState(0);
+
   /*
    * ============================================================
    * CARGAR PARTIDOS
@@ -131,6 +137,26 @@ export default function MatchesTable({
     };
 
     loadMatches();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    getStages()
+      .then((data) => {
+        if (mounted) setStages(data);
+      })
+      .catch((error) => {
+        console.error("Error obteniendo jornadas / fases:", error);
+        if (mounted) setStages([]);
+      })
+      .finally(() => {
+        if (mounted) setStagesLoading(false);
+      });
 
     return () => {
       mounted = false;
@@ -238,19 +264,24 @@ export default function MatchesTable({
 
   const filteredMatches =
     useMemo(() => {
-      if (!selectedCompetitionId) {
-        return matches;
-      }
-
       return matches.filter(
-        (match) =>
-          match.competitionId ===
-          selectedCompetitionId
+        (match) => (!selectedCompetitionId || match.competitionId === selectedCompetitionId)
+          && (!selectedStageId || match.stageId === selectedStageId)
       );
     }, [
       matches,
       selectedCompetitionId,
+      selectedStageId,
     ]);
+
+  const availableStages = useMemo(() => {
+    const stageIds = new Set(matches
+      .filter((match) => !selectedCompetitionId || match.competitionId === selectedCompetitionId)
+      .map((match) => match.stageId)
+      .filter((stageId): stageId is number => stageId > 0));
+
+    return stages.filter((stage) => stageIds.has(stage.id));
+  }, [matches, selectedCompetitionId, stages]);
 
   /*
    * ============================================================
@@ -632,7 +663,7 @@ export default function MatchesTable({
           FILTRO DE COMPETICIÓN
           ====================================================== */}
 
-      <div className="w-full">
+      <div className="grid w-full gap-3 sm:grid-cols-2">
 
         <select
           value={
@@ -644,6 +675,7 @@ export default function MatchesTable({
                 event.target.value
               )
             );
+            setSelectedStageId(0);
           }}
           className="w-full min-w-0 max-w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-500 sm:w-auto sm:min-w-[220px] sm:px-3"
         >
@@ -681,6 +713,19 @@ export default function MatchesTable({
               )
             )}
 
+        </select>
+
+        <select
+          value={selectedStageId}
+          onChange={(event) => setSelectedStageId(Number(event.target.value))}
+          disabled={stagesLoading || availableStages.length === 0}
+          aria-label="Filtrar por jornada o fase"
+          className="w-full min-w-0 max-w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-50 sm:min-w-[220px]"
+        >
+          <option value={0}>Todas las jornadas / fases</option>
+          {availableStages.map((stage) => (
+            <option key={stage.id} value={stage.id}>{stage.name}</option>
+          ))}
         </select>
 
       </div>

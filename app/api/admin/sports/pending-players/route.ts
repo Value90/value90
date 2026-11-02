@@ -292,10 +292,11 @@ export async function POST(request: NextRequest) {
   }
 
   const updatedMappings = await supabase.from("external_player_mappings").update({
-    player_id: player.id, status: "linked", review_decision: body.decision,
+    player_id: player.id, status: "linked", review_decision: body.decision === "updated_existing" ? "matched_existing" : body.decision,
     reviewed_at: new Date().toISOString(), position_id: body.position_id ?? undefined, updated_at: new Date().toISOString(),
-  }).eq("provider", provider).eq("external_player_key", body.external_player_key).eq("status", "pending");
+  }).eq("provider", provider).eq("external_player_key", body.external_player_key).eq("status", "pending").select("external_player_key");
   if (updatedMappings.error) return NextResponse.json({ error: updatedMappings.error.message }, { status: 500 });
+  if (!updatedMappings.data?.length) return NextResponse.json({ error: "No se pudo cerrar la incidencia. Recarga la página y vuelve a intentarlo." }, { status: 409 });
 
   const oldRows = oldParticipationResult.data ?? [];
   if (oldRows.length) {
