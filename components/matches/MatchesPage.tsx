@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import MatchesTable from "@/components/matches/MatchesTable";
 import MatchForm from "@/components/matches/MatchForm";
 import DeleteMatchDialog from "@/components/matches/DeleteMatchDialog";
+import HighlightlyImportPanel from "@/components/matches/HighlightlyImportPanel";
 
 import {
   addMatch,
@@ -273,6 +274,8 @@ export default function MatchesPage() {
           </button>
         )}
       </div>
+
+      {!showForm && <HighlightlyImportPanel onImported={() => setRefreshKey((value) => value + 1)} />}
 
       {/* ========================================================
           ERROR

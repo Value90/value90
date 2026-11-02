@@ -1092,6 +1092,36 @@ export default function MatchDataPage() {
      GUARDAR VALORACIONES
      ============================================================ */
 
+  async function calculateV90Automatically(
+    matchId: number,
+    matchStatus: Match["status"],
+    savedDataLabel: string,
+  ): Promise<string> {
+    if (matchStatus !== "Jugado") {
+      return matchStatus === "Cancelado"
+        ? " El partido está cancelado/suspendido; se conserva como incidencia y no se calcula V90."
+        : " V90 se calculará cuando el partido esté marcado como Jugado.";
+    }
+
+    try {
+      const calculation = await calculateV90Stage([matchId]);
+      const result = calculation.matches[0];
+      return result
+        ? " Cálculo V90 automático: " +
+            result.calculated +
+            "/" +
+            result.participationCount +
+            " participaciones calculadas" +
+            (result.pending ? ", " + result.pending + " pendientes" : "") +
+            (result.errors ? ", " + result.errors + " con error" : "") +
+            "."
+        : " " + savedDataLabel + ", pero el motor V90 no devolvió resultado; queda pendiente de revisión.";
+    } catch (calculationError) {
+      console.error("Error generando V90 automáticamente:", calculationError);
+      return " " + savedDataLabel + ", pero V90 no pudo calcularse automáticamente; queda pendiente para reintentar desde Datos V90.";
+    }
+  }
+
   async function handleSaveRatings(teamSide: "home" | "away") {
     if (!selectedMatchId || !selectedMatch) {
       setError("Selecciona primero un partido.");
@@ -1240,23 +1270,11 @@ export default function MatchDataPage() {
         ? ""
         : " No se pudo vincular esta revisión al aprendizaje de IA.";
 
-      let autoV90Notice = "";
-      if (selectedMatch.status === "Jugado") {
-        try {
-          const calculation = await calculateV90Stage([Number(selectedMatchId)]);
-          const matchCalculation = calculation.matches[0];
-          autoV90Notice = matchCalculation
-            ? " Cálculo V90 automático: " + matchCalculation.calculated + "/" + matchCalculation.participationCount + " participaciones calculadas" + (matchCalculation.pending ? ", " + matchCalculation.pending + " pendientes" : "") + (matchCalculation.errors ? ", " + matchCalculation.errors + " con error" : "") + "."
-            : " El motor V90 no devolvió resultado; queda pendiente de revisión.";
-        } catch (calculationError) {
-          console.error("Error generando V90 automáticamente:", calculationError);
-          autoV90Notice = " Las valoraciones se guardaron, pero V90 no pudo calcularse automáticamente; puedes reintentarlo desde Datos V90.";
-        }
-      } else if (selectedMatch.status === "Cancelado") {
-        autoV90Notice = " El partido está cancelado/suspendido y se deja registrado como incidencia sin generar V90.";
-      } else {
-        autoV90Notice = " V90 se calculará automáticamente cuando el partido esté marcado como Jugado.";
-      }
+      const autoV90Notice = await calculateV90Automatically(
+        Number(selectedMatchId),
+        selectedMatch.status,
+        "Las valoraciones se guardaron",
+      );
 
       if (failed.length > 0) {
         setMessage(
@@ -1596,44 +1614,42 @@ export default function MatchDataPage() {
             hideMatchSelector
             onCancel={() => undefined}
             onSaved={async () => {
+              let followUpMessage =
+                "Participaciones guardadas correctamente. Ya puedes introducir las valoraciones.";
+
               try {
-                const [
-                  refreshedParticipations,
-                  refreshedRatings,
-                ] = await Promise.all([
-                  getParticipationsByMatchId(
-                    Number(selectedMatchId)
-                  ),
-                  getMatchRatingsByMatchId(
-                    Number(selectedMatchId)
-                  ),
+                const [refreshedParticipations, refreshedRatings] = await Promise.all([
+                  getParticipationsByMatchId(Number(selectedMatchId)),
+                  getMatchRatingsByMatchId(Number(selectedMatchId)),
                 ]);
 
-                setParticipations(
-                  refreshedParticipations
-                );
-
+                setParticipations(refreshedParticipations);
                 setExistingRatings(refreshedRatings);
+                setParticipationsSaved(refreshedParticipations.length > 0);
 
-                setParticipationsSaved(
-                  refreshedParticipations.length > 0
-                );
-
-                setMessage(
-                  "Participaciones guardadas correctamente. Ya puedes introducir las valoraciones."
-                );
+                if (!refreshedParticipations.length) {
+                  followUpMessage =
+                    "Participaciones guardadas; no se encontraron filas al actualizar la vista.";
+                }
               } catch (refreshError) {
                 console.error(
                   "Error actualizando los datos después de guardar participaciones:",
-                  refreshError
+                  refreshError,
                 );
-
                 setParticipationsSaved(true);
-
-                setMessage(
-                  "Participaciones guardadas. Vuelve a seleccionar el partido si no aparecen los vínculos de las valoraciones."
-                );
+                followUpMessage =
+                  "Participaciones guardadas. Vuelve a seleccionar el partido si no aparecen los vínculos de las valoraciones.";
               }
+
+              const v90Notice = selectedMatch
+                ? await calculateV90Automatically(
+                    Number(selectedMatchId),
+                    selectedMatch.status,
+                    "Las participaciones se guardaron",
+                  )
+                : " Selecciona el partido de nuevo para continuar con el cálculo V90.";
+
+              setMessage(followUpMessage + v90Notice);
             }}
           />
         </section>

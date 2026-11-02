@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:import-recovery": "node scripts/import-supabase-export.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

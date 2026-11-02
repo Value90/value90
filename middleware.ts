@@ -6,17 +6,27 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = pathname === "/" || pathname === "/public" || pathname.startsWith("/public/");
   const isPublicApiRoute = pathname === "/api/public" || pathname.startsWith("/api/public/");
   const isPublicCrawlerFile = pathname === "/ads.txt" || pathname === "/robots.txt" || pathname === "/sitemap.xml";
+  const isSportsCron = pathname === "/api/admin/sports/sync" && request.method === "POST";
 
   // Public pages do not need a Supabase auth round trip on every navigation.
-  if (isPublicRoute || isPublicApiRoute || isPublicCrawlerFile) {
+  if (isPublicRoute || isPublicApiRoute || isPublicCrawlerFile || isSportsCron) {
     return NextResponse.next({ request });
   }
 
   let response = NextResponse.next({ request });
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !supabaseKey) {
+    return NextResponse.json(
+      { error: "Falta configurar la conexión pública con Supabase." },
+      { status: 500 },
+    );
+  }
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    supabaseKey,
     {
       cookies: {
         getAll() {

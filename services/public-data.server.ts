@@ -7,7 +7,8 @@ const PUBLIC_CACHE_MS = 60_000;
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   { auth: { persistSession: false, autoRefreshToken: false } },
 );
 
@@ -731,7 +732,7 @@ export async function getPublicPlayerProfile(playerId: number) {
   const teamIds = Array.from(new Set([...histories.map((row) => Number(row.team_id)), ...facts.flatMap((row) => [Number(row.team_id), Number(row.rival_team_id)])]));
   const matchIds = Array.from(new Set(facts.map((row) => Number(row.match_id))));
   const [teamsResult, matchesResult] = await Promise.all([
-    teamIds.length ? supabase.from("teams").select("id,name,short_name,city,country_id").in("id", teamIds) : Promise.resolve({ data: [], error: null }),
+    teamIds.length ? supabase.from("teams").select("id,name,short_name,city,country_id,type").in("id", teamIds) : Promise.resolve({ data: [], error: null }),
     matchIds.length ? supabase.from("matches").select("id,season_id,date,home_team_id,away_team_id,home_score,away_score").in("id", matchIds) : Promise.resolve({ data: [], error: null }),
   ]);
   if (teamsResult.error) throw new Error(teamsResult.error.message);
@@ -790,6 +791,7 @@ export async function getPublicPlayerProfile(playerId: number) {
         homeScore: match.home_score == null ? null : Number(match.home_score),
         awayScore: match.away_score == null ? null : Number(match.away_score),
         rating: Number(fact.v90_match),
+        teamType: teamMap.get(Number(fact.team_id))?.type === "Selección" ? "Selección" as const : "Club" as const,
       }];
     }).sort((a, b) => b.date.localeCompare(a.date)),
   };

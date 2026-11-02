@@ -80,6 +80,9 @@ CREATE POLICY "Authenticated users can read market valuation runs"
 
 GRANT SELECT ON public.player_market_values, public.player_market_value_history TO anon, authenticated;
 GRANT SELECT ON public.market_valuation_runs TO authenticated;
+GRANT ALL ON public.market_valuation_runs, public.player_market_values,
+  public.player_market_value_history TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.player_market_value_history_id_seq TO service_role;
 
 CREATE OR REPLACE FUNCTION public.run_market_valuation(p_force boolean DEFAULT false)
 RETURNS jsonb
@@ -95,6 +98,11 @@ DECLARE
   v_count integer := 0;
   v_source text := CASE WHEN p_force THEN 'manual' ELSE 'scheduled' END;
 BEGIN
+  IF auth.uid() IS NOT NULL
+     AND lower(coalesce(auth.jwt() ->> 'email', '')) <> 'pastues@icloud.com' THEN
+    RAISE EXCEPTION 'Only the Value90 administrator can run market valuations.' USING ERRCODE = '42501';
+  END IF;
+
   PERFORM pg_advisory_xact_lock(hashtext('value90-market-valuation'));
 
   IF NOT p_force AND (EXTRACT(ISODOW FROM v_local_date) <> 2 OR EXTRACT(DAY FROM v_local_date) > 7) THEN
