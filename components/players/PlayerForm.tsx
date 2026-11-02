@@ -19,7 +19,7 @@ import {
 interface PlayerFormProps {
   player?: Player;
   onCancel: () => void;
-  onSaved: () => void;
+  onSaved: (savedPlayer?: Player) => void;
 }
 
 function suggestShortName(fullName: string): string {
@@ -272,18 +272,19 @@ export default function PlayerForm({
     setSaving(true);
 
     try {
+      let savedPlayer: Player | undefined;
       if (player) {
-        await updatePlayer(
+        savedPlayer = await updatePlayer(
           player.id,
           playerData
         );
       } else {
-        await addPlayer(
+        savedPlayer = await addPlayer(
           playerData
         );
       }
 
-      onSaved();
+      onSaved(savedPlayer);
     } catch (error) {
       console.error(
         "Error guardando jugador:",

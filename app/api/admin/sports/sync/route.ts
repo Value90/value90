@@ -221,11 +221,16 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
 
       const isStarting = sourcePlayer.isSubstitute !== true;
       const shirtNumber = sourcePlayer.shirtNumber ?? playerMapping.shirt_number;
+      const minutesPlayed = Math.max(0, Number(sourcePlayer.minutesPlayed) || 0);
+      const substitutionMinutes = substitutionMinutesByExternalKey.get(playerMapping.external_player_key);
       const updatedMapping = {
         ...playerMapping,
         is_starting_xi: isStarting,
         captain: sourcePlayer.isCaptain === true,
         shirt_number: shirtNumber,
+        minutes_played: minutesPlayed,
+        substitute_in_minute: substitutionMinutes?.incoming ?? playerMapping.substitute_in_minute,
+        substitute_out_minute: substitutionMinutes?.outgoing ?? playerMapping.substitute_out_minute,
         updated_at: new Date().toISOString(),
       };
       changedMappings.set(playerMapping.external_player_key, updatedMapping);
@@ -233,8 +238,6 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
       const participation = playerMapping.player_id
         ? participationByPlayerId.get(Number(playerMapping.player_id))
         : null;
-      const substitutionMinutes = substitutionMinutesByExternalKey.get(playerMapping.external_player_key);
-      const minutesPlayed = Math.max(0, Number(sourcePlayer.minutesPlayed) || 0);
       const shouldSaveParticipation = isStarting || minutesPlayed > 0 || substitutionMinutes?.incoming != null;
       if (playerMapping.player_id && shouldSaveParticipation) {
         const row = participation ?? {
