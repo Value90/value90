@@ -359,7 +359,8 @@ export default function MatchesTable({
     }
 
     return date.toLocaleDateString(
-      "es-ES"
+      "es-ES",
+      { timeZone: "Europe/Madrid" }
     );
   };
 

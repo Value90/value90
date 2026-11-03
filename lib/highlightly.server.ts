@@ -20,6 +20,8 @@ export interface HighlightlyMatch {
   };
   homeTeam: { id: number; name: string; logo?: string };
   awayTeam: { id: number; name: string; logo?: string };
+  venue?: { id?: number; name?: string } | null;
+  stadium?: string | null;
   league: { id: number; name: string; season: number };
 }
 
@@ -90,7 +92,11 @@ async function request<T>(path: string, params?: Record<string, string | number>
   if (!response.ok) {
     throw new Error(body?.message || `Highlightly devolvió HTTP ${response.status}.`);
   }
-  return { body: body as T, remaining: response.headers.get("x-ratelimit-requests-remaining") };
+  return {
+    body: body as T,
+    remaining: response.headers.get("x-ratelimit-requests-remaining"),
+    limit: response.headers.get("x-ratelimit-requests-limit"),
+  };
 }
 
 export async function getHighlightlyLeagues(params: { leagueName?: string; countryCode?: string; season?: number }) {
@@ -98,13 +104,14 @@ export async function getHighlightlyLeagues(params: { leagueName?: string; count
   return request<HighlightlyPage<HighlightlyLeague>>("/leagues", query);
 }
 
-export async function getHighlightlyMatches(leagueId: number, season: number, offset: number) {
+export async function getHighlightlyMatches(leagueId: number, season: number, offset: number, date?: string, limit = 100) {
   return request<HighlightlyPage<HighlightlyMatch>>("/matches", {
     leagueId,
     season,
-    limit: 100,
+    limit,
     offset,
     timezone: "Europe/Madrid",
+    ...(date ? { date } : {}),
   });
 }
 

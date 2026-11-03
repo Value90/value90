@@ -6,10 +6,8 @@ interface SeasonTotal { seasonId: number; seasonName: string; score: number | nu
 interface MatchRating { id: number; seasonId: number; seasonName: string; date: string; homeTeam: string; awayTeam: string; homeScore: number | null; awayScore: number | null; rating: number; teamType: "Club" | "Selección" }
 
 function formatMatchDate(value: string) {
-  const wallTime = value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?/)?.[0];
-  if (!wallTime) return value;
-  const parsed = new Date(`${wallTime}Z`);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
 }
 
 export default function PlayerSeasonRatings({ seasons, matchHistory, currentSeasonId }: { seasons: SeasonTotal[]; matchHistory: MatchRating[]; currentSeasonId: number | null }) {

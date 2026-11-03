@@ -12,12 +12,8 @@ function SelectFilter({ label, value, onChange, options }: { label: string; valu
 }
 function madridToday() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
 function formatDate(value: string) {
-  // Los horarios guardados desde administración representan hora local de Madrid,
-  // aunque PostgreSQL/Supabase los serialice con sufijo UTC.
-  const wallTime = value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?/)?.[0];
-  if (!wallTime) return value;
-  const parsed = new Date(`${wallTime}Z`);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
 }
 
 export default function PublicMatches({ initialFilters, initialResult }: { initialFilters?: PublicFilters; initialResult?: PublicPageResult<PublicMatch> }) {

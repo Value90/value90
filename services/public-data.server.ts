@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
+import { madridWallTimeToUtc } from "@/lib/timezone";
 
 const PAGE_SIZE = 1000;
 const PUBLIC_CACHE_MS = 60_000;
@@ -92,34 +93,13 @@ function safeSearch(value: string | null): string {
   return (value ?? "").trim().slice(0, 80).replace(/[%,_()]/g, " ");
 }
 
-function madridWallTimeToUtc(value: string): string {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?/);
-  if (!match) throw new Error("Fecha local no válida.");
-  const [, year, month, day, hour = "00", minute = "00", second = "00"] = match;
-  const wallClock = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
-  let instant = wallClock;
-  const formatter = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
-  });
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const parts = Object.fromEntries(formatter.formatToParts(new Date(instant)).map((part) => [part.type, part.value]));
-    const representedAsUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
-    const offset = representedAsUtc - Math.floor(instant / 1000) * 1000;
-    const next = wallClock - offset;
-    if (next === instant) break;
-    instant = next;
-  }
-  return new Date(instant).toISOString();
-}
-
 function madridDateToUtc(date: string): string {
   return madridWallTimeToUtc(date);
 }
 
 function getMatchDisplayStatus(dateValue: string, statusValue: string, homeScore: number | null, awayScore: number | null): string {
   let kickoff = Number.NaN;
-  try { kickoff = new Date(madridWallTimeToUtc(dateValue)).getTime(); } catch { /* preserve the stored status if the date is invalid */ }
+  try { kickoff = new Date(dateValue).getTime(); } catch { /* preserve the stored status if the date is invalid */ }
   if (!Number.isFinite(kickoff)) return statusValue;
   const now = Date.now();
   const hasResult = homeScore !== null && awayScore !== null;

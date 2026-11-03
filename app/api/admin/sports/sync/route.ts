@@ -15,8 +15,16 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Poll after the expected end, with bounded retries. A short time window made
+// a missed cron run permanently strand otherwise valid fixtures.
+const MAX_RESULT_ATTEMPTS = 12;
+const RESULT_RETRY_DELAY_MS = 5 * 60_000;
+// Keep automatic retries limited to recent fixtures, so a missed deployment
+// cannot trigger a large batch of calls for the entire season's archive.
+const MAX_RESULT_AUTO_AGE_MS = 48 * 60 * 60_000;
+
 type SyncMapping = { external_match_id: number | string; match_id: number | string; result_attempts?: number | null; lineup_synced_at?: string | null };
-type SyncMatch = { season_id: number | string };
+type SyncMatch = { season_id: number | string; home_team_id: number | string };
 
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -178,18 +186,21 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
   const state = detail.state?.description ?? "Unknown";
   if (!isTerminal(state)) {
     const attempts = Number(mapping.result_attempts ?? 0) + 1;
-    const canRetry = attempts < 4;
-    const retry = await supabase.from("external_match_mappings").update({ result_attempts: attempts, next_result_sync_at: canRetry ? new Date(Date.now() + 5 * 60_000).toISOString() : null, last_sync_error: canRetry ? `El proveedor aún indica «${state}»; volveré a consultar en 5 minutos.` : `El proveedor aún indica «${state}» después de cuatro comprobaciones. Requiere revisión manual.`, updated_at: new Date().toISOString() })
+    const canRetry = attempts < MAX_RESULT_ATTEMPTS;
+    const retry = await supabase.from("external_match_mappings").update({ result_attempts: attempts, next_result_sync_at: canRetry ? new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString() : null, last_sync_error: canRetry ? `El proveedor aún indica «${state}»; volveré a consultar en 5 minutos.` : `El proveedor aún indica «${state}» después de ${MAX_RESULT_ATTEMPTS} comprobaciones. Requiere revisión manual.`, updated_at: new Date().toISOString() })
       .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
     if (retry.error) throw new Error(retry.error.message);
     return { matchId: mapping.match_id, waiting: true };
   }
 
   const [homeScore, awayScore] = score(detail.state?.score?.current);
+  const { data: homeTeam, error: homeTeamError } = await supabase.from("teams").select("stadium").eq("id", match.home_team_id).maybeSingle();
+  if (homeTeamError) throw new Error(homeTeamError.message);
   const updatedMatch = await supabase.from("matches").update({
     home_score: homeScore,
     away_score: awayScore,
     status: isCancelled(state) ? "Cancelado" : "Jugado",
+    stadium: detail.venue?.name ?? detail.stadium ?? homeTeam?.stadium ?? null,
   }).eq("id", mapping.match_id);
   if (updatedMatch.error) throw new Error(updatedMatch.error.message);
 
@@ -342,7 +353,8 @@ export async function POST(request: NextRequest) {
       const match = Array.isArray(mapping.match) ? mapping.match[0] : mapping.match;
       if (!match) continue;
       const kickoff = new Date(match.date).getTime();
-      const resultDue = !mapping.final_synced_at && Number(mapping.result_attempts ?? 0) < 4 && kickoff + 105 * 60_000 <= now && now <= kickoff + 120 * 60_000
+      const resultDue = !mapping.final_synced_at && Number(mapping.result_attempts ?? 0) < MAX_RESULT_ATTEMPTS
+        && kickoff + 105 * 60_000 <= now && now <= kickoff + MAX_RESULT_AUTO_AGE_MS
         && (!mapping.next_result_sync_at || new Date(mapping.next_result_sync_at).getTime() <= now);
       if (resultDue) {
         try {
@@ -350,7 +362,8 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           const message = error instanceof Error ? error.message : "Error sincronizando resultado.";
           const attempts = Number(mapping.result_attempts ?? 0) + 1;
-          await supabase.from("external_match_mappings").update({ result_attempts: attempts, next_result_sync_at: attempts < 4 ? new Date(Date.now() + 5 * 60_000).toISOString() : null, last_sync_error: attempts < 4 ? message : `${message} Se agotaron cuatro intentos; requiere revisión manual.`, updated_at: new Date().toISOString() }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
+          const canRetry = attempts < MAX_RESULT_ATTEMPTS;
+          await supabase.from("external_match_mappings").update({ result_attempts: attempts, next_result_sync_at: canRetry ? new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString() : null, last_sync_error: canRetry ? message : `${message} Se agotaron ${MAX_RESULT_ATTEMPTS} intentos; requiere revisión manual.`, updated_at: new Date().toISOString() }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
           results.push({ phase: "resultado", matchId: mapping.match_id, error: message });
         }
       }

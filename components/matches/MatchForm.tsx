@@ -28,6 +28,7 @@ import {
 } from "@/services/team-competition.service";
 
 import type { Match } from "@/services/match.service";
+import { madridDateTimeInput, madridDateTimeToUtc } from "@/lib/timezone";
 
 interface MatchFormProps {
   match?: Match;
@@ -177,15 +178,11 @@ export default function MatchForm({
   // Así evitamos construir accidentalmente valores como:
   // 2026-10-20T18:45:00T18:45:00
   const [date, setDate] = useState(
-    match?.date?.includes("T")
-      ? match.date.split("T")[0] ?? ""
-      : match?.date ?? ""
+    () => madridDateTimeInput(match?.date).date
   );
 
   const [time, setTime] = useState(
-    match?.date?.includes("T")
-      ? match.date.split("T")[1]?.slice(0, 5) ?? ""
-      : ""
+    () => madridDateTimeInput(match?.date).time
   );
 
   const [stadium, setStadium] = useState(
@@ -497,11 +494,8 @@ export default function MatchForm({
       }
     }
 
-    // date contiene únicamente YYYY-MM-DD y time únicamente HH:mm.
-    // Construimos el valor datetime una sola vez al guardar.
-    const dateTime = time
-      ? `${date}T${time}:00`
-      : date;
+    // El formulario trabaja en hora peninsular y la base guarda instantes UTC.
+    const dateTime = madridDateTimeToUtc(date, time);
 
     const matchData: Omit<
       Match,
