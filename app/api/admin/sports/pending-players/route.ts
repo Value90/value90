@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Falta una posición en una de las participaciones. Completa la posición antes de vincular." }, { status: 400 });
   }
   if (participationRows.length) {
-    const saved = await supabase.from("participations").upsert(participationRows, { onConflict: "match_id,player_id" });
+    const saved = await supabase.from("participations").upsert(participationRows, { onConflict: "match_id,player_id", defaultToNull: false });
     if (saved.error) return NextResponse.json({ error: saved.error.message }, { status: 500 });
   }
 

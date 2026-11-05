@@ -169,7 +169,7 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
   }
 
   if (participants.length) {
-    const saved = await supabase.from("participations").upsert(participants, { onConflict: "match_id,player_id" });
+    const saved = await supabase.from("participations").upsert(participants, { onConflict: "match_id,player_id", defaultToNull: false });
     if (saved.error) throw new Error(saved.error.message);
   }
   const mark = await supabase.from("external_match_mappings").update({ lineup_synced_at: new Date().toISOString(), next_lineup_sync_at: null, last_sync_error: null, updated_at: new Date().toISOString() })
@@ -179,7 +179,10 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
 }
 
 async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>, mapping: SyncMapping, match: SyncMatch) {
-  const { body } = await getHighlightlyMatch(Number(mapping.external_match_id));
+  const matchResponse = await getHighlightlyMatch(Number(mapping.external_match_id));
+  let callsRemaining = matchResponse.remaining;
+  let callsLimit = matchResponse.limit;
+  const { body } = matchResponse;
   const matchRecord = Array.isArray(body) ? body[0] : body;
   if (!matchRecord) throw new Error("Highlightly no devolvió el partido solicitado.");
   const detail = matchRecord as HighlightlyMatch & { events?: HighlightlyEvent[] };
@@ -190,7 +193,7 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
     const retry = await supabase.from("external_match_mappings").update({ result_attempts: attempts, next_result_sync_at: canRetry ? new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString() : null, last_sync_error: canRetry ? `El proveedor aún indica «${state}»; volveré a consultar en 5 minutos.` : `El proveedor aún indica «${state}» después de ${MAX_RESULT_ATTEMPTS} comprobaciones. Requiere revisión manual.`, updated_at: new Date().toISOString() })
       .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
     if (retry.error) throw new Error(retry.error.message);
-    return { matchId: mapping.match_id, waiting: true };
+    return { matchId: mapping.match_id, waiting: true, callsRemaining, callsLimit };
   }
 
   const [homeScore, awayScore] = score(detail.state?.score?.current);
@@ -207,15 +210,23 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
   let lineupSummary: { participants: number; pendingPlayers: number } | null = null;
   if (!isCancelled(state) && !mapping.lineup_synced_at) {
     const lineupResponse = await getHighlightlyLineups(Number(mapping.external_match_id));
+    callsRemaining = lineupResponse.remaining;
+    callsLimit = lineupResponse.limit;
     lineupSummary = await syncLineup(supabase, mapping, match, lineupResponse.body);
   }
 
-  const { body: boxScoreTeams } = !isCancelled(state)
+  const boxScoreResponse = !isCancelled(state)
     ? await getHighlightlyBoxScore(Number(mapping.external_match_id))
-    : { body: [] };
+    : { body: [], remaining: callsRemaining, limit: callsLimit };
+  callsRemaining = boxScoreResponse.remaining;
+  callsLimit = boxScoreResponse.limit;
+  const boxScoreTeams = boxScoreResponse.body;
   let events = Array.isArray(detail.events) ? detail.events : [];
   if (!isCancelled(state) && !events.length && boxScoreTeams.some((team) => (team.players ?? []).some((player) => player.isSubstitute && Number(player.minutesPlayed) === 0))) {
-    events = (await getHighlightlyEvents(Number(mapping.external_match_id))).body;
+    const eventResponse = await getHighlightlyEvents(Number(mapping.external_match_id));
+    callsRemaining = eventResponse.remaining;
+    callsLimit = eventResponse.limit;
+    events = eventResponse.body;
   }
   const substitutions = events.filter((event) => event.type.toLowerCase() === "substitution" && event.player && event.substituted);
   const [mappingsResult, teamsResult, participationsResult] = await Promise.all([
@@ -310,6 +321,16 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
     const savedMappings = await supabase.from("external_player_mappings").upsert([...changedMappings.values()], { onConflict: "provider,external_player_key,match_id" });
     if (savedMappings.error) throw new Error(savedMappings.error.message);
   }
+  const unusedPendingSubstituteKeys = [...changedMappings.values()]
+    .filter((row) => row.status === "pending" && !row.is_starting_xi
+      && Number(row.minutes_played) === 0 && row.substitute_in_minute == null)
+    .map((row) => String(row.external_player_key));
+  if (unusedPendingSubstituteKeys.length) {
+    const removed = await supabase.from("external_player_mappings").delete()
+      .eq("provider", "highlightly").eq("match_id", mapping.match_id)
+      .in("external_player_key", unusedPendingSubstituteKeys);
+    if (removed.error) throw new Error(removed.error.message);
+  }
   const unusedSubstituteIds = [...participationByPlayerId.values()]
     .filter((row) => !row.is_starting_xi && Number(row.minutes_played) === 0 && row.substitute_in_minute == null)
     .map((row) => Number(row.player_id));
@@ -320,14 +341,14 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
     for (const playerId of unusedSubstituteIds) participationByPlayerId.delete(playerId);
   }
   if (participationByPlayerId.size) {
-    const savedParticipations = await supabase.from("participations").upsert([...participationByPlayerId.values()], { onConflict: "match_id,player_id" });
+    const savedParticipations = await supabase.from("participations").upsert([...participationByPlayerId.values()], { onConflict: "match_id,player_id", defaultToNull: false });
     if (savedParticipations.error) throw new Error(savedParticipations.error.message);
   }
 
   const marked = await supabase.from("external_match_mappings").update({ final_synced_at: new Date().toISOString(), next_result_sync_at: null, last_sync_error: null, updated_at: new Date().toISOString() })
     .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
   if (marked.error) throw new Error(marked.error.message);
-  return { matchId: mapping.match_id, status: isCancelled(state) ? "Cancelado" : "Jugado", score: `${homeScore ?? "?"}-${awayScore ?? "?"}`, substitutions: substitutions.length, ...lineupSummary };
+  return { matchId: mapping.match_id, status: isCancelled(state) ? "Cancelado" : "Jugado", score: `${homeScore ?? "?"}-${awayScore ?? "?"}`, substitutions: substitutions.length, ...lineupSummary, callsRemaining, callsLimit };
 }
 
 export async function POST(request: NextRequest) {
@@ -342,20 +363,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
   try {
+    const body = await request.json().catch(() => ({})) as { matchId?: number | string };
+    const manualMatchId = body.matchId == null ? null : Number(body.matchId);
+    if (manualMatchId != null && (!Number.isSafeInteger(manualMatchId) || manualMatchId <= 0)) {
+      return NextResponse.json({ error: "El partido seleccionado no es válido." }, { status: 400 });
+    }
     const supabase = createAdminSupabaseClient();
     const { data: mappings, error } = await supabase.from("external_match_mappings")
       .select("provider,external_match_id,match_id,lineup_synced_at,final_synced_at,next_result_sync_at,result_attempts,last_sync_error,match:matches!inner(id,date,status,season_id,home_team_id,away_team_id)")
       .eq("provider", "highlightly").order("external_match_id", { ascending: true }).limit(1000);
     if (error) throw error;
+    const candidates = manualMatchId == null ? mappings ?? [] : (mappings ?? []).filter((item) => Number(item.match_id) === manualMatchId);
+    if (manualMatchId != null && !candidates.length) {
+      return NextResponse.json({ error: "Este partido no está asociado a Highlightly. Impórtalo primero desde su fecha." }, { status: 404 });
+    }
     const now = Date.now();
     const results: Array<Record<string, unknown>> = [];
-    for (const mapping of mappings ?? []) {
+    for (const mapping of candidates) {
       const match = Array.isArray(mapping.match) ? mapping.match[0] : mapping.match;
       if (!match) continue;
       const kickoff = new Date(match.date).getTime();
-      const resultDue = !mapping.final_synced_at && Number(mapping.result_attempts ?? 0) < MAX_RESULT_ATTEMPTS
+      const resultDue = manualMatchId != null || (!mapping.final_synced_at && Number(mapping.result_attempts ?? 0) < MAX_RESULT_ATTEMPTS
         && kickoff + 105 * 60_000 <= now && now <= kickoff + MAX_RESULT_AUTO_AGE_MS
-        && (!mapping.next_result_sync_at || new Date(mapping.next_result_sync_at).getTime() <= now);
+        && (!mapping.next_result_sync_at || new Date(mapping.next_result_sync_at).getTime() <= now));
       if (resultDue) {
         try {
           results.push({ phase: "resultado-final-y-participaciones", ...await syncResult(supabase, mapping, match) });
@@ -368,10 +398,52 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    return NextResponse.json({ ok: true, checked: mappings?.length ?? 0, processed: results.length, results });
+    return NextResponse.json({ ok: true, manual: manualMatchId != null, checked: candidates.length, processed: results.length, results });
   } catch (error) {
     console.error("Error en sincronización automática Highlightly:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Error en sincronización." }, { status: 500 });
+  }
+}
+
+export async function GET() {
+  const sessionClient = await createClient();
+  const { data: { user } } = await sessionClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  if (!process.env.SUPABASE_SECRET_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: "Falta configurar el acceso de administración a Supabase." }, { status: 503 });
+  }
+
+  try {
+    const supabase = createAdminSupabaseClient();
+    const { data: mappings, error } = await supabase.from("external_match_mappings")
+      .select("external_match_id,match_id,final_synced_at,match:matches!inner(id,date,status,home_score,away_score,stadium,home_team_id,away_team_id)")
+      .eq("provider", "highlightly").limit(1000);
+    if (error) throw error;
+    const rows = (mappings ?? []).map((mapping) => ({
+      mapping,
+      match: Array.isArray(mapping.match) ? mapping.match[0] : mapping.match,
+    })).filter((item) => item.match);
+    const teamIds = [...new Set(rows.flatMap(({ match }) => [Number(match.home_team_id), Number(match.away_team_id)]))];
+    const { data: teams, error: teamsError } = teamIds.length
+      ? await supabase.from("teams").select("id,name").in("id", teamIds)
+      : { data: [], error: null };
+    if (teamsError) throw teamsError;
+    const names = new Map((teams ?? []).map((team) => [Number(team.id), String(team.name)]));
+    const matches = rows.map(({ mapping, match }) => ({
+      matchId: Number(mapping.match_id),
+      date: String(match.date),
+      status: String(match.status ?? ""),
+      homeScore: match.home_score == null ? null : Number(match.home_score),
+      awayScore: match.away_score == null ? null : Number(match.away_score),
+      home: names.get(Number(match.home_team_id)) ?? "Equipo local",
+      away: names.get(Number(match.away_team_id)) ?? "Equipo visitante",
+      finalSynced: Boolean(mapping.final_synced_at),
+    })).filter((match) => new Date(match.date).getTime() <= Date.now())
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return NextResponse.json({ matches });
+  } catch (error) {
+    console.error("Error consultando partidos importados:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "No se pudieron consultar los partidos." }, { status: 500 });
   }
 }
 

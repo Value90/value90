@@ -15,6 +15,7 @@ type PendingPlayer = {
 type CompetitionKey = "laliga" | "champions";
 type ImportMode = "round" | "dates";
 type QuotaState = { remaining: number | null; limit: number | null; checkedAt: string };
+type ImportedMatch = { matchId: number; date: string; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; finalSynced: boolean };
 
 const QUOTA_STORAGE_KEY = "value90-highlightly-quota";
 
@@ -50,6 +51,9 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   const [endDate, setEndDate] = useState(madridToday);
   const [quota, setQuota] = useState<QuotaState | null>(null);
   const [checkingQuota, setCheckingQuota] = useState(false);
+  const [pastMatches, setPastMatches] = useState<ImportedMatch[]>([]);
+  const [selectedPastMatch, setSelectedPastMatch] = useState("");
+  const [syncingPastMatch, setSyncingPastMatch] = useState(false);
 
   useEffect(() => {
     try {
@@ -90,11 +94,23 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     setPlayers(refreshed);
   }, []);
 
+  const loadPastMatches = useCallback(async () => {
+    const response = await fetch("/api/admin/sports/sync", { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error ?? "No se pudieron cargar los partidos importados.");
+    const rows: ImportedMatch[] = payload.matches ?? [];
+    setPastMatches(rows);
+    setSelectedPastMatch((current) => current && rows.some((match) => String(match.matchId) === current)
+      ? current
+      : rows[0] ? String(rows[0].matchId) : "");
+  }, []);
+
   useEffect(() => {
     loadPending().catch((error) => setMessage(error instanceof Error ? error.message : "Error cargando incidencias."));
     loadPlayers().catch(() => undefined);
+    loadPastMatches().catch(() => undefined);
     getPositions().then(setPositions).catch(() => undefined);
-  }, [loadPending, loadPlayers]);
+  }, [loadPending, loadPlayers, loadPastMatches]);
 
   async function refreshQuota() {
     setCheckingQuota(true);
@@ -136,6 +152,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         setQuota(next);
         localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(next));
       }
+      await loadPastMatches();
       onImported?.();
       const autoLinked = await loadPending();
       setMessage(`${payload.message} Partidos guardados o vinculados: ${payload.imported}. Pendientes por equipos no asociados: ${payload.skipped}. Jugadores asignados automáticamente: ${autoLinked}.${payload.missingTeams?.length ? ` Equipos por crear/asociar: ${payload.missingTeams.join(", ")}.` : ""}`);
@@ -143,6 +160,38 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       setMessage(error instanceof Error ? error.message : "No se pudo importar el calendario.");
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function syncPastMatchNow() {
+    const matchId = Number(selectedPastMatch);
+    if (!matchId) return;
+    setSyncingPastMatch(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/sports/sync", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "No se pudo sincronizar el partido.");
+      const result = payload.results?.[0];
+      if (result?.error) throw new Error(result.error);
+      if (result?.callsRemaining != null) {
+        const next: QuotaState = { remaining: Number(result.callsRemaining), limit: result.callsLimit == null ? quota?.limit ?? null : Number(result.callsLimit), checkedAt: new Date().toISOString() };
+        setQuota(next);
+        localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(next));
+      }
+      await Promise.all([loadPastMatches(), loadPending()]);
+      onImported?.();
+      setMessage(result?.waiting
+        ? "Highlightly todavía no marca el partido como finalizado. Se volverá a consultar automáticamente."
+        : result
+          ? `Partido sincronizado: ${result.score}. Resultado y datos disponibles de alineaciones/minutos actualizados.${result.pendingPlayers ? ` ${result.pendingPlayers} jugador(es) quedan pendientes de revisión.` : ""}`
+          : "No había ningún dato nuevo que sincronizar.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo sincronizar el partido.");
+    } finally {
+      setSyncingPastMatch(false);
     }
   }
 
@@ -232,6 +281,17 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         <p>Saldo de la cuenta: <strong className="text-slate-900">{quota?.remaining ?? "Sin consultar"}{quota?.limit != null ? ` / ${quota.limit}` : ""}</strong>{quota?.checkedAt ? ` · última lectura ${new Date(quota.checkedAt).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
       </div>
       <p className="text-xs text-slate-500 sm:col-span-2">Por jornada, Highlightly no ofrece un filtro directo: se consulta el calendario de la competición y se extrae esa jornada (aprox. 4 llamadas para LaLiga y 2 para Champions). Por fechas, se realiza una llamada por día. Actualizar el saldo también consume 1 llamada; el contador muestra el saldo de la última respuesta de Highlightly.</p>
+    </div>
+    <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-4">
+      <label className="block min-w-0">
+        <span className="mb-1 block text-sm font-semibold text-amber-950">Sincronizar ahora un partido ya importado</span>
+        <select value={selectedPastMatch} onChange={(event) => setSelectedPastMatch(event.target.value)} disabled={!pastMatches.length || syncingPastMatch} className="min-h-11 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm">
+          {!pastMatches.length && <option value="">No hay partidos importados anteriores</option>}
+          {pastMatches.map((match) => <option key={match.matchId} value={match.matchId}>{new Date(match.date).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {match.home} {match.homeScore ?? 0}-{match.awayScore ?? 0} {match.away}{match.finalSynced ? " · volver a consultar" : " · pendiente"}</option>)}
+        </select>
+        <span className="mt-1 block text-xs text-amber-900">Consulta Highlightly ahora mismo y actualiza resultado, alineaciones y minutos. Cada llamada utilizada se descuenta del saldo diario.</span>
+      </label>
+      <button type="button" onClick={syncPastMatchNow} disabled={!selectedPastMatch || syncingPastMatch} className="min-h-11 w-full rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto">{syncingPastMatch ? "Consultando Highlightly…" : "Sincronizar ahora"}</button>
     </div>
     {message && <p role="status" className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{message}</p>}
 

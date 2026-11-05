@@ -46,7 +46,7 @@ interface ExtractedRow {
   playerName: string;
   team: TeamSide;
   shirtNumber: number | null;
-  rating: number | null;
+  rating: number | string | null;
   isCaptain: boolean;
   observations: string;
 }
@@ -120,7 +120,7 @@ const extractionSchema = {
             type: ["integer", "null"],
           },
           rating: {
-            type: ["number", "null"],
+            type: ["number", "string", "null"],
           },
           isCaptain: {
             type: "boolean",
@@ -173,6 +173,11 @@ function normalizeRating(
   source: RatingSource,
   value: unknown,
 ): number | null {
+  if (typeof value === "string") {
+    const token = value.trim().toLocaleLowerCase("es").replace(/[.\s]/g, "");
+    if (["-", "–", "—", "sc"].includes(token)) return 0;
+    value = Number(token.replace(",", "."));
+  }
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return null;
   }
@@ -294,6 +299,8 @@ LECTURA DE LA CAPTURA:
 - Recorre todas las filas visibles, incluidas las situadas en los bordes.
 - Transcribe el nombre aunque sea parcial; no omitas una fila porque el dorsal no se lea.
 - Lee la valoración desde su columna o símbolo específico.
+- Si en la propia columna de valoración aparece «-» o «SC» (también «S.C.»), interpreta la nota como 0 y devuelve el número 0.
+- No confundas un guion separador, raya de tabla ni texto fuera de la columna de valoración con una nota cero.
 - El equipo solo puede ser home, away o unknown.
 - Marca isCaptain=true únicamente si el nombre aparece precedido por '(c)' o una marca inequívoca equivalente.
 - No deduzcas el capitán por posición, brazalete u orden.
