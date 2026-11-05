@@ -26,7 +26,8 @@ const MAX_RESULT_AUTO_AGE_MS = 48 * 60 * 60_000;
 type SyncMapping = { external_match_id: number | string; match_id: number | string; result_attempts?: number | null; lineup_synced_at?: string | null };
 type SyncMatch = { season_id: number | string; home_team_id: number | string };
 
-function normalize(value: string) {
+function normalize(value: string | null | undefined) {
+  if (typeof value !== "string") return "";
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
@@ -44,7 +45,8 @@ function nameMatchesAbbreviation(sourceName: string, playerName: string, shortNa
     && sourceParts[sourceParts.length - 1] === playerParts[playerParts.length - 1];
 }
 
-function positionMatches(providerPosition: string, localName: string, shortName: string) {
+function positionMatches(providerPosition: string | null | undefined, localName: string, shortName: string) {
+  if (typeof providerPosition !== "string" || !providerPosition.trim()) return false;
   const local = normalize(`${localName} ${shortName}`);
   const groups: Record<string, string[]> = {
     goalkeeper: ["goalkeeper", "portero", "arquero", "gk", "por"],
@@ -55,7 +57,8 @@ function positionMatches(providerPosition: string, localName: string, shortName:
   return (groups[providerPosition.toLowerCase()] ?? []).some((term) => local.includes(normalize(term)));
 }
 
-function minute(value: string) {
+function minute(value: string | null | undefined) {
+  if (typeof value !== "string" || !value.trim()) return 0;
   const [base, added = "0"] = value.split("+");
   const number = Number(base) + Number(added);
   return Number.isFinite(number) ? Math.max(0, Math.min(120, number)) : 0;
@@ -228,7 +231,7 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
     callsLimit = eventResponse.limit;
     events = eventResponse.body;
   }
-  const substitutions = events.filter((event) => event.type.toLowerCase() === "substitution" && event.player && event.substituted);
+  const substitutions = events.filter((event) => event.type?.toLowerCase() === "substitution" && event.player && event.substituted);
   const [mappingsResult, teamsResult, participationsResult] = await Promise.all([
     supabase.from("external_player_mappings").select("*").eq("provider", "highlightly").eq("match_id", mapping.match_id),
     supabase.from("external_team_mappings").select("external_team_id,team_id").eq("provider", "highlightly"),
@@ -416,7 +419,7 @@ export async function GET() {
   try {
     const supabase = createAdminSupabaseClient();
     const { data: mappings, error } = await supabase.from("external_match_mappings")
-      .select("external_match_id,match_id,final_synced_at,match:matches!inner(id,date,status,home_score,away_score,stadium,home_team_id,away_team_id)")
+      .select("external_match_id,match_id,final_synced_at,last_sync_error,result_attempts,next_result_sync_at,match:matches!inner(id,date,status,home_score,away_score,stadium,home_team_id,away_team_id)")
       .eq("provider", "highlightly").limit(1000);
     if (error) throw error;
     const rows = (mappings ?? []).map((mapping) => ({
@@ -438,8 +441,13 @@ export async function GET() {
       home: names.get(Number(match.home_team_id)) ?? "Equipo local",
       away: names.get(Number(match.away_team_id)) ?? "Equipo visitante",
       finalSynced: Boolean(mapping.final_synced_at),
+      syncError: mapping.last_sync_error == null ? null : String(mapping.last_sync_error),
+      resultAttempts: Number(mapping.result_attempts ?? 0),
+      nextAttemptAt: mapping.next_result_sync_at == null ? null : String(mapping.next_result_sync_at),
     })).filter((match) => new Date(match.date).getTime() <= Date.now())
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      .sort((a, b) => Number(Boolean(b.syncError)) - Number(Boolean(a.syncError))
+        || Number(a.finalSynced) - Number(b.finalSynced)
+        || new Date(b.date).getTime() - new Date(a.date).getTime());
     return NextResponse.json({ matches });
   } catch (error) {
     console.error("Error consultando partidos importados:", error);

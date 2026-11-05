@@ -15,7 +15,7 @@ type PendingPlayer = {
 type CompetitionKey = "laliga" | "champions";
 type ImportMode = "round" | "dates";
 type QuotaState = { remaining: number | null; limit: number | null; checkedAt: string };
-type ImportedMatch = { matchId: number; date: string; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; finalSynced: boolean };
+type ImportedMatch = { matchId: number; date: string; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; finalSynced: boolean; syncError: string | null; resultAttempts: number; nextAttemptAt: string | null };
 
 const QUOTA_STORAGE_KEY = "value90-highlightly-quota";
 
@@ -287,8 +287,11 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         <span className="mb-1 block text-sm font-semibold text-amber-950">Sincronizar ahora un partido ya importado</span>
         <select value={selectedPastMatch} onChange={(event) => setSelectedPastMatch(event.target.value)} disabled={!pastMatches.length || syncingPastMatch} className="min-h-11 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm">
           {!pastMatches.length && <option value="">No hay partidos importados anteriores</option>}
-          {pastMatches.map((match) => <option key={match.matchId} value={match.matchId}>{new Date(match.date).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {match.home} {match.homeScore ?? 0}-{match.awayScore ?? 0} {match.away}{match.finalSynced ? " · volver a consultar" : " · pendiente"}</option>)}
+          {pastMatches.map((match) => <option key={match.matchId} value={match.matchId}>{new Date(match.date).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {match.home} {match.homeScore ?? 0}-{match.awayScore ?? 0} {match.away}{match.syncError ? " · requiere revisión" : match.finalSynced ? " · volver a consultar" : " · pendiente"}</option>)}
         </select>
+        {pastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.syncError && <p role="status" className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          La última sincronización automática de este partido tuvo un problema ({pastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.resultAttempts ?? 0} intentos). Puedes volver a solicitarla con el botón. Detalle: {pastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.syncError}
+        </p>}
         <span className="mt-1 block text-xs text-amber-900">Consulta Highlightly ahora mismo y actualiza resultado, alineaciones y minutos. Cada llamada utilizada se descuenta del saldo diario.</span>
       </label>
       <button type="button" onClick={syncPastMatchNow} disabled={!selectedPastMatch || syncingPastMatch} className="min-h-11 w-full rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto">{syncingPastMatch ? "Consultando Highlightly…" : "Sincronizar ahora"}</button>

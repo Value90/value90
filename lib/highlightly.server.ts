@@ -29,7 +29,7 @@ export interface HighlightlyPlayer {
   id?: number;
   name: string;
   number: number;
-  position: "Goalkeeper" | "Defender" | "Midfielder" | "Forward";
+  position?: "Goalkeeper" | "Defender" | "Midfielder" | "Forward" | null;
 }
 
 export interface HighlightlyLineupTeam {
@@ -46,9 +46,9 @@ export interface HighlightlyLineups {
 }
 
 export interface HighlightlyEvent {
-  team: { id: number; name: string };
-  time: string;
-  type: string;
+  team?: { id: number; name: string } | null;
+  time?: string | null;
+  type?: string | null;
   playerId?: number;
   player?: string;
   substituted?: string;

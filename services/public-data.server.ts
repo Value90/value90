@@ -307,14 +307,22 @@ async function getRankingBase() {
   });
 }
 
-async function getFilteredMatchIds(competitionId: number | null, seasonId: number | null) {
-  if (!competitionId && !seasonId) return null;
+async function getRankingMatchScope(competitionId: number | null, seasonId: number | null) {
   return readAll<Row>((from, to) => {
-    let query = supabase.from("matches").select("id").order("id");
+    let query = supabase.from("matches").select("id,season_id,home_team_id,away_team_id,status").order("id");
     if (competitionId) query = query.eq("competition_id", competitionId);
     if (seasonId) query = query.eq("season_id", seasonId);
     return query.range(from, to);
-  }).then((rows) => new Set(rows.map((row) => Number(row.id))));
+  });
+}
+
+async function getRankingParticipations(competitionId: number | null, seasonId: number | null) {
+  return readAll<Row>((from, to) => {
+    let query = supabase.from("participations").select("id,player_id,match_id,team_id,match:matches!inner(season_id,competition_id)").order("id");
+    if (competitionId) query = query.eq("match.competition_id", competitionId);
+    if (seasonId) query = query.eq("match.season_id", seasonId);
+    return query.range(from, to);
+  });
 }
 
 export async function getPublicRankings(params: URLSearchParams) {
@@ -332,9 +340,12 @@ export async function getPublicRankings(params: URLSearchParams) {
   const ranked = await cached(
     `public-ranking:${query}:${teamId ?? "all"}:${competitionId ?? "all"}:${seasonId ?? "all"}:${positionId ?? "all"}:${minMatches}`,
     async () => {
-  const [base, matchIds, positionPlayerIds] = await Promise.all([
+  const matchScopePromise = getRankingMatchScope(competitionId, seasonId);
+  const [base, matchScope, eligibilityMatchScope, participationRows, positionPlayerIds] = await Promise.all([
     getRankingBase(),
-    getFilteredMatchIds(competitionId, seasonId),
+    matchScopePromise,
+    competitionId ? getRankingMatchScope(null, seasonId) : matchScopePromise,
+    getRankingParticipations(null, seasonId),
     positionId
       ? readAll<Row>((from, to) => {
           let request = supabase
@@ -356,10 +367,40 @@ export async function getPublicRankings(params: URLSearchParams) {
     teamId: number;
     latestAt: string;
   }>();
+  const matchesById = new Map(matchScope.map((match) => [Number(match.id), match]));
+  const eligibilityMatchesById = new Map(eligibilityMatchScope.map((match) => [Number(match.id), match]));
+  const teamMatches = new Map<string, number>();
+  const appearances = new Map<number, Map<string, Set<number>>>();
+  const playedStatuses = new Set(["jugado", "played", "finished", "finalizado", "finalizada", "completed", "terminado", "terminada"]);
+  const teamSeasonKey = (team: number, season: number) => `${season}:${team}`;
+
+  for (const match of eligibilityMatchScope) {
+    if (!playedStatuses.has(String(match.status ?? "").trim().toLocaleLowerCase("es"))) continue;
+    const season = Number(match.season_id);
+    for (const team of [Number(match.home_team_id), Number(match.away_team_id)]) {
+      const key = teamSeasonKey(team, season);
+      teamMatches.set(key, (teamMatches.get(key) ?? 0) + 1);
+    }
+  }
+
+  for (const participation of participationRows) {
+    const matchId = Number(participation.match_id);
+    const match = eligibilityMatchesById.get(matchId);
+    if (!match || !playedStatuses.has(String(match.status ?? "").trim().toLocaleLowerCase("es"))) continue;
+    const playerId = Number(participation.player_id);
+    const teamId = Number(participation.team_id);
+    const groupKey = teamSeasonKey(teamId, Number(match.season_id));
+    const playerGroups = appearances.get(playerId) ?? new Map<string, Set<number>>();
+    const playerMatches = playerGroups.get(groupKey) ?? new Set<number>();
+    playerMatches.add(matchId);
+    playerGroups.set(groupKey, playerMatches);
+    appearances.set(playerId, playerGroups);
+  }
 
   for (const fact of base.facts) {
     if (teamId && fact.teamId !== teamId) continue;
-    if (matchIds && !matchIds.has(fact.matchId)) continue;
+    const match = matchesById.get(fact.matchId);
+    if (!match || !playedStatuses.has(String(match.status ?? "").trim().toLocaleLowerCase("es"))) continue;
     if (positionPlayerIds && !positionPlayerIds.has(fact.playerId)) continue;
 
     const aggregate = aggregates.get(fact.playerId) ?? {
@@ -387,7 +428,15 @@ export async function getPublicRankings(params: URLSearchParams) {
     score: aggregate.weight > 0 ? aggregate.contribution / aggregate.weight : 0,
     matches: aggregate.matches,
   }))
-    .filter((item) => item.score > 0 && item.matches >= minMatches && (!query || item.playerName.toLocaleLowerCase("es").includes(query)))
+    .filter((item) => {
+      const meetsTeamThreshold = [...(appearances.get(item.playerId)?.entries() ?? [])].some(([key, playedMatches]) => {
+        const [season, team] = key.split(":").map(Number);
+        if (teamId && team !== teamId) return false;
+        const teamMatchCount = teamMatches.get(teamSeasonKey(team, season)) ?? 0;
+        return teamMatchCount > 0 && playedMatches.size / teamMatchCount >= 0.85;
+      });
+      return meetsTeamThreshold && item.score > 0 && item.matches >= minMatches && (!query || item.playerName.toLocaleLowerCase("es").includes(query));
+    })
     .sort((a, b) => b.score - a.score || a.playerName.localeCompare(b.playerName, "es"));
     },
   );
