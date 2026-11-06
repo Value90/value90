@@ -6,7 +6,9 @@ import PublicFooter from "@/components/public/PublicFooter";
 import PublicPageHeader from "@/components/public/PublicPageHeader";
 import { getPublicJson, type PublicFilters, type PublicPageResult } from "@/components/public/public-api";
 
-interface RankedPlayer { playerId: number; playerName: string; teamName: string; score: number; matches: number }
+interface RankedPlayer { playerId: number; playerName: string; teamName: string; score: number; matches: number; marketValueEur: number | null }
+
+const euro = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
 function SelectFilter({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ id: number; name: string }> }) {
   return <label><span className="mb-1.5 block text-xs font-bold text-slate-600">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"><option value="">Todas</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>;
@@ -22,6 +24,8 @@ export default function PublicRankings({ initialFilters, initialResult }: { init
   const [teamId, setTeamId] = useState("");
   const [positionId, setPositionId] = useState("");
   const [minMatches, setMinMatches] = useState("1");
+  const [sortBy, setSortBy] = useState<"score" | "marketValue">("score");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(!initialResult);
   const [error, setError] = useState("");
@@ -40,14 +44,14 @@ export default function PublicRankings({ initialFilters, initialResult }: { init
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const params = new URLSearchParams({ section: "rankings", page: String(page), limit: "20", minMatches });
+  const params = new URLSearchParams({ section: "rankings", page: String(page), limit: "20", minMatches, sortBy, sortDirection });
   if (stableSearch) params.set("q", stableSearch);
   if (competitionId) params.set("competitionId", competitionId);
   if (seasonId) params.set("seasonId", seasonId);
   if (teamId) params.set("teamId", teamId);
   if (positionId) params.set("positionId", positionId);
   const requestKey = params.toString();
-  const lastRequestKey = useRef(initialResult ? new URLSearchParams({ section: "rankings", page: "1", limit: "20", minMatches: "1", ...(seasonId ? { seasonId } : {}) }).toString() : "");
+  const lastRequestKey = useRef(initialResult ? new URLSearchParams({ section: "rankings", page: "1", limit: "20", minMatches: "1", sortBy: "score", sortDirection: "desc", ...(seasonId ? { seasonId } : {}) }).toString() : "");
 
   useEffect(() => {
     if (requestKey === lastRequestKey.current) return;
@@ -55,7 +59,7 @@ export default function PublicRankings({ initialFilters, initialResult }: { init
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    getPublicJson<PublicPageResult<RankedPlayer>>(params, controller.signal)
+    getPublicJson<PublicPageResult<RankedPlayer>>(new URLSearchParams(requestKey), controller.signal)
       .then(setResult)
       .catch((loadError: unknown) => { if (!controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : "No se pudo cargar el ranking."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -64,6 +68,12 @@ export default function PublicRankings({ initialFilters, initialResult }: { init
 
   const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / (result?.pageSize ?? 20)));
   function setFilter(setter: (value: string) => void, value: string) { setter(value); setPage(1); }
+  function toggleSort(field: "score" | "marketValue") {
+    setPage(1);
+    if (sortBy === field) setSortDirection((current) => current === "desc" ? "asc" : "desc");
+    else { setSortBy(field); setSortDirection("desc"); }
+  }
+  const sortArrow = (field: "score" | "marketValue") => sortBy === field ? (sortDirection === "desc" ? " ↓" : " ↑") : "";
 
   return <div className="min-h-screen bg-slate-50 text-slate-900"><PublicHeader /><main>
     <PublicPageHeader eyebrow="Clasificación" title="Rankings V90" description="Consulta la temporada actual y filtra por competición, temporada, equipo, posición, nombre y partidos calculados." />
@@ -81,8 +91,13 @@ export default function PublicRankings({ initialFilters, initialResult }: { init
       </div>
 
       <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="hidden grid-cols-[3.5rem_minmax(0,1fr)_minmax(9rem,0.7fr)_6rem_8rem] gap-3 border-b border-slate-100 bg-slate-50 px-5 py-3 text-xs font-bold uppercase tracking-wide text-slate-500 sm:grid"><span>#</span><span>Jugador</span><span>Equipo del último cálculo</span><span className="text-right">Partidos</span><span className="text-right">V90</span></div>
-        {error ? <p className="p-6 text-sm text-red-700" role="alert">{error}</p> : loading && !result ? <p className="p-10 text-center text-sm text-slate-500" role="status">Cargando el ranking…</p> : (result?.items.length ?? 0) === 0 ? <p className="p-10 text-center text-sm text-slate-500">No hay jugadores con estos filtros.</p> : <ol className="divide-y divide-slate-100">{result!.items.map((item, index) => <li key={item.playerId} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:grid-cols-[3.5rem_minmax(0,1fr)_minmax(9rem,0.7fr)_6rem_8rem] sm:px-5"><span className="text-sm font-black text-slate-400">{String((page - 1) * result!.pageSize + index + 1).padStart(2, "0")}</span><div className="min-w-0"><p className="truncate font-bold">{item.playerName}</p><p className="mt-1 text-xs text-slate-500 sm:hidden">{item.teamName} · {item.matches} partidos</p></div><span className="hidden truncate text-sm text-slate-600 sm:block">{item.teamName}</span><span className="hidden text-right text-sm text-slate-600 sm:block">{item.matches}</span><span className="text-right text-xl font-black text-emerald-700">{item.score.toLocaleString("es-ES", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}</span></li>)}</ol>}
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:hidden">
+          <span className="mr-1 text-xs font-bold text-slate-500">Ordenar:</span>
+          <button type="button" onClick={() => toggleSort("score")} aria-pressed={sortBy === "score"} className={`min-h-10 rounded-lg px-3 text-xs font-bold ${sortBy === "score" ? "bg-emerald-100 text-emerald-800" : "bg-white text-slate-600"}`}>V90{sortArrow("score")}</button>
+          <button type="button" onClick={() => toggleSort("marketValue")} aria-pressed={sortBy === "marketValue"} className={`min-h-10 rounded-lg px-3 text-xs font-bold ${sortBy === "marketValue" ? "bg-emerald-100 text-emerald-800" : "bg-white text-slate-600"}`}>Valor de mercado{sortArrow("marketValue")}</button>
+        </div>
+        <div className="hidden grid-cols-[3.5rem_minmax(0,1fr)_minmax(9rem,0.7fr)_6rem_8rem_10rem] gap-3 border-b border-slate-100 bg-slate-50 px-5 py-3 text-xs font-bold uppercase tracking-wide text-slate-500 sm:grid"><span>#</span><span>Jugador</span><span>Equipo del último cálculo</span><span className="text-right">Partidos</span><button type="button" onClick={() => toggleSort("score")} aria-pressed={sortBy === "score"} className="text-right">V90{sortArrow("score")}</button><button type="button" onClick={() => toggleSort("marketValue")} aria-pressed={sortBy === "marketValue"} className="text-right">Valor de mercado actual{sortArrow("marketValue")}</button></div>
+        {error ? <p className="p-6 text-sm text-red-700" role="alert">{error}</p> : loading && !result ? <p className="p-10 text-center text-sm text-slate-500" role="status">Cargando el ranking…</p> : (result?.items.length ?? 0) === 0 ? <p className="p-10 text-center text-sm text-slate-500">No hay jugadores con estos filtros.</p> : <ol className="divide-y divide-slate-100">{result!.items.map((item, index) => <li key={item.playerId} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:grid-cols-[3.5rem_minmax(0,1fr)_minmax(9rem,0.7fr)_6rem_8rem_10rem] sm:px-5"><span className="text-sm font-black text-slate-400">{String((page - 1) * result!.pageSize + index + 1).padStart(2, "0")}</span><div className="min-w-0"><p className="truncate font-bold">{item.playerName}</p><p className="mt-1 text-xs text-slate-500 sm:hidden">{item.teamName} · {item.matches} partidos</p></div><span className="hidden truncate text-sm text-slate-600 sm:block">{item.teamName}</span><span className="hidden text-right text-sm text-slate-600 sm:block">{item.matches}</span><span className="text-right text-xl font-black text-emerald-700">{item.score.toLocaleString("es-ES", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}<span className="block text-[10px] font-medium text-slate-500 sm:hidden">V90</span></span><span className="hidden text-right text-sm font-bold text-slate-800 sm:block">{item.marketValueEur == null ? "—" : euro.format(item.marketValueEur)}</span><span className="text-right text-xs font-bold text-slate-700 sm:hidden">{item.marketValueEur == null ? "—" : euro.format(item.marketValueEur)}<span className="block text-[10px] font-medium text-slate-500">Mercado actual</span></span></li>)}</ol>}
         {result && result.total > result.pageSize && <div className="flex items-center justify-center gap-3 border-t border-slate-100 p-4"><button type="button" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))} className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-semibold disabled:opacity-40">Anterior</button><span className="text-sm text-slate-600">{page} / {totalPages}</span><button type="button" disabled={page >= totalPages || loading} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-semibold disabled:opacity-40">Siguiente</button></div>}
       </div>
     </section>

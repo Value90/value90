@@ -63,6 +63,25 @@ export interface HighlightlyBoxScorePlayer {
   position?: "Goalkeeper" | "Defender" | "Midfielder" | "Forward";
   minutesPlayed: number;
   isSubstitute: boolean;
+  statistics?: HighlightlyBoxScorePlayerStatistics[] | HighlightlyBoxScorePlayerStatistics;
+}
+
+export interface HighlightlyBoxScorePlayerStatistics {
+  goalsScored?: number;
+  goalsSaved?: number;
+  assists?: number;
+  dribblesTotal?: number;
+  dribblesSuccessful?: number;
+  tacklesTotal?: number;
+  interceptionsTotal?: number;
+  duelsTotal?: number;
+  duelsWon?: number;
+  cardsRed?: number;
+  cardsYellow?: number;
+  passesSuccessful?: number;
+  passesTotal?: number;
+  shotsOnTarget?: number;
+  shotsTotal?: number;
 }
 
 export interface HighlightlyBoxScoreTeam {

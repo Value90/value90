@@ -331,10 +331,6 @@ export default function PlayerMatchStatsTable({
             "Duelos ganados"
           ),
           numberColumn(
-            "clearances",
-            "Despejes"
-          ),
-          numberColumn(
             "saves",
             "Paradas"
           ),
@@ -344,7 +340,7 @@ export default function PlayerMatchStatsTable({
           ),
           numberColumn(
             "recoveries",
-            "Recuperaciones"
+            "Intercepciones"
           ),
         ];
       }
@@ -357,10 +353,6 @@ export default function PlayerMatchStatsTable({
         numberColumn(
           "passesCompleted",
           "Pases completados"
-        ),
-        numberColumn(
-          "errorsLeadingToGoal",
-          "Errores que conllevan gol"
         ),
         numberColumn(
           "yellowCards",

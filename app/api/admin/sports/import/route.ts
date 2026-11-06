@@ -229,8 +229,9 @@ export async function POST(request: NextRequest) {
       const matchData = {
         competition_id: competition.id, season_id: season.id, stage_id: stage.id,
         home_team_id: home.id, away_team_id: away.id,
-        home_score: isFinished(match) ? score[0] : null,
-        away_score: isFinished(match) ? score[1] : null,
+        // La tabla de partidos requiere marcador no nulo; los pendientes usan 0-0.
+        home_score: isFinished(match) ? score[0] ?? 0 : 0,
+        away_score: isFinished(match) ? score[1] ?? 0 : 0,
         date: match.date,
         stadium: match.venue?.name ?? match.stadium ?? home.stadium ?? null,
         status: isFinished(match) ? "Jugado" : isCancelled(match) ? "Cancelado" : "Programado",

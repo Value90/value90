@@ -50,13 +50,11 @@ type StatField =
   | "assists"
   | "duels"
   | "duelsWon"
-  | "clearances"
   | "saves"
   | "tackles"
   | "recoveries"
   | "passes"
   | "passesCompleted"
-  | "errorsLeadingToGoal"
   | "yellowCards"
   | "redCards";
 
@@ -90,14 +88,12 @@ const STAT_FIELDS: StatField[] = [
   "duels",
   "duelsWon",
   "tackles",
-  "clearances",
   "recoveries",
   "saves",
   "passes",
   "passesCompleted",
   "yellowCards",
   "redCards",
-  "errorsLeadingToGoal",
 ];
 
 /*
@@ -135,8 +131,6 @@ const EMPTY_STAT_VALUES: Record<
 
   tackles: 0,
 
-  clearances: 0,
-
   recoveries: 0,
 
   saves: 0,
@@ -149,7 +143,6 @@ const EMPTY_STAT_VALUES: Record<
 
   redCards: 0,
 
-  errorsLeadingToGoal: 0,
 };
 
 /*
@@ -207,11 +200,11 @@ const OFFENSIVE_FIELDS: {
  * IMPORTANTE:
  *
  * "tackles" continúa siendo el nombre técnico del campo
- * almacenado en Supabase.
+ * almacenado en Supabase y representa entradas.
  *
  * Visualmente se muestra como:
  *
- * "Interceptaciones"
+ * "Entradas"
  * ------------------------------------------------------------
  */
 
@@ -231,17 +224,12 @@ const DEFENSIVE_FIELDS: {
 
   {
     field: "tackles",
-    label: "Interceptaciones",
-  },
-
-  {
-    field: "clearances",
-    label: "Despejes",
+    label: "Entradas",
   },
 
   {
     field: "recoveries",
-    label: "Recuperaciones",
+    label: "Intercepciones",
   },
 
   {
@@ -280,10 +268,6 @@ const DISTRIBUTION_FIELDS: {
     label: "Tarjetas rojas",
   },
 
-  {
-    field: "errorsLeadingToGoal",
-    label: "Errores que conllevan gol",
-  },
 ];
 
 /*
@@ -632,10 +616,6 @@ export default function PlayerMatchStatForm({
       tackles:
         playerMatchStat.tackles ?? 0,
 
-      clearances:
-        playerMatchStat.clearances ??
-        0,
-
       recoveries:
         playerMatchStat.recoveries ??
         0,
@@ -657,9 +637,6 @@ export default function PlayerMatchStatForm({
       redCards:
         playerMatchStat.redCards ?? 0,
 
-      errorsLeadingToGoal:
-        playerMatchStat.errorsLeadingToGoal ??
-        0,
     });
   }, [
     playerMatchStat,
@@ -1174,10 +1151,6 @@ export default function PlayerMatchStatForm({
             existingStat.tackles ??
             0,
 
-          clearances:
-            existingStat.clearances ??
-            0,
-
           recoveries:
             existingStat.recoveries ??
             0,
@@ -1202,9 +1175,6 @@ export default function PlayerMatchStatForm({
             existingStat.redCards ??
             0,
 
-          errorsLeadingToGoal:
-            existingStat.errorsLeadingToGoal ??
-            0,
         });
       } catch (loadError) {
         console.error(
@@ -1531,12 +1501,6 @@ export default function PlayerMatchStatForm({
           ? 0
           : statValues.tackles,
 
-      clearances:
-        statValues.clearances ===
-        ""
-          ? 0
-          : statValues.clearances,
-
       recoveries:
         statValues.recoveries ===
         ""
@@ -1571,11 +1535,6 @@ export default function PlayerMatchStatForm({
           ? 0
           : statValues.redCards,
 
-      errorsLeadingToGoal:
-        statValues.errorsLeadingToGoal ===
-        ""
-          ? 0
-          : statValues.errorsLeadingToGoal,
     };
 
     return payload;

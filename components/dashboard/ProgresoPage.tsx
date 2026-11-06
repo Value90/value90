@@ -10,6 +10,7 @@ import { getMatches } from "@/services/match.service";
 import { getParticipations } from "@/services/participation.service";
 import { getMatchRatings } from "@/services/match-rating.service";
 import { getPlayerMatchStats } from "@/services/player-match-stat.service";
+import OwnRatingsProgress from "@/components/dashboard/OwnRatingsProgress";
 import {
   getHistPlayerTeamsByTeamAndSeason,
 } from "@/services/hist-player-team.service";
@@ -24,7 +25,7 @@ import type { MatchRating } from "@/services/match-rating.service";
 import type { PlayerMatchStat } from "@/services/player-match-stat.service";
 import type { HistPlayerTeam } from "@/services/hist-player-team.service";
 
-type Tab = "teams" | "stages";
+type Tab = "teams" | "stages" | "own-ratings";
 
 interface TeamProgress {
   team: Team;
@@ -983,6 +984,18 @@ export default function ProgresoPage() {
           Jornadas
         </button>
 
+        <button
+          type="button"
+          onClick={() => setActiveTab("own-ratings")}
+          className={`shrink-0 px-4 py-3 text-sm font-semibold transition sm:px-5 ${
+            activeTab === "own-ratings"
+              ? "border-b-2 border-slate-800 text-slate-800"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Valoración propia
+        </button>
+
       </div>
 
       {/* ======================================================
@@ -1251,6 +1264,8 @@ export default function ProgresoPage() {
               )}
             </div>
           )}
+
+          {activeTab === "own-ratings" && <OwnRatingsProgress />}
 
         </>
 

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   deleteCompetition,
   getCompetitions,
+  getCompetitionsMissingWeight,
   type Competition,
 } from "@/services/competition.service";
 
@@ -24,6 +25,7 @@ export default function CompetitionsPage() {
 
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
+  const [missingWeightCompetitionIds, setMissingWeightCompetitionIds] = useState<number[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -57,14 +59,16 @@ export default function CompetitionsPage() {
       setLoading(true);
       setError("");
 
-      const [competitionsData, countriesData] =
+      const [competitionsData, countriesData, missingWeights] =
         await Promise.all([
           getCompetitions(),
           getCountries(),
+          getCompetitionsMissingWeight(),
         ]);
 
       setCompetitions(competitionsData);
       setCountries(countriesData);
+      setMissingWeightCompetitionIds(missingWeights);
     } catch (err) {
       console.error(
         "Error cargando competiciones:",
@@ -93,15 +97,18 @@ export default function CompetitionsPage() {
         const [
           competitionsData,
           countriesData,
+          missingWeights,
         ] = await Promise.all([
           getCompetitions(),
           getCountries(),
+          getCompetitionsMissingWeight(),
         ]);
 
         if (!mounted) return;
 
         setCompetitions(competitionsData);
         setCountries(countriesData);
+        setMissingWeightCompetitionIds(missingWeights);
       } catch (err) {
         console.error(
           "Error cargando competiciones:",
@@ -359,6 +366,21 @@ export default function CompetitionsPage() {
                 : competitions.length}
             </span>
           </div>
+
+          {missingWeightCompetitionIds.length > 0 && (
+            <section className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950" aria-labelledby="competition-weight-issues">
+              <h2 id="competition-weight-issues" className="font-bold">Incidencias: competiciones sin peso V90</h2>
+              <p className="mt-1 text-sm">Configura un peso para estas competiciones para que sus valoraciones puedan calcularse correctamente.</p>
+              <ul className="mt-3 space-y-2">
+                {competitions.filter((competition) => missingWeightCompetitionIds.includes(competition.id)).map((competition) => (
+                  <li key={competition.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/80 px-3 py-2">
+                    <span className="font-medium">{competition.name}</span>
+                    <button type="button" onClick={() => handleEdit(competition)} className="min-h-10 rounded-lg border border-amber-400 px-3 text-sm font-semibold hover:bg-amber-100">Asignar peso</button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {/* ==================================================
               ERROR

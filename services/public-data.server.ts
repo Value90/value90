@@ -337,12 +337,14 @@ export async function getPublicRankings(params: URLSearchParams) {
   const positionId = positiveId(params.get("positionId"));
   const requestedMinimum = Math.floor(Number(params.get("minMatches")) || 1);
   const minMatches = Math.max(1, Math.min(1000, requestedMinimum));
+  const sortBy = params.get("sortBy") === "marketValue" ? "marketValue" : "score";
+  const sortDirection = params.get("sortDirection") === "asc" ? "asc" : "desc";
 
   const ranked = await cached(
     `public-ranking:${query}:${teamId ?? "all"}:${competitionId ?? "all"}:${seasonId ?? "all"}:${positionId ?? "all"}:${minMatches}`,
     async () => {
   const matchScopePromise = getRankingMatchScope(competitionId, seasonId);
-  const [base, matchScope, eligibilityMatchScope, participationRows, positionPlayerIds] = await Promise.all([
+  const [base, matchScope, eligibilityMatchScope, participationRows, positionPlayerIds, marketValueRows] = await Promise.all([
     getRankingBase(),
     matchScopePromise,
     !teamId && competitionId ? getRankingMatchScope(null, seasonId) : matchScopePromise,
@@ -359,7 +361,11 @@ export async function getPublicRankings(params: URLSearchParams) {
           return request.order("id").range(from, to);
         }).then((rows) => new Set(rows.map((row) => Number(row.player_id))))
       : Promise.resolve(null),
+    cached("public-current-market-values", () => readAll<Row>((from, to) =>
+      supabase.from("player_market_values").select("player_id,current_value_eur").order("player_id").range(from, to),
+    )),
   ]);
+  const marketValues = new Map(marketValueRows.map((row) => [Number(row.player_id), Number(row.current_value_eur)]));
 
   const aggregates = new Map<number, {
     contribution: number;
@@ -430,6 +436,7 @@ export async function getPublicRankings(params: URLSearchParams) {
     teamName: base.teams.get(aggregate.teamId)?.name ?? "Sin equipo",
     score: aggregate.weight > 0 ? aggregate.contribution / aggregate.weight : 0,
     matches: aggregate.matches,
+    marketValueEur: marketValues.get(playerId) ?? null,
   }))
     .filter((item) => {
       const meetsTeamThreshold = [...(appearances.get(item.playerId)?.entries() ?? [])].some(([key, playedMatches]) => {
@@ -439,13 +446,21 @@ export async function getPublicRankings(params: URLSearchParams) {
         return teamMatchCount > 0 && playedMatches.size / teamMatchCount >= 0.5;
       });
       return (teamId != null || meetsTeamThreshold) && item.score > 0 && item.matches >= minMatches && (!query || item.playerName.toLocaleLowerCase("es").includes(query));
-    })
-    .sort((a, b) => b.score - a.score || a.playerName.localeCompare(b.playerName, "es"));
+    });
     },
   );
 
+  const direction = sortDirection === "asc" ? 1 : -1;
+  const sortedRanked = [...ranked].sort((a, b) => {
+    const primaryA = sortBy === "marketValue" ? a.marketValueEur : a.score;
+    const primaryB = sortBy === "marketValue" ? b.marketValueEur : b.score;
+    if (primaryA == null && primaryB != null) return 1;
+    if (primaryB == null && primaryA != null) return -1;
+    if (primaryA != null && primaryB != null && primaryA !== primaryB) return (primaryA - primaryB) * direction;
+    return b.score - a.score || a.playerName.localeCompare(b.playerName, "es");
+  });
   const start = (page - 1) * limit;
-  return { items: ranked.slice(start, start + limit), total: ranked.length, page, pageSize: limit };
+  return { items: sortedRanked.slice(start, start + limit), total: sortedRanked.length, page, pageSize: limit };
 }
 
 export async function getPublicFilters() {

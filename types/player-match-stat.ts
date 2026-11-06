@@ -31,8 +31,6 @@ export interface PlayerMatchStat {
 
   duelsWon: number | null;
 
-  clearances: number | null;
-
   saves: number | null;
 
   tackles: number | null;
@@ -48,8 +46,6 @@ export interface PlayerMatchStat {
   passes: number | null;
 
   passesCompleted: number | null;
-
-  errorsLeadingToGoal: number | null;
 
   yellowCards: number | null;
 

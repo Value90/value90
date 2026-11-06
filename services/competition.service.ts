@@ -77,6 +77,22 @@ export async function getCompetitionWeight(
   return Number(data.peso_v90);
 }
 
+/** Returns active competitions that have no active V90 weight configured. */
+export async function getCompetitionsMissingWeight(): Promise<number[]> {
+  const [competitionsResult, weightsResult] = await Promise.all([
+    supabase.from("competitions").select("id").eq("active", true),
+    supabase.from("competition_weights").select("competition_id").eq("active", true),
+  ]);
+
+  if (competitionsResult.error) throw competitionsResult.error;
+  if (weightsResult.error) throw weightsResult.error;
+
+  const configured = new Set((weightsResult.data ?? []).map((row) => Number(row.competition_id)));
+  return (competitionsResult.data ?? [])
+    .map((row) => Number(row.id))
+    .filter((id) => !configured.has(id));
+}
+
 /*
  * ============================================================
  * GUARDAR / ACTUALIZAR PESO V90 DE UNA COMPETICIÓN

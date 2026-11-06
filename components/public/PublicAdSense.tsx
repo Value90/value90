@@ -1,7 +1,7 @@
 "use client";
 
-import Script from "next/script";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
+import { normalizeAdSensePublisherId } from "@/lib/adsense";
 
 declare global {
   interface Window {
@@ -10,24 +10,23 @@ declare global {
 }
 
 export default function PublicAdSense() {
-  const publisherId = process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID || "ca-pub-6147383489510665";
+  const publisherId = normalizeAdSensePublisherId(process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID ?? "pub-6147383489510665");
   const slotId = process.env.NEXT_PUBLIC_ADSENSE_SLOT_ID;
   const adRef = useRef<HTMLModElement>(null);
-  const publisherConfigured = Boolean(publisherId && /^ca-pub-\d+$/.test(publisherId));
   const slotConfigured = Boolean(slotId && /^\d+$/.test(slotId));
 
-  if (!publisherConfigured || !publisherId) return null;
-
-  const initializeAd = () => {
+  useEffect(() => {
     const element = adRef.current;
-    if (!element || element.dataset.adInitialized === "true") return;
+    if (!publisherId || !slotConfigured || !element || element.dataset.adInitialized === "true") return;
     try {
       (window.adsbygoogle ??= []).push({});
       element.dataset.adInitialized = "true";
     } catch (error) {
       console.warn("No se pudo inicializar el bloque publicitario.", error);
     }
-  };
+  }, [publisherId, slotConfigured]);
+
+  if (!publisherId) return null;
 
   return (
     <>
@@ -47,14 +46,6 @@ export default function PublicAdSense() {
           </div>
         </aside>
       )}
-      <Script
-        id="google-adsense"
-        async
-        strategy="afterInteractive"
-        src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${publisherId}`}
-        crossOrigin="anonymous"
-        onReady={slotConfigured ? initializeAd : undefined}
-      />
     </>
   );
 }

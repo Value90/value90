@@ -20,13 +20,11 @@ const STAT_FIELDS = [
   "assists",
   "duels",
   "duelsWon",
-  "clearances",
   "saves",
   "tackles",
   "recoveries",
   "passes",
   "passesCompleted",
-  "errorsLeadingToGoal",
   "yellowCards",
   "redCards",
 ] as const;
@@ -82,9 +80,6 @@ function mapPlayerMatchStat(
     duelsWon:
       stat.duels_won,
 
-    clearances:
-      stat.clearances,
-
     saves:
       stat.saves,
 
@@ -105,19 +100,6 @@ function mapPlayerMatchStat(
 
     passesCompleted:
       stat.passes_completed,
-
-    /*
-     * IMPORTANTE:
-     *
-     * La columna real de Supabase es:
-     * goal_errors
-     *
-     * En frontend se llama:
-     * errorsLeadingToGoal
-     */
-
-    errorsLeadingToGoal:
-      stat.goal_errors,
 
     yellowCards:
       stat.yellow_cards,
@@ -176,9 +158,6 @@ function mapPlayerMatchStatToDatabase(
     duels_won:
       stat.duelsWon,
 
-    clearances:
-      stat.clearances,
-
     saves:
       stat.saves,
 
@@ -199,19 +178,6 @@ function mapPlayerMatchStatToDatabase(
 
     passes_completed:
       stat.passesCompleted,
-
-    /*
-     * IMPORTANTE:
-     *
-     * Frontend:
-     * errorsLeadingToGoal
-     *
-     * Supabase:
-     * goal_errors
-     */
-
-    goal_errors:
-      stat.errorsLeadingToGoal,
 
     yellow_cards:
       stat.yellowCards,

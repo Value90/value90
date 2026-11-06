@@ -10,6 +10,7 @@ import {
   type HighlightlyLineupTeam,
   type HighlightlyLineups,
   type HighlightlyMatch,
+  type HighlightlyBoxScorePlayerStatistics,
 } from "@/lib/highlightly.server";
 
 export const runtime = "nodejs";
@@ -259,6 +260,7 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
 
   const localTeamByExternalId = new Map((teamsResult.data ?? []).map((team) => [Number(team.external_team_id), Number(team.team_id)]));
   const changedMappings = new Map<string, (typeof playerMappings)[number]>();
+  const statsByPlayerId = new Map<number, HighlightlyBoxScorePlayerStatistics>();
   for (const sourceTeam of boxScoreTeams) {
     const localTeamId = localTeamByExternalId.get(Number(sourceTeam.team?.id));
     if (!localTeamId) continue;
@@ -311,6 +313,10 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
         row.substitute_in_minute = substitutionMinutes?.incoming ?? row.substitute_in_minute;
         row.substitute_out_minute = substitutionMinutes?.outgoing ?? row.substitute_out_minute;
         participationByPlayerId.set(Number(playerMapping.player_id), row);
+        const providerStats = Array.isArray(sourcePlayer.statistics)
+          ? sourcePlayer.statistics[0]
+          : sourcePlayer.statistics;
+        if (providerStats) statsByPlayerId.set(Number(playerMapping.player_id), providerStats);
       } else if (participation && Number.isFinite(Number(sourcePlayer.minutesPlayed))) {
         participation.is_starting_xi = isStarting;
         participation.minutes_played = minutesPlayed;
@@ -348,10 +354,49 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
     if (savedParticipations.error) throw new Error(savedParticipations.error.message);
   }
 
+  let importedPlayerStats = 0;
+  if (statsByPlayerId.size) {
+    const savedParticipationIds = await supabase.from("participations")
+      .select("id,player_id").eq("match_id", mapping.match_id)
+      .in("player_id", [...statsByPlayerId.keys()]);
+    if (savedParticipationIds.error) throw new Error(savedParticipationIds.error.message);
+    const participationIdByPlayer = new Map((savedParticipationIds.data ?? [])
+      .map((row) => [Number(row.player_id), Number(row.id)]));
+    const playerStatsRows = [...statsByPlayerId.entries()].flatMap(([playerId, stats]) => {
+      const participationId = participationIdByPlayer.get(playerId);
+      if (!participationId) return [];
+      const count = (value: number | undefined) => Number.isFinite(Number(value)) ? Math.max(0, Math.trunc(Number(value))) : 0;
+      return [{
+        participation_id: participationId,
+        goals: count(stats.goalsScored),
+        shots: count(stats.shotsTotal),
+        shots_on_target: count(stats.shotsOnTarget),
+        dribbles: count(stats.dribblesTotal),
+        dribbles_completed: count(stats.dribblesSuccessful),
+        assists: count(stats.assists),
+        duels: count(stats.duelsTotal),
+        duels_won: count(stats.duelsWon),
+        recoveries: count(stats.interceptionsTotal),
+        saves: count(stats.goalsSaved),
+        tackles: count(stats.tacklesTotal),
+        passes: count(stats.passesTotal),
+        passes_completed: count(stats.passesSuccessful),
+        yellow_cards: count(stats.cardsYellow),
+        red_cards: count(stats.cardsRed),
+      }];
+    });
+    if (playerStatsRows.length) {
+      const savedStats = await supabase.from("player_match_stats")
+        .upsert(playerStatsRows, { onConflict: "participation_id" });
+      if (savedStats.error) throw new Error(savedStats.error.message);
+      importedPlayerStats = playerStatsRows.length;
+    }
+  }
+
   const marked = await supabase.from("external_match_mappings").update({ final_synced_at: new Date().toISOString(), next_result_sync_at: null, last_sync_error: null, updated_at: new Date().toISOString() })
     .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
   if (marked.error) throw new Error(marked.error.message);
-  return { matchId: mapping.match_id, status: isCancelled(state) ? "Cancelado" : "Jugado", score: `${homeScore ?? "?"}-${awayScore ?? "?"}`, substitutions: substitutions.length, ...lineupSummary, callsRemaining, callsLimit };
+  return { matchId: mapping.match_id, status: isCancelled(state) ? "Cancelado" : "Jugado", score: `${homeScore ?? "?"}-${awayScore ?? "?"}`, substitutions: substitutions.length, importedPlayerStats, ...lineupSummary, callsRemaining, callsLimit };
 }
 
 export async function POST(request: NextRequest) {
