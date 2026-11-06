@@ -159,7 +159,7 @@ export async function GET() {
   try {
     const supabase = await adminClient();
     const { data: run, error: runError } = await supabase.from("own_rating_runs")
-      .select("id,season_id,competition_id,model_version,training_samples,rated_samples,cross_validation_mae,cross_validation_rmse,created_at,position_models")
+      .select("id,season_id,competition_id,model_version,training_samples,rated_samples,cross_validation_mae,cross_validation_rmse,evaluation_source_run_id,evaluation_mae,evaluation_rmse,created_at,position_models")
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (runError) throw new Error(runError.message);
     if (!run) return NextResponse.json({ run: null, items: [] });

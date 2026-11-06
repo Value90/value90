@@ -8,11 +8,15 @@ export const dynamic = "force-dynamic";
 
 const LEAGUE_ID = 119924;
 const SEASON_YEAR = 2026;
-const FIRST_FIVE = new Set([1, 2, 3, 4, 5]);
+const TARGET_ROUNDS = new Set([6, 7, 8, 9, 10]);
 
 function stageNumber(round: string) {
   const match = round.match(/(\d+)\s*$/);
   return match ? Number(match[1]) : null;
+}
+
+function isFinished(match: HighlightlyMatch) {
+  return /finished|full.?time|after (penalt|over.?time)|awarded/i.test(match.state?.description ?? "");
 }
 
 function normalize(value: string | null | undefined) {
@@ -70,8 +74,8 @@ export async function POST(request: NextRequest) {
       const season = (seasonResult.data ?? []).find((row) => row.active) ?? (seasonResult.data ?? []).find((row) => String(row.name).includes("2026/27"));
       const competition = competitionResult.data?.[0];
       if (!season || !competition) throw new Error("No encuentro LaLiga o la temporada activa.");
-      const stages = (stagesResult.data ?? []).filter((row) => Number(row.season_id) === Number(season.id) && /^Jornada [1-5]$/.test(row.name));
-      if (stages.length !== 5) throw new Error("Deben existir las jornadas 1–5 para la temporada activa.");
+      const stages = (stagesResult.data ?? []).filter((row) => Number(row.season_id) === Number(season.id) && /^Jornada (?:[6-9]|10)$/.test(row.name));
+      if (stages.length !== TARGET_ROUNDS.size) throw new Error("Deben existir las jornadas 6–10 para la temporada activa.");
       const stageIdByNumber = new Map(stages.map((row) => [stageNumber(row.name)!, Number(row.id)]));
       const localMatchesResult = await supabase.from("matches")
         .select("id,stage_id,home_team_id,away_team_id,status")
@@ -83,14 +87,19 @@ export async function POST(request: NextRequest) {
 
       const fetched = await fetchAllLaLiga();
       const fixtures = [...new Map(fetched.allMatches
-        .filter((match) => Number(match.league?.season) === SEASON_YEAR && FIRST_FIVE.has(stageNumber(match.round) ?? -1))
+        .filter((match) => Number(match.league?.season) === SEASON_YEAR && TARGET_ROUNDS.has(stageNumber(match.round) ?? -1))
         .map((match) => [Number(match.id), match])).values()];
       const selected: Array<{ localMatchId: number; externalMatchId: number }> = [];
       const missingTeamMappings = new Set<string>();
       const missingLocalMatches: string[] = [];
+      const notFinished: string[] = [];
       for (const fixture of fixtures) {
         const round = stageNumber(fixture.round);
         if (round == null) continue;
+        if (!isFinished(fixture)) {
+          notFinished.push(`${fixture.round}: ${fixture.homeTeam.name}–${fixture.awayTeam.name}`);
+          continue;
+        }
         const homeId = localTeamByExternalId.get(Number(fixture.homeTeam.id));
         const awayId = localTeamByExternalId.get(Number(fixture.awayTeam.id));
         if (!homeId || !awayId) {
@@ -139,7 +148,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true, matchIds, totalMatches: matchIds.length, callsUsed: fetched.callsUsed,
         callsRemaining: fetched.callsRemaining == null ? null : Number(fetched.callsRemaining),
-        skipped: { missingTeamMappings: [...missingTeamMappings], missingLocalMatches, conflictingMappings },
+        skipped: { missingTeamMappings: [...missingTeamMappings], missingLocalMatches, conflictingMappings, notFinished },
       });
     }
 

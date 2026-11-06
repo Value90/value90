@@ -185,3 +185,49 @@ export function trainOwnRatings(samples: OwnRatingSample[]) {
       .filter((group) => !models.positions[group]),
   };
 }
+
+export interface StoredPositionModel {
+  source: "position" | "global";
+  trainingSamples: number;
+  features: string[];
+  means: number[];
+  scales: number[];
+  intercept: number;
+  coefficients: number[];
+}
+
+export function predictWithStoredModels(
+  samples: OwnRatingSample[],
+  storedModels: Partial<Record<PositionGroup | "global", StoredPositionModel>>,
+) {
+  const global = storedModels.global;
+  if (!global) throw new Error("La ejecución de entrenamiento no contiene el modelo general.");
+  const ratings = samples.map((sample) => {
+    const group = getPositionGroup(sample.positionName);
+    const model = storedModels[group] ?? global;
+    const row = featuresFor(sample);
+    const prediction = model.intercept + model.features.reduce((sum, feature, index) => {
+      const scale = model.scales[index] || 1;
+      return sum + ((row[feature] - model.means[index]) / scale) * model.coefficients[index];
+    }, 0);
+    const ownRating = Math.round(Math.max(0, Math.min(10, prediction)) * 1000) / 1000;
+    const external = sample.externalAverage == null ? null : Number(sample.externalAverage);
+    return {
+      ...sample,
+      ownRating,
+      externalAverage: external,
+      absoluteError: external == null ? null : Math.round(Math.abs(ownRating - external) * 1000) / 1000,
+      difference: external == null ? null : Math.round((ownRating - external) * 1000) / 1000,
+      modelSource: model.source,
+    };
+  });
+  const errors = ratings
+    .filter((item) => item.externalAverage != null)
+    .map((item) => item.ownRating - Number(item.externalAverage));
+  return {
+    ratings,
+    evaluatedSamples: errors.length,
+    mae: errors.length ? Math.round(errors.reduce((sum, value) => sum + Math.abs(value), 0) / errors.length * 10000) / 10000 : null,
+    rmse: errors.length ? Math.round(Math.sqrt(errors.reduce((sum, value) => sum + value ** 2, 0) / errors.length) * 10000) / 10000 : null,
+  };
+}

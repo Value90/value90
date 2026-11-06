@@ -17,6 +17,9 @@ interface ComparisonItem {
 interface OwnRatingReport {
   run: {
     id: string;
+    evaluation_source_run_id: string | null;
+    evaluation_mae: number | null;
+    evaluation_rmse: number | null;
     model_version: string;
     training_samples: number;
     rated_samples: number;
@@ -33,7 +36,7 @@ const shortDate = (value: string | null) => value ? new Date(value).toLocaleDate
 
 export default function OwnRatingsProgress() {
   const [report, setReport] = useState<OwnRatingReport | null>(null);
-  const [busy, setBusy] = useState<"import" | "calculate" | null>(null);
+  const [busy, setBusy] = useState<"import" | "calculate" | "evaluate" | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [importProgress, setImportProgress] = useState("");
@@ -50,11 +53,11 @@ export default function OwnRatingsProgress() {
     loadReport().catch((loadError) => setError(loadError instanceof Error ? loadError.message : "No se pudo cargar la comparación."));
   }, [loadReport]);
 
-  async function importFirstFiveRounds() {
+  async function importEvaluationRounds() {
     setBusy("import");
     setError("");
     setMessage("");
-    setImportProgress("Preparando las jornadas 1–5…");
+    setImportProgress("Preparando las jornadas 6–10…");
     try {
       const prepareResponse = await fetch("/api/admin/own-ratings/import-stats", {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "prepare" }),
@@ -63,7 +66,13 @@ export default function OwnRatingsProgress() {
       if (!prepareResponse.ok) throw new Error(prepared.error ?? "No se pudieron preparar los partidos.");
       const ids: number[] = prepared.matchIds ?? [];
       setQuota(prepared.callsRemaining ?? null);
-      if (!ids.length) throw new Error("No se encontraron partidos locales asociados a esas jornadas.");
+      if (!ids.length) {
+        const notFinished = Number(prepared.skipped?.notFinished?.length ?? 0);
+        const missing = Number(prepared.skipped?.missingLocalMatches?.length ?? 0) + Number(prepared.skipped?.missingTeamMappings?.length ?? 0);
+        setMessage(`No hay partidos finalizados de las jornadas 6–10 listos para importar${notFinished ? ` (${notFinished} aún no están finalizados)` : ""}. Se utilizaron ${Number(prepared.callsUsed ?? 0)} llamadas para revisar el calendario${missing ? `; hay ${missing} asociaciones de partidos o equipos pendientes` : ""}.`);
+        setImportProgress("");
+        return;
+      }
       let imported = 0;
       let calls = Number(prepared.callsUsed ?? 0);
       const unmatched: Array<{ player: string }> = [];
@@ -88,10 +97,11 @@ export default function OwnRatingsProgress() {
       }
       const missingCount = Number(prepared.skipped?.missingLocalMatches?.length ?? 0) + Number(prepared.skipped?.missingTeamMappings?.length ?? 0);
       const conflicts = Number(prepared.skipped?.conflictingMappings?.length ?? 0);
+      const notFinished = Number(prepared.skipped?.notFinished?.length ?? 0);
       const summary = stoppedByQuota && imported === 0
         ? `No se importaron estadísticas porque la cuota diaria quedó agotada al preparar los partidos. Se revisaron ${ids.length} partidos sin consumir más llamadas.`
         : `${stoppedByQuota ? "Importación parcial por límite diario" : "Importación terminada"}: ${imported} participaciones con estadísticas en ${stoppedByQuota ? "parte de " : ""}${ids.length} partidos.`;
-      setMessage(`${summary} Se utilizaron ${calls} llamadas a Highlightly.${unmatched.length ? ` ${unmatched.length} jugadores quedaron sin asociar para revisión.` : ""}${missingCount ? ` Hay ${missingCount} incidencias de equipos o partidos que no se pudieron asociar.` : ""}${conflicts ? ` Se omitieron ${conflicts} asociaciones de partido que entraban en conflicto con vínculos ya guardados.` : ""}`);
+      setMessage(`${summary} Se utilizaron ${calls} llamadas a Highlightly.${notFinished ? ` Se excluyeron ${notFinished} partidos todavía no finalizados para no gastar llamadas en datos incompletos.` : ""}${unmatched.length ? ` ${unmatched.length} jugadores quedaron sin asociar para revisión.` : ""}${missingCount ? ` Hay ${missingCount} incidencias de equipos o partidos que no se pudieron asociar.` : ""}${conflicts ? ` Se omitieron ${conflicts} asociaciones de partido que entraban en conflicto con vínculos ya guardados.` : ""}`);
       setImportProgress("");
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : "No se pudieron importar las estadísticas.");
@@ -119,19 +129,39 @@ export default function OwnRatingsProgress() {
     }
   }
 
+  async function evaluateHeldOutRounds() {
+    setBusy("evaluate");
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/own-ratings/evaluate", { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "No se pudo evaluar el modelo.");
+      setMessage(`Evaluación independiente de las jornadas 6–10, sin reentrenar: ${payload.evaluatedSamples} valoraciones externas comparadas. MAE ${rating.format(payload.mae)} · RMSE ${rating.format(payload.rmse)}.`);
+      await loadReport();
+    } catch (evaluationError) {
+      setError(evaluationError instanceof Error ? evaluationError.message : "No se pudo evaluar el modelo.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <section className="space-y-5">
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-bold text-slate-800">Valoración propia a partir de estadísticas</h2>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-          El modelo aprende pesos distintos por posición usando las estadísticas de LaLiga jornadas 1–5 y las valoraciones externas existentes. La importación de estadísticas y el cálculo de notas son acciones manuales e independientes.
+          El modelo entrenado con las jornadas 1–5 se evalúa primero en las jornadas 6–10 sin aprender de ellas. Importa sus estadísticas y ejecuta la evaluación antes de recalibrar; así MAE y RMSE reflejan partidos nuevos.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-          <button type="button" onClick={importFirstFiveRounds} disabled={busy !== null} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">
-            {busy === "import" ? "Importando estadísticas…" : "Importar estadísticas: jornadas 1–5"}
+          <button type="button" onClick={importEvaluationRounds} disabled={busy !== null} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">
+            {busy === "import" ? "Importando estadísticas…" : "Importar estadísticas: jornadas 6–10"}
           </button>
-          <button type="button" onClick={calculateOwnRatings} disabled={busy !== null} className="min-h-11 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60">
-            {busy === "calculate" ? "Calculando…" : "Calcular valoración propia (manual)"}
+          <button type="button" onClick={evaluateHeldOutRounds} disabled={busy !== null} className="min-h-11 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60">
+            {busy === "evaluate" ? "Evaluando…" : "Evaluar modelo con jornadas 6–10"}
+          </button>
+          <button type="button" onClick={calculateOwnRatings} disabled={busy !== null} className="min-h-11 rounded-lg border border-emerald-700 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-wait disabled:opacity-60">
+            {busy === "calculate" ? "Recalculando…" : "Recalcular entrenamiento 1–5"}
           </button>
         </div>
         {importProgress && <p className="mt-3 text-sm font-medium text-slate-600" role="status">{importProgress}</p>}
@@ -145,7 +175,9 @@ export default function OwnRatingsProgress() {
           <h3 className="font-bold text-slate-800">Comparación con fuentes externas</h3>
           {report?.run && (
             <p className="mt-1 text-sm text-slate-500">
-              {report.run.model_version} · {report.run.training_samples} valoraciones externas para entrenar · MAE validación {report.run.cross_validation_mae == null ? "—" : rating.format(Number(report.run.cross_validation_mae))} · RMSE {report.run.cross_validation_rmse == null ? "—" : rating.format(Number(report.run.cross_validation_rmse))}
+              {report.run.model_version} · {report.run.evaluation_source_run_id
+                ? `Evaluación independiente: ${report.run.rated_samples} notas, MAE ${report.run.evaluation_mae == null ? "—" : rating.format(Number(report.run.evaluation_mae))} y RMSE ${report.run.evaluation_rmse == null ? "—" : rating.format(Number(report.run.evaluation_rmse))}. El modelo se entrenó con ${report.run.training_samples} valoraciones de las jornadas 1–5.`
+                : `${report.run.training_samples} valoraciones externas para entrenar · validación cruzada inicial: MAE ${report.run.cross_validation_mae == null ? "—" : rating.format(Number(report.run.cross_validation_mae))} · RMSE ${report.run.cross_validation_rmse == null ? "—" : rating.format(Number(report.run.cross_validation_rmse))}`}
             </p>
           )}
         </div>
