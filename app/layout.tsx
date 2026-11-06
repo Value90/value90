@@ -12,6 +12,9 @@ const metadataBase = (() => {
 })();
 
 export const metadata: Metadata = {
+  other: {
+    "google-adsense-account": "ca-pub-6147383489510665",
+  },
   metadataBase,
   title: {
     default: "Value90 | Rendimiento y valor del fútbol",
