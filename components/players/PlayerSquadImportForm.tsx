@@ -24,7 +24,7 @@ import {
 import {
   getPlayers,
   type Player,
-  addPlayer,
+  addPlayersBulk,
 } from "@/services/player.service";
 
 import {
@@ -1470,207 +1470,75 @@ export default function PlayerSquadImportForm({
       setSaving(true);
 
       try {
-        const updatedPlayers =
-          [...players];
+        // Lee la plantilla anterior primero para conservar sus fechas y datos
+        // si alguno de los jugadores ya pertenecía a este equipo/temporada.
+        const existingSquad = await getHistPlayerTeamsByTeamAndSeason(teamId, seasonId);
 
-        const finalRows =
-          [...rows];
+        const newRows = rows.filter((row) => row.status === "new");
+        const createdPlayers = await addPlayersBulk(newRows.map((row) => ({
+          name: row.inputName.trim(),
+          shortName: row.inputName.trim(),
+          countryId: applyCountryToAll ? globalCountryId : row.countryId,
+          birthDate: row.birthDate,
+          active: true,
+        })));
 
-        /*
-         * ======================================================
-         * CREAR JUGADORES NUEVOS
-         * ======================================================
-         */
+        const createdByIdentity = new Map<string, Player>();
+        createdPlayers.forEach((player) => {
+          const key = [normalizeName(player.name), player.countryId ?? "", player.birthDate ?? ""].join("|");
+          createdByIdentity.set(key, player);
+        });
 
-        for (
-          let index = 0;
-          index <
-          finalRows.length;
-          index++
-        ) {
-          const row =
-            finalRows[index];
+        const completedRows = rows.map((row) => {
+          if (row.status !== "new") return row;
 
-          if (
-            row.status !==
-            "new"
-          ) {
-            continue;
-          }
+          const countryId = applyCountryToAll ? globalCountryId : row.countryId;
+          const identityKey = [normalizeName(row.inputName), countryId ?? "", row.birthDate ?? ""].join("|");
+          const player = createdByIdentity.get(identityKey);
+          if (!player) throw new Error(`No se pudo confirmar la ficha creada de ${row.inputName}.`);
 
-          const playerData:
-            Omit<
-              Player,
-              "id"
-            > = {
-            name: row.inputName.trim(),
-            shortName: row.inputName.trim(),
-            countryId: applyCountryToAll
-              ? globalCountryId
-              : row.countryId,
-            birthDate: row.birthDate,
-            active: true,
-          };
-
-          const createdPlayer =
-            await addPlayer(
-              playerData
-            );
-
-          updatedPlayers.push(
-            createdPlayer
-          );
-
-          finalRows[index] = {
+          return {
             ...row,
-            existingPlayer:
-              createdPlayer,
-            playerId:
-              createdPlayer.id,
-            status:
-              "existing",
+            existingPlayer: player,
+            playerId: player.id,
+            status: "existing" as const,
           };
+        });
+
+        const incomplete = completedRows.filter((row) => !row.playerId);
+        if (incomplete.length > 0) {
+          throw new Error(`No se pudieron vincular estas fichas: ${incomplete.map((row) => row.inputName).join(", ")}.`);
         }
 
-        /*
-         * Actualizamos estado local.
-         */
-        setPlayers(
-          updatedPlayers
-        );
+        const updatedPlayers = [...players, ...createdPlayers];
+        const playerById = new Map(updatedPlayers.map((player) => [player.id, player]));
+        const historyByPlayerId = new Map(existingSquad.map((history) => [history.playerId, history]));
+        const newSquadRows = completedRows
+          .flatMap<SquadRow>((row) => {
+            const player = playerById.get(row.playerId!);
+            if (!player) return [];
 
-        setRows(
-          finalRows
-        );
+            const history = historyByPlayerId.get(player.id);
+            return [{
+              playerId: player.id,
+              playerName: player.name,
+              shirtNumber: history?.shirtNumber ? String(history.shirtNumber) : "",
+              positionId: history?.positionId ?? 0,
+              history,
+            }];
+          })
+          .sort((a, b) => a.playerName.localeCompare(b.playerName, "es"));
 
-        /*
-         * ======================================================
-         * COMPROBAR QUE TODOS TIENEN PLAYER ID
-         * ======================================================
-         */
+        setPlayers(updatedPlayers);
+        setRows(completedRows);
+        setSquadRows(newSquadRows);
 
-        const incomplete =
-          finalRows.filter(
-            (row) =>
-              !row.playerId
-          );
+        // La tabla histórica exige dorsal y posición no nulos. Por eso el
+        // registro de plantilla se guarda en el paso 2, cuando ya se validan.
+        setShirtNumberText("");
+        setStep("numbers");
 
-        if (
-          incomplete.length >
-          0
-        ) {
-          throw new Error(
-            "Hay jugadores sin identificar."
-          );
-        }
-
-        /*
-         * ======================================================
-         * CREAR HISTORIAL DE PLANTILLA
-         * ======================================================
-         */
-
-        const squadRecords =
-          finalRows.map(
-            (row) => ({
-              playerId:
-                row.playerId!,
-              teamId,
-              seasonId,
-              shirtNumber:
-                null,
-              positionId:
-                null,
-              startDate:
-                null,
-              endDate:
-                null,
-              active: true,
-            })
-          );
-
-        await saveHistPlayerTeamSquad(
-          squadRecords
-        );
-
-        /*
-         * ======================================================
-         * CARGAR PLANTILLA RECIÉN CREADA
-         * ======================================================
-         */
-
-        const savedSquad =
-          await getHistPlayerTeamsByTeamAndSeason(
-            teamId,
-            seasonId
-          );
-
-        const newSquadRows: SquadRow[] =
-          savedSquad
-            .flatMap(
-              (history) => {
-                const player =
-                  updatedPlayers.find(
-                    (item) =>
-                      item.id ===
-                      history.playerId
-                  );
-
-                if (!player) {
-                  return [];
-                }
-
-                const row: SquadRow = {
-                  playerId:
-                    player.id,
-
-                  playerName:
-                    player.name,
-
-                  shirtNumber:
-                    history.shirtNumber !==
-                      null &&
-                    history.shirtNumber !==
-                      undefined
-                      ? String(
-                          history.shirtNumber
-                        )
-                      : "",
-
-                  positionId:
-                    history.positionId ??
-                    0,
-
-                  history,
-                };
-
-                return [row];
-              }
-            )
-
-            .sort(
-              (a, b) =>
-                a.playerName.localeCompare(
-                  b.playerName,
-                  "es"
-                )
-            );
-
-        setSquadRows(
-          newSquadRows
-        );
-
-        setStep(
-          "numbers"
-        );
-
-        setShirtNumberText(
-          ""
-        );
-
-        setSuccess(
-          `Plantilla creada correctamente: ${newSquadRows.length} jugadores. Ahora puedes pegar la lista con los dorsales.`
-        );
+        setSuccess(`Jugadores reconocidos: ${newSquadRows.length}. Ahora pega los dorsales y posiciones para completar y guardar la plantilla.`);
       } catch (err) {
         console.error(
           "Error creando jugadores y plantilla:",
@@ -1678,7 +1546,7 @@ export default function PlayerSquadImportForm({
         );
 
         setError(
-          "No se pudo crear la plantilla. Comprueba los datos e inténtalo de nuevo."
+          `No se pudo preparar la plantilla. ${err instanceof Error ? err.message : "Comprueba los datos e inténtalo de nuevo."}`
         );
       } finally {
         setSaving(false);
@@ -2145,7 +2013,7 @@ export default function PlayerSquadImportForm({
       setSaving(true);
 
       try {
-        const records =
+        const submittedRecords =
           squadRows.map(
             (row) => ({
               playerId:
@@ -2177,12 +2045,48 @@ export default function PlayerSquadImportForm({
             })
           );
 
-        await saveHistPlayerTeamSquad(
-          records
-        );
+        // Revisa de nuevo el estado persistido justo antes de escribir: las
+        // filas idénticas se omiten y cualquier diferencia queda como
+        // incidencia para evitar que el upsert cambie datos silenciosamente.
+        const existingSquad = await getHistPlayerTeamsByTeamAndSeason(teamId, seasonId);
+        const existingByPlayerId = new Map(existingSquad.map((item) => [item.playerId, item]));
+        const recordsToSave = [] as typeof submittedRecords;
+        const rosterConflicts: string[] = [];
+
+        submittedRecords.forEach((record) => {
+          const existing = existingByPlayerId.get(record.playerId);
+          if (!existing) {
+            recordsToSave.push(record);
+            return;
+          }
+
+          const sameRosterData =
+            existing.shirtNumber === record.shirtNumber &&
+            existing.positionId === record.positionId &&
+            existing.active;
+
+          if (sameRosterData) return;
+
+          const storedPosition = positions.find((position) => position.id === existing.positionId)?.name ?? "posición sin identificar";
+          const importedPosition = positions.find((position) => position.id === record.positionId)?.name ?? "posición sin identificar";
+          rosterConflicts.push(
+            `${squadRows.find((row) => row.playerId === record.playerId)?.playerName ?? `Jugador ${record.playerId}`}: ya existe con dorsal ${existing.shirtNumber} y posición ${storedPosition}; la importación indica dorsal ${record.shirtNumber} y posición ${importedPosition}.`
+          );
+        });
+
+        if (rosterConflicts.length > 0) {
+          setError(`Incidencias de plantilla: ${rosterConflicts.join(" ")} Corrige la lista o los datos de la plantilla y vuelve a importar; no se ha sobrescrito ningún registro.`);
+          return;
+        }
+
+        if (recordsToSave.length > 0) {
+          await saveHistPlayerTeamSquad(recordsToSave);
+        }
 
         const savedMessage =
-          `Plantilla completada correctamente: ${records.length} jugadores con dorsal y posición.`;
+          recordsToSave.length === 0
+            ? `Importación completada: los ${submittedRecords.length} jugadores ya estaban guardados con los mismos datos y se omitieron.`
+            : `Plantilla completada: ${recordsToSave.length} jugadores guardados y ${submittedRecords.length - recordsToSave.length} coincidencias existentes omitidas.`;
 
         /*
          * Reiniciamos el formulario para poder
@@ -2202,7 +2106,7 @@ export default function PlayerSquadImportForm({
         );
 
         setError(
-          "No se pudieron guardar los dorsales y posiciones."
+          `No se pudieron guardar los dorsales y posiciones. ${err instanceof Error ? err.message : "Comprueba los datos e inténtalo de nuevo."}`
         );
       } finally {
         setSaving(false);
@@ -2680,8 +2584,8 @@ Pedro Porro`}
                   className="rounded-lg bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving
-                    ? "Creando..."
-                    : `Crear jugadores y plantilla (${rows.length})`}
+                    ? "Preparando jugadores..."
+                    : `Crear/reconocer jugadores y continuar (${rows.length})`}
                 </button>
 
               </div>
@@ -2714,6 +2618,9 @@ Pedro Porro`}
                 jugador. Si alguna posición no se
                 reconoce, podrás seleccionarla
                 manualmente.
+              </p>
+              <p className="mt-2 text-sm font-medium text-slate-700">
+                Las fichas de jugadores se preparan en el paso 1. La plantilla del equipo se guarda al completar y confirmar aquí dorsales y posiciones.
               </p>
             </div>
 

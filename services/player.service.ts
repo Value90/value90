@@ -16,9 +16,14 @@ export interface PublicPlayer {
  * ============================================================
  */
 
-function mapPlayer(
-  player: any
-): Player {
+function mapPlayer(player: {
+  id: number;
+  name: string;
+  short_name: string;
+  country_id: number | null;
+  birth_date: string | null;
+  active: boolean;
+}): Player {
   return {
     id: player.id,
 
@@ -148,6 +153,31 @@ export async function addPlayer(
   }
 
   return mapPlayer(data);
+}
+
+/** Crea de una vez varios jugadores ya revisados por el administrador. */
+export async function addPlayersBulk(
+  players: Omit<Player, "id">[]
+): Promise<Player[]> {
+  if (players.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("players")
+    .insert(players.map((player) => ({
+      name: player.name,
+      short_name: player.shortName,
+      country_id: player.countryId,
+      birth_date: player.birthDate,
+      active: player.active,
+    })))
+    .select();
+
+  if (error) {
+    console.error("Error creando jugadores en bloque:", JSON.stringify(error, null, 2));
+    throw error;
+  }
+
+  return (data ?? []).map(mapPlayer);
 }
 
 /*
