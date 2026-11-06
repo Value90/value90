@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import DataTable from "@/components/shared/tables/DataTable";
+import { sortStagesDescending } from "@/lib/stage-order";
 
 import {
   getMatches,
@@ -280,7 +281,7 @@ export default function MatchesTable({
       .map((match) => match.stageId)
       .filter((stageId): stageId is number => stageId > 0));
 
-    return stages.filter((stage) => stageIds.has(stage.id));
+    return sortStagesDescending(stages.filter((stage) => stageIds.has(stage.id)));
   }, [matches, selectedCompetitionId, stages]);
 
   /*

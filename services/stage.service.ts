@@ -1,5 +1,6 @@
 import { dedupeRequest } from "@/lib/request-dedupe";
 import { supabase } from "@/lib/supabase";
+import { sortStagesDescending } from "@/lib/stage-order";
 
 /*
  * ============================================================
@@ -61,13 +62,13 @@ async function fetchStages(): Promise<Stage[]> {
     throw error;
   }
 
-  return (data ?? []).map((stage) => ({
+  return sortStagesDescending((data ?? []).map((stage) => ({
     id: stage.id,
     seasonId: stage.season_id,
     name: stage.name,
     displayOrder: stage.display_order,
     active: stage.active,
-  }));
+  })));
 }
 
 /*

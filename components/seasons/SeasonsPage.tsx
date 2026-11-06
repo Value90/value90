@@ -9,6 +9,7 @@ import DeleteSeasonDialog from "@/components/seasons/DeleteSeasonDialog";
 import {
   deleteSeason,
   getSeasons,
+  updateSeason,
   type Season,
 } from "@/services/season.service";
 
@@ -87,6 +88,24 @@ export default function SeasonsPage() {
   ) => {
     setEditingSeason(season);
     setShowForm(true);
+  };
+
+  const handleToggleSeasonActive = async (season: Season, active: boolean) => {
+    setError("");
+    setSeasons((current) => current.map((item) => item.id === season.id ? { ...item, active } : item));
+    try {
+      const saved = await updateSeason(season.id, {
+        name: season.name,
+        startDate: season.startDate,
+        endDate: season.endDate,
+        active,
+      });
+      if (saved) setSeasons((current) => current.map((item) => item.id === saved.id ? saved : item));
+    } catch (error) {
+      console.error("Error actualizando el estado de la temporada:", error);
+      setSeasons((current) => current.map((item) => item.id === season.id ? season : item));
+      setError(`No se ha podido ${active ? "activar" : "desactivar"} la temporada ${season.name}.`);
+    }
   };
 
   /*
@@ -236,6 +255,7 @@ export default function SeasonsPage() {
             seasons={seasons}
             onEdit={handleEditSeason}
             onDelete={handleDeleteSeason}
+            onToggleActive={handleToggleSeasonActive}
           />
         </div>
       )}

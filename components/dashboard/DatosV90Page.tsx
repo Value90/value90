@@ -4,17 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { getSeasons, type Season } from "@/services/season.service";
 import { getCompetitions, type Competition } from "@/services/competition.service";
 import { getStages, type Stage } from "@/services/stage.service";
+import { sortStagesDescending } from "@/lib/stage-order";
 import { getMatches, type Match } from "@/services/match.service";
 import { getTeams, type Team } from "@/services/team.service";
 import {
   getV90MatchStatusByMatch,
   type V90MatchStatusSummary,
 } from "@/services/v90-match.service";
-
-function getStageNumber(stage: Stage): number {
-  const number = Number(stage.name.match(/\d+/)?.[0]);
-  return Number.isFinite(number) ? number : Number.MAX_SAFE_INTEGER;
-}
 
 function isPastMatch(match: Match, now: number): boolean {
   return new Date(match.date).getTime() < now;
@@ -115,17 +111,13 @@ export default function DatosV90Page() {
         .map((match) => match.stageId),
     );
 
-    return stages
+    return sortStagesDescending(stages
       .filter(
         (stage) =>
           stage.active &&
           stage.seasonId === selectedSeasonId &&
           stageIds.has(stage.id),
-      )
-      .sort((a, b) => {
-        const difference = getStageNumber(a) - getStageNumber(b);
-        return difference || a.name.localeCompare(b.name, "es");
-      });
+      ));
   }, [matches, selectedCompetitionId, selectedSeasonId, stages]);
 
   useEffect(() => {
@@ -161,7 +153,7 @@ export default function DatosV90Page() {
   useEffect(() => {
     if (!selectedCompetitionId || selectedStageId || !availableStages.length) return;
 
-    const latestPlayedStage = [...availableStages].reverse().find((stage) =>
+    const latestPlayedStage = availableStages.find((stage) =>
       matches.some(
         (match) =>
           match.stageId === stage.id &&
@@ -170,7 +162,7 @@ export default function DatosV90Page() {
       ),
     );
 
-    setSelectedStageId((latestPlayedStage ?? availableStages[availableStages.length - 1]).id);
+    setSelectedStageId((latestPlayedStage ?? availableStages[0]).id);
   }, [availableStages, matches, selectedCompetitionId, selectedStageId]);
 
   const selectedSeason = seasons.find((season) => season.id === selectedSeasonId);

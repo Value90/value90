@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 import { madridWallTimeToUtc } from "@/lib/timezone";
+import { sortStagesDescending } from "@/lib/stage-order";
 
 const PAGE_SIZE = 1000;
 const PUBLIC_CACHE_MS = 60_000;
@@ -344,8 +345,8 @@ export async function getPublicRankings(params: URLSearchParams) {
   const [base, matchScope, eligibilityMatchScope, participationRows, positionPlayerIds] = await Promise.all([
     getRankingBase(),
     matchScopePromise,
-    competitionId ? getRankingMatchScope(null, seasonId) : matchScopePromise,
-    getRankingParticipations(null, seasonId),
+    !teamId && competitionId ? getRankingMatchScope(null, seasonId) : matchScopePromise,
+    teamId ? Promise.resolve([] as Row[]) : getRankingParticipations(null, seasonId),
     positionId
       ? readAll<Row>((from, to) => {
           let request = supabase
@@ -374,27 +375,29 @@ export async function getPublicRankings(params: URLSearchParams) {
   const playedStatuses = new Set(["jugado", "played", "finished", "finalizado", "finalizada", "completed", "terminado", "terminada"]);
   const teamSeasonKey = (team: number, season: number) => `${season}:${team}`;
 
-  for (const match of eligibilityMatchScope) {
-    if (!playedStatuses.has(String(match.status ?? "").trim().toLocaleLowerCase("es"))) continue;
-    const season = Number(match.season_id);
-    for (const team of [Number(match.home_team_id), Number(match.away_team_id)]) {
-      const key = teamSeasonKey(team, season);
-      teamMatches.set(key, (teamMatches.get(key) ?? 0) + 1);
+  if (!teamId) {
+    for (const match of eligibilityMatchScope) {
+      if (!playedStatuses.has(String(match.status ?? "").trim().toLocaleLowerCase("es"))) continue;
+      const season = Number(match.season_id);
+      for (const team of [Number(match.home_team_id), Number(match.away_team_id)]) {
+        const key = teamSeasonKey(team, season);
+        teamMatches.set(key, (teamMatches.get(key) ?? 0) + 1);
+      }
     }
-  }
 
-  for (const participation of participationRows) {
-    const matchId = Number(participation.match_id);
-    const match = eligibilityMatchesById.get(matchId);
-    if (!match || !playedStatuses.has(String(match.status ?? "").trim().toLocaleLowerCase("es"))) continue;
-    const playerId = Number(participation.player_id);
-    const teamId = Number(participation.team_id);
-    const groupKey = teamSeasonKey(teamId, Number(match.season_id));
-    const playerGroups = appearances.get(playerId) ?? new Map<string, Set<number>>();
-    const playerMatches = playerGroups.get(groupKey) ?? new Set<number>();
-    playerMatches.add(matchId);
-    playerGroups.set(groupKey, playerMatches);
-    appearances.set(playerId, playerGroups);
+    for (const participation of participationRows) {
+      const matchId = Number(participation.match_id);
+      const match = eligibilityMatchesById.get(matchId);
+      if (!match || !playedStatuses.has(String(match.status ?? "").trim().toLocaleLowerCase("es"))) continue;
+      const playerId = Number(participation.player_id);
+      const participatedTeamId = Number(participation.team_id);
+      const groupKey = teamSeasonKey(participatedTeamId, Number(match.season_id));
+      const playerGroups = appearances.get(playerId) ?? new Map<string, Set<number>>();
+      const playerMatches = playerGroups.get(groupKey) ?? new Set<number>();
+      playerMatches.add(matchId);
+      playerGroups.set(groupKey, playerMatches);
+      appearances.set(playerId, playerGroups);
+    }
   }
 
   for (const fact of base.facts) {
@@ -433,9 +436,9 @@ export async function getPublicRankings(params: URLSearchParams) {
         const [season, team] = key.split(":").map(Number);
         if (teamId && team !== teamId) return false;
         const teamMatchCount = teamMatches.get(teamSeasonKey(team, season)) ?? 0;
-        return teamMatchCount > 0 && playedMatches.size / teamMatchCount >= 0.85;
+        return teamMatchCount > 0 && playedMatches.size / teamMatchCount >= 0.5;
       });
-      return meetsTeamThreshold && item.score > 0 && item.matches >= minMatches && (!query || item.playerName.toLocaleLowerCase("es").includes(query));
+      return (teamId != null || meetsTeamThreshold) && item.score > 0 && item.matches >= minMatches && (!query || item.playerName.toLocaleLowerCase("es").includes(query));
     })
     .sort((a, b) => b.score - a.score || a.playerName.localeCompare(b.playerName, "es"));
     },
@@ -461,7 +464,7 @@ export async function getPublicFilters() {
     competitions: competitions.data ?? [],
     seasons: seasons.data ?? [],
     teams: teams.data ?? [],
-    stages: stages.data ?? [],
+    stages: sortStagesDescending(stages.data ?? []),
     positions: positions.data ?? [],
   };
   });

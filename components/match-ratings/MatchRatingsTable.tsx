@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import DataTable from "@/components/shared/tables/DataTable";
+import { sortStagesDescending } from "@/lib/stage-order";
 
 import {
   getMatchRatings,
@@ -245,9 +246,7 @@ export default function MatchRatingsTable({
         .map((match) => match.stageId)
     );
 
-    return stages
-      .filter((stage) => stageIds.has(stage.id))
-      .sort((a, b) => a.id - b.id);
+    return sortStagesDescending(stages.filter((stage) => stageIds.has(stage.id)));
   }, [matches, stages, seasonId, competitionId]);
 
   const availableMatches = useMemo(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import DataTable from "@/components/shared/tables/DataTable";
 
@@ -12,13 +12,17 @@ interface SeasonsTableProps {
   seasons: Season[];
   onEdit: (season: Season) => void;
   onDelete: (season: Season) => void;
+  onToggleActive: (season: Season, active: boolean) => Promise<void>;
 }
 
 export default function SeasonsTable({
   seasons,
   onEdit,
   onDelete,
+  onToggleActive,
 }: SeasonsTableProps) {
+  const [savingIds, setSavingIds] = useState<Set<number>>(() => new Set());
+
   const columns = useMemo<
     ColumnDef<Season, unknown>[]
   >(
@@ -41,10 +45,33 @@ export default function SeasonsTable({
       {
         accessorKey: "active",
         header: "Estado",
-        cell: ({ getValue }) =>
-          getValue<boolean>()
-            ? "Activa"
-            : "Inactiva",
+        cell: ({ row }) => (
+          <label className="inline-flex min-h-10 cursor-pointer items-center gap-2.5">
+            <input
+              type="checkbox"
+              checked={row.original.active}
+              disabled={savingIds.has(row.original.id)}
+              onChange={async (event) => {
+                const active = event.target.checked;
+                setSavingIds((current) => new Set(current).add(row.original.id));
+                try {
+                  await onToggleActive(row.original, active);
+                } finally {
+                  setSavingIds((current) => {
+                    const next = new Set(current);
+                    next.delete(row.original.id);
+                    return next;
+                  });
+                }
+              }}
+              aria-label={`${row.original.active ? "Desactivar" : "Activar"} temporada ${row.original.name}`}
+              className="h-4 w-4 accent-emerald-600 disabled:opacity-50"
+            />
+            <span className="text-sm text-slate-700" aria-live="polite">
+              {savingIds.has(row.original.id) ? "Guardando…" : row.original.active ? "Activa" : "Inactiva"}
+            </span>
+          </label>
+        ),
       },
 
       {
@@ -78,7 +105,7 @@ export default function SeasonsTable({
         ),
       },
     ],
-    [onEdit, onDelete]
+    [onEdit, onDelete, onToggleActive, savingIds]
   );
 
   return (

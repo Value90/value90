@@ -19,6 +19,7 @@ import { getPlayers } from "@/services/player.service";
 import { getCompetitions } from "@/services/competition.service";
 import { getSeasons } from "@/services/season.service";
 import { getStages } from "@/services/stage.service";
+import { sortStagesDescending } from "@/lib/stage-order";
 import {
   getParticipationsByMatchId,
   type Participation,
@@ -745,18 +746,13 @@ export default function PlayerMatchStatForm({
         return [];
       }
 
-      return stages
+      return sortStagesDescending(stages
         .filter(
           (stage) =>
             stage.seasonId ===
               seasonId &&
             stage.active
-        )
-        .sort(
-          (a, b) =>
-            a.displayOrder -
-            b.displayOrder
-        );
+        ));
     }, [
       stages,
       seasonId,
