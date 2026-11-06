@@ -10,7 +10,7 @@ declare global {
 }
 
 export default function PublicAdSense() {
-  const publisherId = process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID;
+  const publisherId = process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID || "ca-pub-6147383489510665";
   const slotId = process.env.NEXT_PUBLIC_ADSENSE_SLOT_ID;
   const adRef = useRef<HTMLModElement>(null);
   const publisherConfigured = Boolean(publisherId && /^ca-pub-\d+$/.test(publisherId));

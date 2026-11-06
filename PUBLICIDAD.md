@@ -12,6 +12,8 @@ No hace falta compartir contraseña, clave secreta ni acceso a la cuenta de Goog
 
 ## Configuración en Vercel
 
+El ID de editor facilitado para Value90 ya está configurado como valor predeterminado en el código (`ca-pub-6147383489510665`) y también se utiliza para generar `/ads.txt`. Si prefieres administrar el ID desde Vercel, configura la variable indicada abajo; esta sustituye el valor predeterminado.
+
 En Settings → Environment Variables, para Production añade:
 
 ```text
@@ -19,7 +21,7 @@ NEXT_PUBLIC_ADSENSE_PUBLISHER_ID=ca-pub-1234567890123456
 NEXT_PUBLIC_ADSENSE_SLOT_ID=1234567890
 ```
 
-El bloque superior necesita ambos IDs. Si solo se configura el ID de editor, se carga el script de AdSense para Auto ads, pero no se renderiza el bloque superior. Cambiar variables requiere un nuevo despliegue.
+El ID de editor carga el script de AdSense para Auto ads. Para mostrar además un bloque fijo en la parte superior, configura también el ID numérico de la unidad de display. Cambiar variables requiere un nuevo despliegue.
 
 El bloque superior es adaptable a móvil, tablet y escritorio. El anuncio ancla inferior se administra desde Auto ads de la cuenta. El script solo se carga cuando hay un ID de editor válido.
 
