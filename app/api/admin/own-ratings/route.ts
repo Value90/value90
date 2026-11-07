@@ -6,7 +6,7 @@ import { OWN_RATING_MODEL_VERSION, trainOwnRatings, type OwnRatingSample } from 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const FIRST_FIVE_STAGES = ["Jornada 1", "Jornada 2", "Jornada 3", "Jornada 4", "Jornada 5"];
+const FIRST_ELEVEN_STAGES = Array.from({ length: 11 }, (_, index) => `Jornada ${index + 1}`);
 
 async function adminClient() {
   const session = await createClient();
@@ -48,17 +48,17 @@ export async function POST() {
     if (!season || !competition) throw new Error("No encuentro la temporada activa o LaLiga.");
 
     const { data: stages, error: stageError } = await supabase.from("stages")
-      .select("id,name").eq("season_id", season.id).in("name", FIRST_FIVE_STAGES);
+      .select("id,name").eq("season_id", season.id).in("name", FIRST_ELEVEN_STAGES);
     if (stageError) throw new Error(stageError.message);
     const stageIds = (stages ?? []).map((stage) => Number(stage.id));
-    if (stageIds.length !== FIRST_FIVE_STAGES.length) {
-      throw new Error("Faltan jornadas 1–5. Comprueba que estén creadas para la temporada activa.");
+    if (stageIds.length !== FIRST_ELEVEN_STAGES.length) {
+      throw new Error("Faltan jornadas 1–11. Comprueba que estén creadas para la temporada activa.");
     }
     const stageNumberById = new Map((stages ?? []).map((stage) => [Number(stage.id), roundNumber(stage.name)]));
     const matches = await readAll((from, to) => supabase.from("matches")
       .select("id,stage_id,competition_id,season_id").eq("season_id", season.id)
-      .eq("competition_id", competition.id).in("stage_id", stageIds).order("id").range(from, to));
-    if (!matches.length) throw new Error("No hay partidos de LaLiga en las jornadas 1–5.");
+      .eq("competition_id", competition.id).in("stage_id", stageIds).eq("status", "Jugado").order("id").range(from, to));
+    if (!matches.length) throw new Error("No hay partidos jugados de LaLiga en las jornadas 1–11.");
     const matchIds = matches.map((match) => Number(match.id));
     const participations = await readAll((from, to) => supabase.from("participations")
       .select("id,match_id,player_id,position_id,minutes_played").in("match_id", matchIds)
@@ -99,7 +99,7 @@ export async function POST() {
         stats: statValues,
       }];
     });
-    if (!samples.length) throw new Error("No hay participaciones con estadísticas importadas. Importa primero las estadísticas de las jornadas 1–5.");
+    if (!samples.length) throw new Error("No hay participaciones con estadísticas importadas. Importa primero las estadísticas de las jornadas 1–11.");
 
     const trained = trainOwnRatings(samples);
     if (!trained) throw new Error(`Solo hay ${samples.filter((sample) => sample.externalAverage != null).length} valoraciones externas vinculadas a estadísticas; hacen falta al menos 17 para ajustar el modelo.`);
@@ -133,6 +133,19 @@ export async function POST() {
       if (inserted.error) throw new Error(inserted.error.message);
     }
 
+    const finalRows = trained.ratings.map((rating) => ({
+      match_id: rating.matchId,
+      player_id: rating.playerId,
+      participation_id: rating.participationId,
+      final_match_rating: rating.ownRating,
+      calculation_version: OWN_RATING_MODEL_VERSION,
+      calculated_at: new Date().toISOString(),
+    }));
+    for (let offset = 0; offset < finalRows.length; offset += 500) {
+      const saved = await supabase.from("match_ratings").upsert(finalRows.slice(offset, offset + 500), { onConflict: "participation_id" });
+      if (saved.error) throw new Error(`No se pudo actualizar la valoración final del ranking: ${saved.error.message}`);
+    }
+
     return NextResponse.json({
       ok: true,
       runId: run.data.id,
@@ -143,6 +156,7 @@ export async function POST() {
       statsCount: samples.length,
       trainingSamples: trained.trainingSamples,
       ratedSamples: trained.ratedSamples,
+      rankingRatingsUpdated: finalRows.length,
       crossValidationMae: trained.crossValidationMae,
       crossValidationRmse: trained.crossValidationRmse,
       modelVersion: OWN_RATING_MODEL_VERSION,

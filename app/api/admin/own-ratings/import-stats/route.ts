@@ -1,23 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { getHighlightlyBoxScore, getHighlightlyMatches, type HighlightlyMatch } from "@/lib/highlightly.server";
+import { getHighlightlyBoxScore } from "@/lib/highlightly.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const LEAGUE_ID = 119924;
-const SEASON_YEAR = 2026;
-const TARGET_ROUNDS = new Set([6, 7, 8, 9, 10]);
-
-function stageNumber(round: string) {
-  const match = round.match(/(\d+)\s*$/);
-  return match ? Number(match[1]) : null;
-}
-
-function isFinished(match: HighlightlyMatch) {
-  return /finished|full.?time|after (penalt|over.?time)|awarded/i.test(match.state?.description ?? "");
-}
+// The statistics from rounds 1–5 already power the initial training. Only
+// complete rounds 6–11, which avoids spending provider calls on known data.
+const TARGET_ROUNDS = new Set([6, 7, 8, 9, 10, 11]);
 
 function normalize(value: string | null | undefined) {
   if (typeof value !== "string") return "";
@@ -40,22 +31,16 @@ async function requireAdminSession() {
   return createAdminSupabaseClient();
 }
 
-async function fetchAllLaLiga() {
-  const allMatches: HighlightlyMatch[] = [];
-  let total = Number.POSITIVE_INFINITY;
-  let callsUsed = 0;
-  let callsRemaining: string | null = null;
-  for (let offset = 0; offset < total; offset += 100) {
-    const response = await getHighlightlyMatches(LEAGUE_ID, SEASON_YEAR, offset);
-    callsUsed += 1;
-    callsRemaining = response.remaining;
-    const page = response.body;
-    if (!page?.pagination || !Array.isArray(page.data)) throw new Error("Highlightly devolvió un calendario no válido.");
-    allMatches.push(...page.data);
-    total = page.pagination.totalCount;
-    if (!page.data.length || (callsRemaining === "0" && offset + 100 < total)) break;
+async function readAll<T>(query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>) {
+  const rows: T[] = [];
+  for (let from = 0; from < 20_000; from += 1000) {
+    const { data, error } = await query(from, from + 999);
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < 1000) return rows;
   }
-  return { allMatches, callsUsed, callsRemaining };
+  throw new Error("La consulta de estadísticas superó el límite de seguridad.");
 }
 
 export async function POST(request: NextRequest) {
@@ -64,91 +49,52 @@ export async function POST(request: NextRequest) {
     const input = await request.json().catch(() => ({})) as { action?: string; matchIds?: number[] };
 
     if (input.action === "prepare") {
-      const [seasonResult, competitionResult, stagesResult, teamsResult] = await Promise.all([
+      const [seasonResult, competitionResult, stagesResult] = await Promise.all([
         supabase.from("seasons").select("id,name,active,start_date").order("start_date", { ascending: false }),
         supabase.from("competitions").select("id,name").ilike("name", "%laliga%"),
         supabase.from("stages").select("id,name,season_id"),
-        supabase.from("external_team_mappings").select("external_team_id,team_id").eq("provider", "highlightly"),
       ]);
-      for (const result of [seasonResult, competitionResult, stagesResult, teamsResult]) if (result.error) throw new Error(result.error.message);
+      for (const result of [seasonResult, competitionResult, stagesResult]) if (result.error) throw new Error(result.error.message);
       const season = (seasonResult.data ?? []).find((row) => row.active) ?? (seasonResult.data ?? []).find((row) => String(row.name).includes("2026/27"));
       const competition = competitionResult.data?.[0];
       if (!season || !competition) throw new Error("No encuentro LaLiga o la temporada activa.");
-      const stages = (stagesResult.data ?? []).filter((row) => Number(row.season_id) === Number(season.id) && /^Jornada (?:[6-9]|10)$/.test(row.name));
-      if (stages.length !== TARGET_ROUNDS.size) throw new Error("Deben existir las jornadas 6–10 para la temporada activa.");
-      const stageIdByNumber = new Map(stages.map((row) => [stageNumber(row.name)!, Number(row.id)]));
-      const localMatchesResult = await supabase.from("matches")
-        .select("id,stage_id,home_team_id,away_team_id,status")
-        .eq("season_id", season.id).eq("competition_id", competition.id)
-        .in("stage_id", stages.map((row) => row.id));
-      if (localMatchesResult.error) throw new Error(localMatchesResult.error.message);
-      const localMatchByKey = new Map((localMatchesResult.data ?? []).map((row) => [`${row.stage_id}:${row.home_team_id}:${row.away_team_id}`, Number(row.id)]));
-      const localTeamByExternalId = new Map((teamsResult.data ?? []).map((row) => [Number(row.external_team_id), Number(row.team_id)]));
-
-      const fetched = await fetchAllLaLiga();
-      const fixtures = [...new Map(fetched.allMatches
-        .filter((match) => Number(match.league?.season) === SEASON_YEAR && TARGET_ROUNDS.has(stageNumber(match.round) ?? -1))
-        .map((match) => [Number(match.id), match])).values()];
-      const selected: Array<{ localMatchId: number; externalMatchId: number }> = [];
-      const missingTeamMappings = new Set<string>();
-      const missingLocalMatches: string[] = [];
-      const notFinished: string[] = [];
-      for (const fixture of fixtures) {
-        const round = stageNumber(fixture.round);
-        if (round == null) continue;
-        if (!isFinished(fixture)) {
-          notFinished.push(`${fixture.round}: ${fixture.homeTeam.name}–${fixture.awayTeam.name}`);
-          continue;
-        }
-        const homeId = localTeamByExternalId.get(Number(fixture.homeTeam.id));
-        const awayId = localTeamByExternalId.get(Number(fixture.awayTeam.id));
-        if (!homeId || !awayId) {
-          if (!homeId) missingTeamMappings.add(fixture.homeTeam.name);
-          if (!awayId) missingTeamMappings.add(fixture.awayTeam.name);
-          continue;
-        }
-        const localMatchId = localMatchByKey.get(`${stageIdByNumber.get(round)}:${homeId}:${awayId}`);
-        if (!localMatchId) {
-          missingLocalMatches.push(`${fixture.round}: ${fixture.homeTeam.name}–${fixture.awayTeam.name}`);
-          continue;
-        }
-        selected.push({ localMatchId, externalMatchId: Number(fixture.id) });
-      }
-      const localIds = selected.map((row) => row.localMatchId);
-      const externalIds = selected.map((row) => row.externalMatchId);
-      const [existingResult, existingExternalResult] = localIds.length
+      const stages = (stagesResult.data ?? []).filter((row) => Number(row.season_id) === Number(season.id) && TARGET_ROUNDS.has(Number(row.name.match(/\d+$/)?.[0])));
+      if (stages.length !== TARGET_ROUNDS.size) throw new Error("Deben existir las jornadas 6–11 para la temporada activa.");
+      const stageIds = stages.map((row) => Number(row.id));
+      const { data: matches, error: matchesError } = await supabase.from("matches")
+        .select("id,stage_id,status").eq("season_id", season.id).eq("competition_id", competition.id)
+        .eq("status", "Jugado").in("stage_id", stageIds);
+      if (matchesError) throw new Error(matchesError.message);
+      const matchIdsInScope = matches.map((row) => Number(row.id));
+      const [mappingResult, participantRows] = matchIdsInScope.length
         ? await Promise.all([
-            supabase.from("external_match_mappings").select("match_id,external_match_id").eq("provider", "highlightly").in("match_id", localIds),
-            supabase.from("external_match_mappings").select("match_id,external_match_id").eq("provider", "highlightly").in("external_match_id", externalIds),
+            supabase.from("external_match_mappings").select("match_id,external_match_id").eq("provider", "highlightly").in("match_id", matchIdsInScope),
+            readAll((from, to) => supabase.from("participations").select("id,match_id,is_starting_xi,minutes_played").in("match_id", matchIdsInScope).order("id").range(from, to)),
           ])
-        : [{ data: [], error: null }, { data: [], error: null }];
-      if (existingResult.error || existingExternalResult.error) throw new Error(existingResult.error?.message ?? existingExternalResult.error?.message);
-      const existingByMatch = new Map((existingResult.data ?? []).map((row) => [Number(row.match_id), Number(row.external_match_id)]));
-      const existingByExternal = new Map((existingExternalResult.data ?? []).map((row) => [Number(row.external_match_id), Number(row.match_id)]));
-      const conflictingMappings: string[] = [];
-      const conflictingLocalIds = new Set<number>();
-      const toInsert = selected.filter((row) => {
-        const mappedExternalId = existingByMatch.get(row.localMatchId);
-        const mappedLocalId = existingByExternal.get(row.externalMatchId);
-        if ((mappedExternalId != null && mappedExternalId !== row.externalMatchId)
-          || (mappedLocalId != null && mappedLocalId !== row.localMatchId)) {
-          conflictingMappings.push(`partido local ${row.localMatchId} / Highlightly ${row.externalMatchId}`);
-          conflictingLocalIds.add(row.localMatchId);
-          return false;
-        }
-        return mappedExternalId == null && mappedLocalId == null;
+        : [{ data: [], error: null }, []];
+      if (mappingResult.error) throw new Error(mappingResult.error.message);
+      const participationIds = participantRows.map((row) => Number(row.id));
+      const statsRows = participationIds.length
+        ? await readAll((from, to) => supabase.from("player_match_stats").select("participation_id").in("participation_id", participationIds).order("participation_id").range(from, to))
+        : [];
+      const existingStats = new Set(statsRows.map((row) => Number(row.participation_id)));
+      const participantsByMatch = new Map<number, typeof participantRows>();
+      participantRows.forEach((row) => participantsByMatch.set(Number(row.match_id), [...(participantsByMatch.get(Number(row.match_id)) ?? []), row]));
+      const mappingsByMatch = new Map((mappingResult.data ?? []).map((row) => [Number(row.match_id), Number(row.external_match_id)]));
+      const noMapping: number[] = [];
+      const matchIds = matches.flatMap((row) => {
+        const id = Number(row.id);
+        const eligible = (participantsByMatch.get(id) ?? []).filter((part) =>
+          (part.is_starting_xi || Number(part.minutes_played) > 0) && !existingStats.has(Number(part.id))
+        );
+        if (!eligible.length) return [];
+        if (!mappingsByMatch.has(id)) { noMapping.push(id); return []; }
+        return [id];
       });
-      for (let offset = 0; offset < toInsert.length; offset += 200) {
-        const inserted = await supabase.from("external_match_mappings").insert(toInsert.slice(offset, offset + 200).map((row) => ({
-          provider: "highlightly", external_match_id: row.externalMatchId, match_id: row.localMatchId,
-        })));
-        if (inserted.error) throw new Error(`No pude asociar los partidos con Highlightly: ${inserted.error.message}`);
-      }
-      const matchIds = selected.filter((row) => !conflictingLocalIds.has(row.localMatchId)).map((row) => row.localMatchId);
       return NextResponse.json({
-        ok: true, matchIds, totalMatches: matchIds.length, callsUsed: fetched.callsUsed,
-        callsRemaining: fetched.callsRemaining == null ? null : Number(fetched.callsRemaining),
-        skipped: { missingTeamMappings: [...missingTeamMappings], missingLocalMatches, conflictingMappings, notFinished },
+        ok: true, matchIds, totalMatches: matchIds.length, callsUsed: 0, callsRemaining: null,
+        alreadyComplete: matches.length - matchIds.length - noMapping.length,
+        skipped: { missingMappings: noMapping },
       });
     }
 

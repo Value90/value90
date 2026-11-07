@@ -57,7 +57,7 @@ export default function OwnRatingsProgress() {
     setBusy("import");
     setError("");
     setMessage("");
-    setImportProgress("Preparando las jornadas 6–10…");
+    setImportProgress("Buscando estadísticas pendientes de las jornadas 6–11…");
     try {
       const prepareResponse = await fetch("/api/admin/own-ratings/import-stats", {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "prepare" }),
@@ -67,16 +67,15 @@ export default function OwnRatingsProgress() {
       const ids: number[] = prepared.matchIds ?? [];
       setQuota(prepared.callsRemaining ?? null);
       if (!ids.length) {
-        const notFinished = Number(prepared.skipped?.notFinished?.length ?? 0);
-        const missing = Number(prepared.skipped?.missingLocalMatches?.length ?? 0) + Number(prepared.skipped?.missingTeamMappings?.length ?? 0);
-        setMessage(`No hay partidos finalizados de las jornadas 6–10 listos para importar${notFinished ? ` (${notFinished} aún no están finalizados)` : ""}. Se utilizaron ${Number(prepared.callsUsed ?? 0)} llamadas para revisar el calendario${missing ? `; hay ${missing} asociaciones de partidos o equipos pendientes` : ""}.`);
+        const missing = Number(prepared.skipped?.missingMappings?.length ?? 0);
+        setMessage(`No quedan estadísticas pendientes de las jornadas 6–11${missing ? `; ${missing} partidos necesitan asociación con Highlightly` : ""}. Las jornadas 1–5 ya estaban importadas; no se consumieron llamadas para preparar esta revisión.`);
         setImportProgress("");
         return;
       }
       let imported = 0;
-      let calls = Number(prepared.callsUsed ?? 0);
+      let calls = 0;
       const unmatched: Array<{ player: string }> = [];
-      let stoppedByQuota = prepared.callsRemaining === 0 && ids.length > 0;
+      let stoppedByQuota = false;
       for (let start = 0; start < ids.length && !stoppedByQuota; start += 5) {
         const batch = ids.slice(start, start + 5);
         setImportProgress(`Importando partidos ${Math.min(start + batch.length, ids.length)} de ${ids.length}…`);
@@ -95,13 +94,11 @@ export default function OwnRatingsProgress() {
           break;
         }
       }
-      const missingCount = Number(prepared.skipped?.missingLocalMatches?.length ?? 0) + Number(prepared.skipped?.missingTeamMappings?.length ?? 0);
-      const conflicts = Number(prepared.skipped?.conflictingMappings?.length ?? 0);
-      const notFinished = Number(prepared.skipped?.notFinished?.length ?? 0);
+      const missingCount = Number(prepared.skipped?.missingMappings?.length ?? 0);
       const summary = stoppedByQuota && imported === 0
         ? `No se importaron estadísticas porque la cuota diaria quedó agotada al preparar los partidos. Se revisaron ${ids.length} partidos sin consumir más llamadas.`
         : `${stoppedByQuota ? "Importación parcial por límite diario" : "Importación terminada"}: ${imported} participaciones con estadísticas en ${stoppedByQuota ? "parte de " : ""}${ids.length} partidos.`;
-      setMessage(`${summary} Se utilizaron ${calls} llamadas a Highlightly.${notFinished ? ` Se excluyeron ${notFinished} partidos todavía no finalizados para no gastar llamadas en datos incompletos.` : ""}${unmatched.length ? ` ${unmatched.length} jugadores quedaron sin asociar para revisión.` : ""}${missingCount ? ` Hay ${missingCount} incidencias de equipos o partidos que no se pudieron asociar.` : ""}${conflicts ? ` Se omitieron ${conflicts} asociaciones de partido que entraban en conflicto con vínculos ya guardados.` : ""}`);
+      setMessage(`${summary} Se utilizaron ${calls} llamadas a Highlightly.${prepared.alreadyComplete ? ` ${prepared.alreadyComplete} partidos ya tenían sus estadísticas completas.` : ""}${unmatched.length ? ` ${unmatched.length} jugadores quedaron sin asociar para revisión.` : ""}${missingCount ? ` Hay ${missingCount} partidos sin asociación con Highlightly.` : ""}`);
       setImportProgress("");
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : "No se pudieron importar las estadísticas.");
@@ -151,17 +148,17 @@ export default function OwnRatingsProgress() {
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-bold text-slate-800">Valoración propia a partir de estadísticas</h2>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-          El modelo entrenado con las jornadas 1–5 se evalúa primero en las jornadas 6–10 sin aprender de ellas. Importa sus estadísticas y ejecuta la evaluación antes de recalibrar; así MAE y RMSE reflejan partidos nuevos.
+          Importa las estadísticas pendientes de las primeras 11 jornadas y entrena el modelo con las valoraciones externas disponibles. Después, cada sincronización automática de un partido finalizado calcula las notas propias y actualiza el ranking.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <button type="button" onClick={importEvaluationRounds} disabled={busy !== null} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">
-            {busy === "import" ? "Importando estadísticas…" : "Importar estadísticas: jornadas 6–10"}
+            {busy === "import" ? "Importando estadísticas…" : "Completar estadísticas: jornadas 6–11"}
           </button>
           <button type="button" onClick={evaluateHeldOutRounds} disabled={busy !== null} className="min-h-11 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60">
             {busy === "evaluate" ? "Evaluando…" : "Evaluar modelo con jornadas 6–10"}
           </button>
           <button type="button" onClick={calculateOwnRatings} disabled={busy !== null} className="min-h-11 rounded-lg border border-emerald-700 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-wait disabled:opacity-60">
-            {busy === "calculate" ? "Recalculando…" : "Recalcular entrenamiento 1–5"}
+            {busy === "calculate" ? "Recalculando…" : "Recalcular modelo: jornadas 1–11"}
           </button>
         </div>
         {importProgress && <p className="mt-3 text-sm font-medium text-slate-600" role="status">{importProgress}</p>}
@@ -176,7 +173,7 @@ export default function OwnRatingsProgress() {
           {report?.run && (
             <p className="mt-1 text-sm text-slate-500">
               {report.run.model_version} · {report.run.evaluation_source_run_id
-                ? `Evaluación independiente: ${report.run.rated_samples} notas, MAE ${report.run.evaluation_mae == null ? "—" : rating.format(Number(report.run.evaluation_mae))} y RMSE ${report.run.evaluation_rmse == null ? "—" : rating.format(Number(report.run.evaluation_rmse))}. El modelo se entrenó con ${report.run.training_samples} valoraciones de las jornadas 1–5.`
+                ? `Evaluación independiente: ${report.run.rated_samples} notas, MAE ${report.run.evaluation_mae == null ? "—" : rating.format(Number(report.run.evaluation_mae))} y RMSE ${report.run.evaluation_rmse == null ? "—" : rating.format(Number(report.run.evaluation_rmse))}. Modelo entrenado con ${report.run.training_samples} valoraciones externas.`
                 : `${report.run.training_samples} valoraciones externas para entrenar · validación cruzada inicial: MAE ${report.run.cross_validation_mae == null ? "—" : rating.format(Number(report.run.cross_validation_mae))} · RMSE ${report.run.cross_validation_rmse == null ? "—" : rating.format(Number(report.run.cross_validation_rmse))}`}
             </p>
           )}

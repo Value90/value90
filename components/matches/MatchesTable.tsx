@@ -51,6 +51,9 @@ export default function MatchesTable({
 
   const [matchesError, setMatchesError] =
     useState("");
+  const [highlightlyMatchIds, setHighlightlyMatchIds] = useState<Set<number>>(new Set());
+  const [syncingMatchId, setSyncingMatchId] = useState<number | null>(null);
+  const [syncMessage, setSyncMessage] = useState("");
 
   /*
    * ============================================================
@@ -143,6 +146,41 @@ export default function MatchesTable({
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch("/api/admin/sports/sync", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? "No se pudo consultar el estado de sincronización.");
+        if (mounted) setHighlightlyMatchIds(new Set<number>((payload.matches ?? []).map((item: { matchId: number }) => Number(item.matchId))));
+      })
+      .catch((error) => console.error("No se pudieron cargar los partidos asociados a Highlightly:", error));
+    return () => { mounted = false; };
+  }, []);
+
+  async function importMatchFromHighlightly(matchId: number) {
+    setSyncingMatchId(matchId);
+    setSyncMessage("");
+    try {
+      const response = await fetch("/api/admin/sports/sync", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ matchId }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) throw new Error(payload.error ?? "No se pudieron importar los datos.");
+      const detail = payload.results?.find((item: { matchId: number }) => Number(item.matchId) === matchId);
+      setSyncMessage(detail?.ownRatings
+        ? `Partido actualizado: resultado, participaciones, estadísticas y ${detail.ownRatings} valoraciones propias.`
+        : "Partido actualizado. No se generó valoración propia: " + (detail?.ownRatingNote ?? "faltan estadísticas o entrenamiento con 11 jornadas."));
+      window.setTimeout(() => window.location.reload(), 500);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "No se pudieron importar los datos.");
+    } finally {
+      setSyncingMatchId(null);
+    }
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -591,6 +629,18 @@ export default function MatchesTable({
       cell: ({ row }) => (
         <div className="flex w-full min-w-0 items-center gap-1 whitespace-nowrap sm:gap-2">
 
+          {highlightlyMatchIds.has(row.original.id) && (
+            <button
+              type="button"
+              onClick={() => void importMatchFromHighlightly(row.original.id)}
+              disabled={syncingMatchId !== null}
+              aria-label={`Importar resultado y valoraciones de ${getTeamName(row.original.homeTeamId)} contra ${getTeamName(row.original.awayTeamId)}`}
+              className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60 sm:rounded-lg sm:px-2.5 sm:text-sm"
+            >
+              {syncingMatchId === row.original.id ? "Importando…" : "Importar"}
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() =>
@@ -610,7 +660,8 @@ export default function MatchesTable({
                 row.original
               )
             }
-            className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-red-200 bg-white px-1.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 sm:rounded-lg sm:px-2.5 sm:text-sm"
+            disabled={syncingMatchId === row.original.id}
+            className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-red-200 bg-white px-1.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50 sm:rounded-lg sm:px-2.5 sm:text-sm"
           >
             Eliminar
           </button>
@@ -738,6 +789,8 @@ export default function MatchesTable({
 
       <div className="matches-responsive-table w-full min-w-0 max-w-full overflow-hidden">
 
+        {syncMessage && <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" role="status">{syncMessage}</p>}
+
         <DataTable
           data={
             filteredMatches
@@ -809,33 +862,33 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th:nth-child(1)),
           .matches-responsive-table :global(td:nth-child(1)) {
-            width: 16%;
+            width: 14%;
           }
 
           .matches-responsive-table :global(th:nth-child(2)),
           .matches-responsive-table :global(td:nth-child(2)) {
-            width: 10%;
+            width: 9%;
           }
 
           .matches-responsive-table :global(th:nth-child(3)),
           .matches-responsive-table :global(td:nth-child(3)) {
-            width: 15%;
+            width: 14%;
           }
 
           .matches-responsive-table :global(th:nth-child(4)),
           .matches-responsive-table :global(td:nth-child(4)) {
-            width: 15%;
+            width: 14%;
           }
 
           .matches-responsive-table :global(th:nth-child(5)),
           .matches-responsive-table :global(td:nth-child(5)) {
-            width: 9%;
+            width: 8%;
             text-align: center;
           }
 
           .matches-responsive-table :global(th:nth-child(6)),
           .matches-responsive-table :global(td:nth-child(6)) {
-            width: 10%;
+            width: 9%;
           }
 
           .matches-responsive-table :global(th:nth-child(7)),
@@ -845,7 +898,7 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th:nth-child(8)),
           .matches-responsive-table :global(td:nth-child(8)) {
-            width: 18%;
+            width: 25%;
           }
 
           .matches-responsive-table :global(td:nth-child(8) > div) {
@@ -898,22 +951,22 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th:nth-child(1)),
           .matches-responsive-table :global(td:nth-child(1)) {
-            width: 17%;
+            width: 14%;
           }
 
           .matches-responsive-table :global(th:nth-child(2)),
           .matches-responsive-table :global(td:nth-child(2)) {
-            width: 11%;
+            width: 10%;
           }
 
           .matches-responsive-table :global(th:nth-child(3)),
           .matches-responsive-table :global(td:nth-child(3)) {
-            width: 15%;
+            width: 14%;
           }
 
           .matches-responsive-table :global(th:nth-child(4)),
           .matches-responsive-table :global(td:nth-child(4)) {
-            width: 15%;
+            width: 14%;
           }
 
           .matches-responsive-table :global(th:nth-child(5)),
@@ -924,20 +977,22 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th:nth-child(6)),
           .matches-responsive-table :global(td:nth-child(6)) {
-            width: 11%;
+            width: 10%;
           }
 
           .matches-responsive-table :global(th:nth-child(7)),
           .matches-responsive-table :global(td:nth-child(7)) {
-            width: 8%;
+            width: 7%;
           }
 
           .matches-responsive-table :global(th:nth-child(8)),
           .matches-responsive-table :global(td:nth-child(8)) {
-            width: 14%;
+            width: 22%;
           }
 
           .matches-responsive-table :global(td:nth-child(8) > div) {
+            flex-direction: column;
+            align-items: stretch;
             gap: 0.25rem;
           }
 
@@ -1006,17 +1061,17 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th:nth-child(2)),
           .matches-responsive-table :global(td:nth-child(2)) {
-            width: 16%;
+            width: 14%;
           }
 
           .matches-responsive-table :global(th:nth-child(3)),
           .matches-responsive-table :global(td:nth-child(3)) {
-            width: 22%;
+            width: 20%;
           }
 
           .matches-responsive-table :global(th:nth-child(4)),
           .matches-responsive-table :global(td:nth-child(4)) {
-            width: 22%;
+            width: 20%;
           }
 
           .matches-responsive-table :global(th:nth-child(5)),
@@ -1027,7 +1082,7 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th:nth-child(8)),
           .matches-responsive-table :global(td:nth-child(8)) {
-            width: 25%;
+            width: 31%;
           }
 
           /*
@@ -1099,17 +1154,17 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th:nth-child(2)),
           .matches-responsive-table :global(td:nth-child(2)) {
-            width: 17%;
+            width: 15%;
           }
 
           .matches-responsive-table :global(th:nth-child(3)),
           .matches-responsive-table :global(td:nth-child(3)) {
-            width: 21%;
+            width: 19%;
           }
 
           .matches-responsive-table :global(th:nth-child(4)),
           .matches-responsive-table :global(td:nth-child(4)) {
-            width: 21%;
+            width: 19%;
           }
 
           .matches-responsive-table :global(th:nth-child(5)),
@@ -1119,7 +1174,7 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th:nth-child(8)),
           .matches-responsive-table :global(td:nth-child(8)) {
-            width: 26%;
+            width: 32%;
           }
 
           .matches-responsive-table :global(td:nth-child(8) button) {

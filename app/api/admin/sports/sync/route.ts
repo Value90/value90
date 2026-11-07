@@ -12,6 +12,7 @@ import {
   type HighlightlyMatch,
   type HighlightlyBoxScorePlayerStatistics,
 } from "@/lib/highlightly.server";
+import { OWN_RATING_MODEL_VERSION, predictWithStoredModels, type OwnRatingSample } from "@/lib/own-ratings.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,10 +23,65 @@ const MAX_RESULT_ATTEMPTS = 12;
 const RESULT_RETRY_DELAY_MS = 5 * 60_000;
 // Keep automatic retries limited to recent fixtures, so a missed deployment
 // cannot trigger a large batch of calls for the entire season's archive.
-const MAX_RESULT_AUTO_AGE_MS = 48 * 60 * 60_000;
+const MAX_RESULT_AUTO_AGE_MS = 7 * 24 * 60 * 60_000;
 
 type SyncMapping = { external_match_id: number | string; match_id: number | string; result_attempts?: number | null; lineup_synced_at?: string | null };
-type SyncMatch = { season_id: number | string; home_team_id: number | string };
+type SyncMatch = { season_id: number | string; competition_id: number | string; home_team_id: number | string };
+
+async function calculateOwnRatingForMatch(supabase: ReturnType<typeof createAdminSupabaseClient>, matchId: number, match: SyncMatch) {
+  const { data: run, error: runError } = await supabase.from("own_rating_runs")
+    .select("id,stage_ids,position_models,model_version")
+    .eq("season_id", match.season_id).eq("competition_id", match.competition_id)
+    .is("evaluation_source_run_id", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (runError) throw new Error(`No se pudo cargar el modelo de valoración: ${runError.message}`);
+  if (!run || !Array.isArray(run.stage_ids) || run.stage_ids.length < 11 || run.model_version !== OWN_RATING_MODEL_VERSION) {
+    return { calculated: 0, reason: "Aún no hay un modelo entrenado con las jornadas 1–11." };
+  }
+  const [participationsResult, positionsResult] = await Promise.all([
+    supabase.from("participations").select("id,match_id,player_id,position_id,minutes_played").eq("match_id", matchId),
+    supabase.from("positions").select("id,name,short_name"),
+  ]);
+  if (participationsResult.error || positionsResult.error) throw new Error(participationsResult.error?.message ?? positionsResult.error?.message);
+  const participations = participationsResult.data ?? [];
+  const ids = participations.map((row) => Number(row.id));
+  if (!ids.length) return { calculated: 0, reason: "El partido no contiene participaciones." };
+  const [statsResult, externalResult] = await Promise.all([
+    supabase.from("player_match_stats").select("*").in("participation_id", ids),
+    supabase.from("match_ratings").select("participation_id,external_average").in("participation_id", ids),
+  ]);
+  if (statsResult.error || externalResult.error) throw new Error(statsResult.error?.message ?? externalResult.error?.message);
+  const statsByParticipation = new Map((statsResult.data ?? []).map((row) => [Number(row.participation_id), row]));
+  const externalByParticipation = new Map((externalResult.data ?? []).filter((row) => row.external_average != null).map((row) => [Number(row.participation_id), Number(row.external_average)]));
+  const positionById = new Map((positionsResult.data ?? []).map((row) => [Number(row.id), String(row.name)]));
+  const samples: OwnRatingSample[] = participations.flatMap((participation) => {
+    const stats = statsByParticipation.get(Number(participation.id));
+    const positionId = Number(participation.position_id);
+    const positionName = positionById.get(positionId);
+    if (!stats || !positionName) return [];
+    return [{
+      participationId: Number(participation.id), playerId: Number(participation.player_id), matchId,
+      positionId, positionName, stageNumber: 0, minutesPlayed: Number(participation.minutes_played) || 0,
+      externalAverage: externalByParticipation.get(Number(participation.id)) ?? null,
+      stats: Object.fromEntries(["goals", "assists", "shots", "shots_on_target", "dribbles_completed", "duels_won", "tackles", "recoveries", "saves", "passes_completed", "yellow_cards", "red_cards"].map((key) => [key, Number(stats[key]) || 0])),
+    }];
+  });
+  if (!samples.length) return { calculated: 0, reason: "No hay estadísticas suficientes para puntuar este partido." };
+  const prediction = predictWithStoredModels(samples, run.position_models as Parameters<typeof predictWithStoredModels>[1]);
+  const ownRows = prediction.ratings.map((row) => ({
+    run_id: run.id, participation_id: row.participationId, match_id: matchId, player_id: row.playerId,
+    position_id: row.positionId, own_rating: row.ownRating, external_average: row.externalAverage,
+    absolute_error: row.absoluteError, calculation_version: OWN_RATING_MODEL_VERSION,
+  }));
+  const savedOwn = await supabase.from("own_match_ratings").upsert(ownRows, { onConflict: "run_id,participation_id" });
+  if (savedOwn.error) throw new Error(`No se pudo guardar la valoración propia: ${savedOwn.error.message}`);
+  const finalRows = prediction.ratings.map((row) => ({
+    match_id: matchId, player_id: row.playerId, participation_id: row.participationId,
+    final_match_rating: row.ownRating, calculation_version: OWN_RATING_MODEL_VERSION, calculated_at: new Date().toISOString(),
+  }));
+  const savedFinal = await supabase.from("match_ratings").upsert(finalRows, { onConflict: "participation_id" });
+  if (savedFinal.error) throw new Error(`No se pudo actualizar la columna de valoración final: ${savedFinal.error.message}`);
+  return { calculated: finalRows.length };
+}
 
 function normalize(value: string | null | undefined) {
   if (typeof value !== "string") return "";
@@ -192,7 +248,7 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
   const detail = matchRecord as HighlightlyMatch & { events?: HighlightlyEvent[] };
   const state = detail.state?.description ?? "Unknown";
   if (!isTerminal(state)) {
-    const attempts = Number(mapping.result_attempts ?? 0) + 1;
+    const attempts = Number(mapping.result_attempts ?? 0);
     const canRetry = attempts < MAX_RESULT_ATTEMPTS;
     const retry = await supabase.from("external_match_mappings").update({ result_attempts: attempts, next_result_sync_at: canRetry ? new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString() : null, last_sync_error: canRetry ? `El proveedor aún indica «${state}»; volveré a consultar en 5 minutos.` : `El proveedor aún indica «${state}» después de ${MAX_RESULT_ATTEMPTS} comprobaciones. Requiere revisión manual.`, updated_at: new Date().toISOString() })
       .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
@@ -393,10 +449,11 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
     }
   }
 
+  const ownRating = await calculateOwnRatingForMatch(supabase, Number(mapping.match_id), match);
   const marked = await supabase.from("external_match_mappings").update({ final_synced_at: new Date().toISOString(), next_result_sync_at: null, last_sync_error: null, updated_at: new Date().toISOString() })
     .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
   if (marked.error) throw new Error(marked.error.message);
-  return { matchId: mapping.match_id, status: isCancelled(state) ? "Cancelado" : "Jugado", score: `${homeScore ?? "?"}-${awayScore ?? "?"}`, substitutions: substitutions.length, importedPlayerStats, ...lineupSummary, callsRemaining, callsLimit };
+  return { matchId: mapping.match_id, status: isCancelled(state) ? "Cancelado" : "Jugado", score: `${homeScore ?? "?"}-${awayScore ?? "?"}`, substitutions: substitutions.length, importedPlayerStats, ownRatings: ownRating.calculated, ownRatingNote: ownRating.reason, ...lineupSummary, callsRemaining, callsLimit };
 }
 
 export async function POST(request: NextRequest) {
@@ -418,7 +475,7 @@ export async function POST(request: NextRequest) {
     }
     const supabase = createAdminSupabaseClient();
     const { data: mappings, error } = await supabase.from("external_match_mappings")
-      .select("provider,external_match_id,match_id,lineup_synced_at,final_synced_at,next_result_sync_at,result_attempts,last_sync_error,match:matches!inner(id,date,status,season_id,home_team_id,away_team_id)")
+      .select("provider,external_match_id,match_id,lineup_synced_at,final_synced_at,next_result_sync_at,result_attempts,last_sync_error,match:matches!inner(id,date,status,season_id,competition_id,home_team_id,away_team_id)")
       .eq("provider", "highlightly").order("external_match_id", { ascending: true }).limit(1000);
     if (error) throw error;
     const candidates = manualMatchId == null ? mappings ?? [] : (mappings ?? []).filter((item) => Number(item.match_id) === manualMatchId);
@@ -435,15 +492,24 @@ export async function POST(request: NextRequest) {
         && kickoff + 105 * 60_000 <= now && now <= kickoff + MAX_RESULT_AUTO_AGE_MS
         && (!mapping.next_result_sync_at || new Date(mapping.next_result_sync_at).getTime() <= now));
       if (resultDue) {
+        const claimedAttempts = Number(mapping.result_attempts ?? 0) + 1;
+        const claim = await supabase.from("external_match_mappings").update({
+          result_attempts: claimedAttempts,
+          next_result_sync_at: new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString(),
+          last_sync_error: null,
+          updated_at: new Date().toISOString(),
+        }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
+        if (claim.error) throw claim.error;
+        const claimedMapping = { ...mapping, result_attempts: claimedAttempts };
         try {
-          results.push({ phase: "resultado-final-y-participaciones", ...await syncResult(supabase, mapping, match) });
+          results.push({ phase: "resultado-final-y-participaciones", ...await syncResult(supabase, claimedMapping, match) });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Error sincronizando resultado.";
-          const attempts = Number(mapping.result_attempts ?? 0) + 1;
-          const canRetry = attempts < MAX_RESULT_ATTEMPTS;
-          await supabase.from("external_match_mappings").update({ result_attempts: attempts, next_result_sync_at: canRetry ? new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString() : null, last_sync_error: canRetry ? message : `${message} Se agotaron ${MAX_RESULT_ATTEMPTS} intentos; requiere revisión manual.`, updated_at: new Date().toISOString() }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
+          const canRetry = claimedAttempts < MAX_RESULT_ATTEMPTS;
+          await supabase.from("external_match_mappings").update({ next_result_sync_at: canRetry ? new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString() : null, last_sync_error: canRetry ? message : `${message} Se agotaron ${MAX_RESULT_ATTEMPTS} intentos; requiere revisión manual.`, updated_at: new Date().toISOString() }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
           results.push({ phase: "resultado", matchId: mapping.match_id, error: message });
         }
+        if (manualMatchId == null) break;
       }
     }
     return NextResponse.json({ ok: true, manual: manualMatchId != null, checked: candidates.length, processed: results.length, results });
