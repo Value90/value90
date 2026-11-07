@@ -33,6 +33,10 @@ import {
   getPlayerV90MatchFacts,
   type PlayerV90MatchFact,
 } from "@/services/v90-match.service";
+import {
+  getLatestOwnMatchRatings,
+  type OwnMatchRating,
+} from "@/services/own-rating.service";
 
 type RankingMode =
   | "total"
@@ -100,6 +104,9 @@ export default function RankingsPage() {
 
   const [v90Facts, setV90Facts] =
     useState<PlayerV90MatchFact[]>([]);
+
+  const [ownMatchRatings, setOwnMatchRatings] =
+    useState<OwnMatchRating[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -208,6 +215,13 @@ export default function RankingsPage() {
           getPlayerV90MatchFacts(),
         ]);
 
+        const ownMatchRatingsData = await getLatestOwnMatchRatings(
+          matchesData.map((match) => match.id)
+        ).catch((error) => {
+          console.error("Error cargando valoraciones propias:", error);
+          return [];
+        });
+
         if (!mounted) {
           return;
         }
@@ -239,6 +253,8 @@ export default function RankingsPage() {
         setV90Facts(
           v90FactsData
         );
+
+        setOwnMatchRatings(ownMatchRatingsData);
       } catch (error) {
         console.error(
           "Error cargando rankings:",
@@ -256,6 +272,7 @@ export default function RankingsPage() {
         setParticipations([]);
         setCompetitions([]);
         setV90Facts([]);
+        setOwnMatchRatings([]);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -314,6 +331,10 @@ export default function RankingsPage() {
         )
       );
     }, [participations]);
+
+  const ownRatingsByMatchPlayer = useMemo(() => new Map(
+    ownMatchRatings.map((rating) => [`${rating.matchId}:${rating.playerId}`, rating.ownRating])
+  ), [ownMatchRatings]);
 
   const v90FactsByParticipation =
     useMemo(() => {
@@ -582,8 +603,8 @@ export default function RankingsPage() {
           finalMatchRating:
             average(
               ratings.map(
-                (rating) =>
-                  rating.finalMatchRating
+                (rating) => ownRatingsByMatchPlayer.get(`${rating.matchId}:${rating.playerId}`)
+                  ?? rating.finalMatchRating
               )
             ),
 
@@ -598,6 +619,7 @@ export default function RankingsPage() {
     filteredMatchRatings,
     playersMap,
     v90FactsByParticipation,
+    ownRatingsByMatchPlayer,
   ]);
 
   /*
@@ -685,7 +707,8 @@ export default function RankingsPage() {
               )?.v90Match ?? null,
 
             finalMatchRating:
-              rating.finalMatchRating,
+              ownRatingsByMatchPlayer.get(`${rating.matchId}:${rating.playerId}`)
+                ?? rating.finalMatchRating,
           };
         }
       );
@@ -696,6 +719,7 @@ export default function RankingsPage() {
       teamsMap,
       participationsMap,
       v90FactsByParticipation,
+      ownRatingsByMatchPlayer,
     ]);
 
   /*
