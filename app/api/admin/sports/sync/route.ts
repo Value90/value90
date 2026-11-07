@@ -530,7 +530,7 @@ export async function GET() {
   try {
     const supabase = createAdminSupabaseClient();
     const { data: mappings, error } = await supabase.from("external_match_mappings")
-      .select("external_match_id,match_id,final_synced_at,last_sync_error,result_attempts,next_result_sync_at,match:matches!inner(id,date,status,home_score,away_score,stadium,home_team_id,away_team_id)")
+      .select("external_match_id,match_id,final_synced_at,last_sync_error,result_attempts,next_result_sync_at,match:matches!inner(id,date,status,home_score,away_score,stadium,home_team_id,away_team_id,competition_id,stage_id)")
       .eq("provider", "highlightly").limit(1000);
     if (error) throw error;
     const rows = (mappings ?? []).map((mapping) => ({
@@ -538,11 +538,18 @@ export async function GET() {
       match: Array.isArray(mapping.match) ? mapping.match[0] : mapping.match,
     })).filter((item) => item.match);
     const teamIds = [...new Set(rows.flatMap(({ match }) => [Number(match.home_team_id), Number(match.away_team_id)]))];
-    const { data: teams, error: teamsError } = teamIds.length
-      ? await supabase.from("teams").select("id,name").in("id", teamIds)
-      : { data: [], error: null };
-    if (teamsError) throw teamsError;
+    const competitionIds = [...new Set(rows.map(({ match }) => Number(match.competition_id)))];
+    const stageIds = [...new Set(rows.map(({ match }) => Number(match.stage_id)))];
+    const [teamsResult, competitionsResult, stagesResult] = await Promise.all([
+      teamIds.length ? supabase.from("teams").select("id,name").in("id", teamIds) : Promise.resolve({ data: [], error: null }),
+      competitionIds.length ? supabase.from("competitions").select("id,name").in("id", competitionIds) : Promise.resolve({ data: [], error: null }),
+      stageIds.length ? supabase.from("stages").select("id,name").in("id", stageIds) : Promise.resolve({ data: [], error: null }),
+    ]);
+    for (const result of [teamsResult, competitionsResult, stagesResult]) if (result.error) throw result.error;
+    const teams = teamsResult.data;
     const names = new Map((teams ?? []).map((team) => [Number(team.id), String(team.name)]));
+    const competitionNames = new Map((competitionsResult.data ?? []).map((item) => [Number(item.id), String(item.name)]));
+    const stageNames = new Map((stagesResult.data ?? []).map((item) => [Number(item.id), String(item.name)]));
     const matches = rows.map(({ mapping, match }) => ({
       matchId: Number(mapping.match_id),
       date: String(match.date),
@@ -551,6 +558,10 @@ export async function GET() {
       awayScore: match.away_score == null ? null : Number(match.away_score),
       home: names.get(Number(match.home_team_id)) ?? "Equipo local",
       away: names.get(Number(match.away_team_id)) ?? "Equipo visitante",
+      competitionId: Number(match.competition_id),
+      competition: competitionNames.get(Number(match.competition_id)) ?? "",
+      stageId: Number(match.stage_id),
+      stage: stageNames.get(Number(match.stage_id)) ?? "",
       finalSynced: Boolean(mapping.final_synced_at),
       syncError: mapping.last_sync_error == null ? null : String(mapping.last_sync_error),
       resultAttempts: Number(mapping.result_attempts ?? 0),

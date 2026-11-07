@@ -9,6 +9,7 @@ node_modules/
 .next-sync-verification/
 .next-final-check/
 .next-codex-check*/
+.next-codex-verify*/
 out/
 
 # Variables de entorno

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPlayers, type Player } from "@/services/player.service";
 import PlayerForm from "@/components/players/PlayerForm";
 import { getPositions, type Position } from "@/services/position.service";
@@ -15,7 +15,7 @@ type PendingPlayer = {
 type CompetitionKey = "laliga" | "champions";
 type ImportMode = "round" | "dates";
 type QuotaState = { remaining: number | null; limit: number | null; checkedAt: string };
-type ImportedMatch = { matchId: number; date: string; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; finalSynced: boolean; syncError: string | null; resultAttempts: number; nextAttemptAt: string | null };
+type ImportedMatch = { matchId: number; date: string; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; competitionId: number; competition: string; stageId: number; stage: string; finalSynced: boolean; syncError: string | null; resultAttempts: number; nextAttemptAt: string | null };
 
 const QUOTA_STORAGE_KEY = "value90-highlightly-quota";
 
@@ -23,6 +23,19 @@ function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
   const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function matchDateInMadrid(value: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value));
+  const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function competitionKey(value: string): CompetitionKey | null {
+  const normalized = normalize(value);
+  if (normalized.includes("champions")) return "champions";
+  if (normalized.includes("laliga") || normalized.includes("primeradivision")) return "laliga";
+  return null;
 }
 
 function incidentKey(item: PendingPlayer) { return `${item.provider}:${item.external_player_key}`; }
@@ -133,6 +146,17 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     ? (competition === "laliga" ? 4 : 2)
     : Math.max(0, Math.floor((new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86_400_000) + 1);
   const invalidDateRange = importMode === "dates" && (!startDate || !endDate || endDate < startDate || estimatedCalls > 31);
+  const filteredPastMatches = useMemo(() => pastMatches.filter((match) => {
+    if (competitionKey(match.competition) !== competition) return false;
+    if (importMode === "round") return Number(match.stage.match(/\d+/)?.[0]) === Number(round);
+    const matchDate = matchDateInMadrid(match.date);
+    return Boolean(startDate && endDate && matchDate >= startDate && matchDate <= endDate);
+  }), [pastMatches, competition, importMode, round, startDate, endDate]);
+
+  useEffect(() => {
+    if (filteredPastMatches.some((match) => String(match.matchId) === selectedPastMatch)) return;
+    setSelectedPastMatch(filteredPastMatches[0] ? String(filteredPastMatches[0].matchId) : "");
+  }, [filteredPastMatches, selectedPastMatch]);
 
   async function importFixtures() {
     setImporting(true);
@@ -248,7 +272,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     <div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2 sm:p-4">
       <label className="block min-w-0">
         <span className="mb-1 block text-sm font-medium text-slate-700">Competición</span>
-        <select value={competition} onChange={(event) => setCompetition(event.target.value as CompetitionKey)} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+        <select value={competition} onChange={(event) => { setCompetition(event.target.value as CompetitionKey); setRound("1"); }} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
           <option value="laliga">LaLiga</option>
           <option value="champions">Champions League</option>
         </select>
@@ -285,12 +309,12 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-4">
       <label className="block min-w-0">
         <span className="mb-1 block text-sm font-semibold text-amber-950">Sincronizar ahora un partido ya importado</span>
-        <select value={selectedPastMatch} onChange={(event) => setSelectedPastMatch(event.target.value)} disabled={!pastMatches.length || syncingPastMatch} className="min-h-11 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm">
-          {!pastMatches.length && <option value="">No hay partidos importados anteriores</option>}
-          {pastMatches.map((match) => <option key={match.matchId} value={match.matchId}>{new Date(match.date).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {match.home} {match.homeScore ?? 0}-{match.awayScore ?? 0} {match.away}{match.syncError ? " · requiere revisión" : match.finalSynced ? " · volver a consultar" : " · pendiente"}</option>)}
+        <select value={selectedPastMatch} onChange={(event) => setSelectedPastMatch(event.target.value)} disabled={!filteredPastMatches.length || syncingPastMatch} className="min-h-11 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm">
+          {!filteredPastMatches.length && <option value="">No hay partidos importados para los filtros seleccionados</option>}
+          {filteredPastMatches.map((match) => <option key={match.matchId} value={match.matchId}>{new Date(match.date).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {match.home} {match.homeScore ?? 0}-{match.awayScore ?? 0} {match.away}{match.syncError ? " · requiere revisión" : match.finalSynced ? " · volver a consultar" : " · pendiente"}</option>)}
         </select>
-        {pastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.syncError && <p role="status" className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-          La última sincronización automática de este partido tuvo un problema ({pastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.resultAttempts ?? 0} intentos). Puedes volver a solicitarla con el botón. Detalle: {pastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.syncError}
+        {filteredPastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.syncError && <p role="status" className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          La última sincronización automática de este partido tuvo un problema ({filteredPastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.resultAttempts ?? 0} intentos). Puedes volver a solicitarla con el botón. Detalle: {filteredPastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.syncError}
         </p>}
         <span className="mt-1 block text-xs text-amber-900">Consulta Highlightly ahora mismo y actualiza resultado, alineaciones y minutos. Cada llamada utilizada se descuenta del saldo diario.</span>
       </label>
