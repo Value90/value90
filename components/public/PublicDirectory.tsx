@@ -17,7 +17,7 @@ const pageInfo: Record<DirectoryKind, { title: string; description: string; plac
 };
 
 function Filter({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ id: number; name: string }> }) {
-  return <label className="min-w-0"><span className="mb-1.5 block text-xs font-bold text-slate-600">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"><option value="">Todas</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>;
+  return <label className="min-w-0"><span className="mb-1 block text-[11px] font-bold text-slate-600">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"><option value="">Todas</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>;
 }
 
 export default function PublicDirectory({ kind, initialFilters, initialResult }: { kind: DirectoryKind; initialFilters?: PublicFilters; initialResult?: PublicPageResult<DirectoryItem> }) {
@@ -81,19 +81,18 @@ export default function PublicDirectory({ kind, initialFilters, initialResult }:
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <PublicHeader />
       <main>
-        <PublicPageHeader eyebrow="Value90" title={info.title} description={info.description} />
-        <section className="mx-auto max-w-[1440px] px-4 py-7 sm:px-8 sm:py-10 lg:px-10">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-bold text-slate-600">Buscar</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={info.placeholder} className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" /></label>
+        <PublicPageHeader eyebrow="Value90" title={info.title} description={info.description}>
+          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+              <label className="col-span-2 min-w-0"><span className="mb-1 block text-[11px] font-bold text-slate-600">Buscar</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={info.placeholder} className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" /></label>
               {kind !== "competitions" && <Filter label="Competición" value={competitionId} onChange={(value) => changeFilter(setCompetitionId, value)} options={(filters?.competitions ?? []).filter((item) => item.active !== false)} />}
               {kind !== "competitions" && <Filter label="Temporada" value={seasonId} onChange={(value) => changeFilter(setSeasonId, value)} options={(filters?.seasons ?? []).map((season) => ({ id: season.id, name: season.name }))} />}
               {kind === "players" && <Filter label="Equipo" value={teamId} onChange={(value) => changeFilter(setTeamId, value)} options={(filters?.teams ?? []).filter((item) => item.active !== false)} />}
-              {kind === "teams" && <label className="min-w-0"><span className="mb-1.5 block text-xs font-bold text-slate-600">Tipo de equipo</span><select value={teamType} onChange={(event) => changeFilter(setTeamType, event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"><option value="Club">Clubes</option><option value="Selección">Selecciones nacionales</option></select></label>}
+              {kind === "teams" && <label className="min-w-0"><span className="mb-1 block text-[11px] font-bold text-slate-600">Tipo de equipo</span><select value={teamType} onChange={(event) => changeFilter(setTeamType, event.target.value)} className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"><option value="Club">Clubes</option><option value="Selección">Selecciones nacionales</option></select></label>}
               {kind === "competitions" && <Filter label="Temporada" value={seasonId} onChange={(value) => changeFilter(setSeasonId, value)} options={(filters?.seasons ?? []).map((season) => ({ id: season.id, name: season.name }))} />}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4 text-sm text-slate-500"><span>{loading ? "Buscando…" : `${(result?.total ?? 0).toLocaleString("es-ES")} resultados`}</span><span className="text-xs">Los datos se actualizan desde Value90.</span></div>
           </div>
+        </PublicPageHeader>
+        <section className="mx-auto max-w-[1440px] px-4 py-4 sm:px-8 sm:py-6 lg:px-10">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>{loading ? "Buscando…" : `${(result?.total ?? 0).toLocaleString("es-ES")} resultados`}</span><span>Datos actualizados desde Value90.</span></div>
 
           {error ? <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800" role="alert">{error}</div> : loading && !result ? <p className="py-16 text-center text-sm text-slate-500" role="status">Cargando {info.title.toLocaleLowerCase("es")}…</p> : !loading && (result?.items.length ?? 0) === 0 ? <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-14 text-center"><h2 className="font-bold">No hay resultados</h2><p className="mt-2 text-sm text-slate-500">Prueba con otro nombre o cambia los filtros.</p></div> : (
             <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

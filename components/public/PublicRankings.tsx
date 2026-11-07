@@ -11,7 +11,7 @@ interface RankedPlayer { playerId: number; playerName: string; teamName: string;
 const euro = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
 function SelectFilter({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ id: number; name: string }> }) {
-  return <label><span className="mb-1.5 block text-xs font-bold text-slate-600">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"><option value="">Todas</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>;
+  return <label className="min-w-0"><span className="mb-1 block text-[11px] font-bold text-slate-600">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"><option value="">Todas</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>;
 }
 
 export default function PublicRankings({ initialFilters, initialResult }: { initialFilters?: PublicFilters; initialResult?: PublicPageResult<RankedPlayer> }) {
@@ -76,20 +76,18 @@ export default function PublicRankings({ initialFilters, initialResult }: { init
   const sortArrow = (field: "score" | "marketValue") => sortBy === field ? (sortDirection === "desc" ? " ↓" : " ↑") : "";
 
   return <div className="min-h-screen bg-slate-50 text-slate-900"><PublicHeader /><main>
-    <PublicPageHeader eyebrow="Clasificación" title="Rankings V90" description="Consulta la temporada actual y filtra por competición, temporada, equipo, posición, nombre y partidos calculados." />
-    <section className="mx-auto max-w-[1440px] px-4 py-7 sm:px-8 sm:py-10 lg:px-10">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-bold text-slate-600">Buscar jugador</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nombre del jugador" className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" /></label>
+    <PublicPageHeader eyebrow="Clasificación" title="Rankings V90" description="Consulta el rendimiento y valor de mercado con filtros a tu medida.">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
+          <label className="col-span-2 min-w-0 lg:col-span-1"><span className="mb-1 block text-[11px] font-bold text-slate-600">Buscar jugador</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nombre del jugador" className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" /></label>
           <SelectFilter label="Competición" value={competitionId} onChange={(value) => setFilter(setCompetitionId, value)} options={filters?.competitions ?? []} />
           <SelectFilter label="Temporada" value={seasonId === "all" ? "" : seasonId} onChange={(value) => setFilter(setSeasonId, value || "all")} options={(filters?.seasons ?? []).map((season) => ({ id: season.id, name: season.name }))} />
           <SelectFilter label="Equipo" value={teamId} onChange={(value) => setFilter(setTeamId, value)} options={filters?.teams ?? []} />
           <SelectFilter label="Posición" value={positionId} onChange={(value) => setFilter(setPositionId, value)} options={(filters?.positions ?? []).map((position) => ({ id: position.id, name: position.name }))} />
-          <label><span className="mb-1.5 block text-xs font-bold text-slate-600">Mínimo de partidos</span><input type="number" inputMode="numeric" min="1" max="1000" value={minMatches} onChange={(event) => setFilter(setMinMatches, event.target.value || "1")} className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100" /></label>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-4 text-sm text-slate-500"><span>{loading ? "Actualizando clasificación…" : `${(result?.total ?? 0).toLocaleString("es-ES")} jugadores`}</span><span className="text-xs">Media ponderada de los hechos V90 activos calculados.</span></div>
+          <label className="min-w-0"><span className="mb-1 block text-[11px] font-bold text-slate-600">Mínimo de partidos</span><input type="number" inputMode="numeric" min="1" max="1000" value={minMatches} onChange={(event) => setFilter(setMinMatches, event.target.value || "1")} className="h-10 w-full rounded-lg border border-slate-200 px-2.5 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100" /></label>
       </div>
-
+    </PublicPageHeader>
+    <section className="mx-auto max-w-[1440px] px-4 py-4 sm:px-8 sm:py-6 lg:px-10">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>{loading ? "Actualizando clasificación…" : `${(result?.total ?? 0).toLocaleString("es-ES")} jugadores`}</span><span>Media ponderada de los hechos V90 activos calculados.</span></div>
       <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3 sm:hidden">
           <span className="mr-1 text-xs font-bold text-slate-500">Ordenar:</span>

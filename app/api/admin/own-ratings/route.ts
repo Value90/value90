@@ -178,9 +178,28 @@ export async function GET() {
     if (runError) throw new Error(runError.message);
     if (!run) return NextResponse.json({ run: null, items: [] });
 
+    const trainingRuns = await readAll((from, to) => supabase.from("own_rating_runs")
+      .select("id,season_id,competition_id,created_at")
+      .is("evaluation_source_run_id", null)
+      .order("created_at", { ascending: false })
+      .range(from, to));
+    const latestRunIdsByScope = new Map<string, string>();
+    for (const trainingRun of trainingRuns) {
+      const scope = `${trainingRun.season_id}:${trainingRun.competition_id}`;
+      if (!latestRunIdsByScope.has(scope)) latestRunIdsByScope.set(scope, String(trainingRun.id));
+    }
+
     const items = await readAll((from, to) => supabase.from("own_match_ratings")
       .select("own_rating,external_average,absolute_error,calculation_version,player:players!inner(name,short_name),match:matches!inner(date,stage_id),position:positions!inner(name),participation:participations!inner(minutes_played)")
       .eq("run_id", run.id).order("id", { ascending: true }).range(from, to));
+    const latestTrainingRunIds = [...latestRunIdsByScope.values()];
+    const finalRatings = latestTrainingRunIds.length
+      ? await readAll((from, to) => supabase.from("own_match_ratings")
+          .select("match_id,player_id,own_rating")
+          .in("run_id", latestTrainingRunIds)
+          .order("id", { ascending: true })
+          .range(from, to))
+      : [];
     const stageIds = [...new Set(items.map((item) => Number((Array.isArray(item.match) ? item.match[0] : item.match)?.stage_id)).filter(Number.isFinite))];
     const { data: stages, error: stagesError } = stageIds.length
       ? await supabase.from("stages").select("id,name").in("id", stageIds)
@@ -189,6 +208,11 @@ export async function GET() {
     const stageNames = new Map((stages ?? []).map((stage) => [Number(stage.id), stage.name]));
     return NextResponse.json({
       run,
+      finalRatings: finalRatings.map((item) => ({
+        matchId: Number(item.match_id),
+        playerId: Number(item.player_id),
+        ownRating: Number(item.own_rating),
+      })),
       items: items.map((item) => {
         const player = Array.isArray(item.player) ? item.player[0] : item.player;
         const match = Array.isArray(item.match) ? item.match[0] : item.match;
