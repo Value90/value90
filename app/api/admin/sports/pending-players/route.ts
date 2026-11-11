@@ -15,6 +15,8 @@ function namesMatch(sourceName: string, playerName: string, shortName = "") {
     .replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
   const sourceParts = parts(sourceName);
   const playerParts = parts(playerName);
+  if (sourceParts.length === 1 && sourceParts[0].length >= 4
+    && playerParts.some((part) => part.startsWith(sourceParts[0]))) return true;
   if (sourceParts.length < 2 || playerParts.length < 2) return false;
   return sourceParts[0].length === 1 && playerParts[0].startsWith(sourceParts[0])
     && sourceParts[sourceParts.length - 1] === playerParts[playerParts.length - 1];

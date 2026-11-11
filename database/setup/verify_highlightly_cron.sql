@@ -2,7 +2,8 @@
 WITH cron_status AS (
   SELECT
     bool_or(active AND schedule = '* * * * *') AS active_on_expected_schedule,
-    max(schedule) AS schedule
+    max(schedule) AS schedule,
+    bool_or(active AND schedule = '* * * * *' AND position('timeout_milliseconds := 120000' in command) > 0) AS timeout_configured
   FROM cron.job
   WHERE jobname = 'value90-highlightly-match-sync'
 ), vault_status AS (
@@ -15,10 +16,12 @@ WITH cron_status AS (
 SELECT
   coalesce(cron_status.active_on_expected_schedule, false) AS cron_job_ready,
   cron_status.schedule,
+  coalesce(cron_status.timeout_configured, false) AS request_timeout_configured,
   vault_status.app_url_configured,
   vault_status.cron_secret_configured,
   CASE
     WHEN coalesce(cron_status.active_on_expected_schedule, false)
+      AND coalesce(cron_status.timeout_configured, false)
       AND vault_status.app_url_configured
       AND vault_status.cron_secret_configured
     THEN 'ready'

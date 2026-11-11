@@ -10,7 +10,9 @@ La configuración de producción se administra en Vercel > Project > Settings > 
 
 ## Sincronización programada
 
-En Supabase Vault deben existir `value90_app_url` (URL base de producción de Vercel) y `value90_sports_cron_secret` (el mismo valor privado de `CRON_SECRET` en Vercel). El trabajo se crea o actualiza ejecutando `database/setup/highlightly_cron.sql` en SQL Editor. Para comprobarlo sin mostrar secretos, ejecutar `database/setup/verify_highlightly_cron.sql`; debe devolver una fila con `status = ready`.
+En Supabase Vault deben existir `value90_app_url` (URL base de producción de Vercel) y `value90_sports_cron_secret` (el mismo valor privado de `CRON_SECRET` en Vercel). El trabajo se crea o actualiza ejecutando `database/setup/highlightly_cron.sql` en SQL Editor. El cron sondea cada minuto y el endpoint usa la hora `Europe/Madrid` para ejecutar sincronizaciones solo en las ventanas configuradas: LaLiga viernes y lunes 23:15, sábado y domingo 16:15, 18:30, 20:45 y 23:15; Champions martes y miércoles 21:00 y 23:15. Si no hay partidos importados pendientes de la competición, no llama a Highlightly. Cada ventana permanece abierta 15 minutos y procesa como máximo un partido por minuto.
+
+El cron da hasta 120 segundos a cada petición para permitir obtener marcador, alineaciones y box score sin cortar una sincronización que use varias llamadas. Para comprobar configuración y plazo sin mostrar secretos, ejecutar `database/setup/verify_highlightly_cron.sql`; debe devolver `status = ready` y `request_timeout_configured = true`.
 
 Si el resultado es `not_ready`, revisar que el trabajo `value90-highlightly-match-sync` esté activo y que ambas entradas de Vault tengan valores. La consulta de verificación informa el estado de cada secreto, pero nunca su contenido.
 

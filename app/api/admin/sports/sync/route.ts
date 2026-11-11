@@ -16,6 +16,7 @@ import { OWN_RATING_MODEL_VERSION, predictWithStoredModels, type OwnRatingSample
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 // Poll after the expected end, with bounded retries. A short time window made
 // a missed cron run permanently strand otherwise valid fixtures.
@@ -27,6 +28,41 @@ const MAX_RESULT_AUTO_AGE_MS = 7 * 24 * 60 * 60_000;
 
 type SyncMapping = { external_match_id: number | string; match_id: number | string; result_attempts?: number | null; lineup_synced_at?: string | null };
 type SyncMatch = { season_id: number | string; competition_id: number | string; home_team_id: number | string };
+
+const MADRID_TIME_ZONE = "Europe/Madrid";
+const AUTO_SYNC_WINDOW_MINUTES = 15;
+
+function madridClockParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: MADRID_TIME_ZONE,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+}
+
+function scheduledCompetitionForNow(date: Date): "laliga" | "champions" | null {
+  const parts = madridClockParts(date);
+  const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
+  const weekday = parts.weekday;
+  const slots = weekday === "Fri" ? [23 * 60 + 15]
+    : weekday === "Sat" || weekday === "Sun" ? [16 * 60 + 15, 18 * 60 + 30, 20 * 60 + 45, 23 * 60 + 15]
+      : weekday === "Mon" ? [23 * 60 + 15]
+        : weekday === "Tue" || weekday === "Wed" ? [21 * 60, 23 * 60 + 15]
+          : [];
+  if (!slots.some((slot) => minuteOfDay >= slot && minuteOfDay < slot + AUTO_SYNC_WINDOW_MINUTES)) return null;
+  return ["Fri", "Sat", "Sun", "Mon"].includes(weekday) ? "laliga"
+    : ["Tue", "Wed"].includes(weekday) ? "champions" : null;
+}
+
+function competitionMatchesSchedule(name: string, schedule: "laliga" | "champions") {
+  const normalized = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return schedule === "laliga"
+    ? normalized.includes("laliga") || normalized.includes("ligaprofesional")
+    : normalized.includes("championsleague") || normalized.includes("uefachampions");
+}
 
 async function calculateOwnRatingForMatch(supabase: ReturnType<typeof createAdminSupabaseClient>, matchId: number, match: SyncMatch) {
   const { data: run, error: runError } = await supabase.from("own_rating_runs")
@@ -95,6 +131,8 @@ function nameMatchesAbbreviation(sourceName: string, playerName: string, shortNa
     .replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
   const sourceParts = parts(sourceName);
   const playerParts = parts(playerName);
+  if (sourceParts.length === 1 && sourceParts[0].length >= 4
+    && playerParts.some((part) => part.startsWith(sourceParts[0]))) return true;
   if (sourceParts.length < 2 || playerParts.length < 2) return false;
   const sourceFirst = sourceParts[0];
   const playerFirst = playerParts[0];
@@ -145,12 +183,18 @@ function lineupPlayers(team: HighlightlyLineupTeam) {
 async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>, mapping: SyncMapping, match: SyncMatch, lineups: HighlightlyLineups) {
   if (!lineups?.homeTeam || !lineups?.awayTeam) throw new Error("Highlightly todavía no ofrece las alineaciones.");
 
+  const sourceEntries = [lineups.homeTeam, lineups.awayTeam].flatMap((team) =>
+    lineupPlayers(team).map(({ player }) => ({ team, player, externalKey: player.id ? String(player.id) : `${team.id}:${normalize(player.name)}` })));
+  const externalKeys = [...new Set(sourceEntries.map((entry) => entry.externalKey))];
+  const externalPlayerIds = [...new Set(sourceEntries.map(({ player }) => Number(player.id)).filter((id) => Number.isSafeInteger(id) && id > 0))];
   const [teamMapResult, playersResult, positionsResult, linkedPlayersResult] = await Promise.all([
     supabase.from("external_team_mappings").select("external_team_id,team_id").eq("provider", "highlightly")
       .in("external_team_id", [lineups.homeTeam.id, lineups.awayTeam.id]),
     supabase.from("players").select("id,name,short_name,country_id,active"),
     supabase.from("positions").select("id,name,short_name").eq("active", true),
-    supabase.from("external_player_mappings").select("external_player_key,player_id,position_id").eq("provider", "highlightly").eq("status", "linked"),
+    externalKeys.length
+      ? supabase.from("external_player_mappings").select("external_player_key,external_player_id,player_id,position_id,team_id,season_id,shirt_number,source_name").eq("provider", "highlightly").eq("status", "linked").in("external_player_key", externalKeys)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   for (const result of [teamMapResult, playersResult, positionsResult, linkedPlayersResult]) if (result.error) throw new Error(result.error.message);
   const teamMap = new Map((teamMapResult.data ?? []).map((row) => [Number(row.external_team_id), Number(row.team_id)]));
@@ -164,6 +208,19 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
     : { data: [], error: null };
   if (rosterResult.error) throw new Error(rosterResult.error.message);
   const rosterRows = rosterResult.data ?? [];
+  const [linkedByIdResult, linkedRosterResult] = await Promise.all([
+    externalPlayerIds.length
+      ? supabase.from("external_player_mappings").select("external_player_key,external_player_id,player_id,position_id,team_id,season_id,shirt_number,source_name").eq("provider", "highlightly").eq("status", "linked").in("external_player_id", externalPlayerIds).limit(5000)
+      : Promise.resolve({ data: [], error: null }),
+    localTeamIds.length && rosterRows.length
+      ? supabase.from("external_player_mappings").select("external_player_key,external_player_id,player_id,position_id,team_id,season_id,shirt_number,source_name").eq("provider", "highlightly").eq("status", "linked").eq("season_id", seasonId).in("team_id", localTeamIds).in("shirt_number", [...new Set(rosterRows.map((row) => Number(row.shirt_number)).filter(Number.isFinite))]).limit(5000)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (linkedByIdResult.error || linkedRosterResult.error) throw new Error(linkedByIdResult.error?.message ?? linkedRosterResult.error?.message);
+  const playersById = new Map((playersResult.data ?? []).map((player) => [Number(player.id), player]));
+  const linkedByExternalId = new Map((linkedByIdResult.data ?? []).filter((row) => row.external_player_id != null)
+    .map((row) => [Number(row.external_player_id), row]));
+  const linkedHistory = [...(linkedRosterResult.data ?? [])];
   const participants: Array<Record<string, unknown>> = [];
   let pending = 0;
 
@@ -173,8 +230,14 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
     for (const entry of lineupPlayers(sourceTeam)) {
       const player = entry.player;
       const externalKey = player.id ? String(player.id) : `${sourceTeam.id}:${normalize(player.name)}`;
-      const linkedPlayer = linkedPlayers.get(externalKey)?.player_id
-        ? (playersResult.data ?? []).find((item) => Number(item.id) === Number(linkedPlayers.get(externalKey)?.player_id)) ?? null
+      const knownMapping = linkedPlayers.get(externalKey)
+        ?? (player.id ? linkedByExternalId.get(Number(player.id)) : undefined)
+        ?? linkedHistory.find((row) => Number(row.team_id) === teamId && Number(row.season_id) === seasonId
+          && Number(row.shirt_number) === Number(player.number)
+          && row.player_id != null
+          && nameMatchesAbbreviation(player.name, String(playersById.get(Number(row.player_id))?.name ?? row.source_name), String(playersById.get(Number(row.player_id))?.short_name ?? "")));
+      const linkedPlayer = knownMapping?.player_id
+        ? playersById.get(Number(knownMapping.player_id)) ?? null
         : null;
       const rosterCandidates = rosterRows.filter((row) => Number(row.team_id) === teamId
         && Number(row.season_id) === seasonId && Number(row.shirt_number) === Number(player.number)
@@ -186,7 +249,7 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
         : null;
       const localPlayer = linkedPlayer ?? strictPlayer;
       const rosterPositionId = rosterCandidates.find((row) => Number(row.player_id) === Number(localPlayer?.id))?.position_id
-        ?? linkedPlayers.get(externalKey)?.position_id;
+        ?? knownMapping?.position_id;
       const position = positions.find((item) => positionMatches(player.position, item.name, item.short_name ?? ""))
         ?? positions.find((item) => Number(item.id) === Number(rosterPositionId))
         ?? null;
@@ -474,11 +537,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "El partido seleccionado no es válido." }, { status: 400 });
     }
     const supabase = createAdminSupabaseClient();
+    const cronCompetition = validCron ? scheduledCompetitionForNow(new Date()) : null;
+    if (validCron && !cronCompetition) {
+      return NextResponse.json({ ok: true, scheduled: true, skipped: "Fuera del horario automático configurado para Europe/Madrid." });
+    }
     const { data: mappings, error } = await supabase.from("external_match_mappings")
       .select("provider,external_match_id,match_id,lineup_synced_at,final_synced_at,next_result_sync_at,result_attempts,last_sync_error,match:matches!inner(id,date,status,season_id,competition_id,home_team_id,away_team_id)")
       .eq("provider", "highlightly").order("external_match_id", { ascending: true }).limit(1000);
     if (error) throw error;
-    const candidates = manualMatchId == null ? mappings ?? [] : (mappings ?? []).filter((item) => Number(item.match_id) === manualMatchId);
+    let candidates = manualMatchId == null ? mappings ?? [] : (mappings ?? []).filter((item) => Number(item.match_id) === manualMatchId);
+    if (validCron && cronCompetition && candidates.length) {
+      const competitionIds = [...new Set(candidates.map((item) => {
+        const match = Array.isArray(item.match) ? item.match[0] : item.match;
+        return Number(match?.competition_id);
+      }).filter(Number.isFinite))];
+      const competitions = competitionIds.length
+        ? await supabase.from("competitions").select("id,name").in("id", competitionIds)
+        : { data: [], error: null };
+      if (competitions.error) throw competitions.error;
+      const scheduledIds = new Set((competitions.data ?? [])
+        .filter((competition) => competitionMatchesSchedule(String(competition.name ?? ""), cronCompetition))
+        .map((competition) => Number(competition.id)));
+      candidates = candidates.filter((item) => {
+        const match = Array.isArray(item.match) ? item.match[0] : item.match;
+        return scheduledIds.has(Number(match?.competition_id));
+      });
+      if (!candidates.length) {
+        return NextResponse.json({ ok: true, scheduled: true, competition: cronCompetition, processed: 0, message: "No hay partidos importados de esta competición para sincronizar." });
+      }
+    }
     if (manualMatchId != null && !candidates.length) {
       return NextResponse.json({ error: "Este partido no está asociado a Highlightly. Impórtalo primero desde su fecha." }, { status: 404 });
     }
