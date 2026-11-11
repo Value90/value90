@@ -22,9 +22,11 @@ export async function GET(request: NextRequest) {
 
   const competition = request.nextUrl.searchParams.get("competition") ?? "laliga";
   if (!Object.prototype.hasOwnProperty.call(LEAGUES, competition)) return NextResponse.json({ error: "Selecciona una competición válida." }, { status: 400 });
+  const seasonYear = Number(request.nextUrl.searchParams.get("seasonYear") ?? 2026);
+  if (!Number.isInteger(seasonYear) || seasonYear < 1990 || seasonYear > 2100) return NextResponse.json({ error: "Selecciona una temporada válida." }, { status: 400 });
 
   try {
-    const response = await getHighlightlyMatches(LEAGUES[competition as keyof typeof LEAGUES], 2026, 0, madridToday(), 1);
+    const response = await getHighlightlyMatches(LEAGUES[competition as keyof typeof LEAGUES], seasonYear, 0, madridToday(), 1);
     const limitHeader = response.limit;
     const remaining = response.remaining;
     return NextResponse.json({

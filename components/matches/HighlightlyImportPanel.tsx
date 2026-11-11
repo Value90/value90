@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPlayers, type Player } from "@/services/player.service";
 import PlayerForm from "@/components/players/PlayerForm";
 import { getPositions, type Position } from "@/services/position.service";
+import { getSeasons, type Season } from "@/services/season.service";
 
 type PendingOccurrence = { match_id: number; date: string | null; fixture: string; status: string | null; is_starting_xi: boolean; minutes_played: number | null };
 type Candidate = { id: number; name: string; score: number; countryId: number | null; birthDate: string | null; teamName?: string | null; shirtNumber?: number | null };
@@ -23,6 +24,20 @@ function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
   const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function currentFootballSeasonYear() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit" }).formatToParts(new Date());
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  return month >= 7 ? year : year - 1;
+}
+
+function footballSeasonYear(value: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit" }).formatToParts(new Date(value));
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  return month >= 7 ? year : year - 1;
 }
 
 function matchDateInMadrid(value: string) {
@@ -58,6 +73,8 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   const [savingKey, setSavingKey] = useState("");
   const [creatingFor, setCreatingFor] = useState<PendingPlayer | null>(null);
   const [competition, setCompetition] = useState<CompetitionKey>("laliga");
+  const [seasonYear, setSeasonYear] = useState(currentFootballSeasonYear);
+  const [seasonOptions, setSeasonOptions] = useState<Array<{ year: number; name: string }>>([]);
   const [importMode, setImportMode] = useState<ImportMode>("round");
   const [round, setRound] = useState("1");
   const [startDate, setStartDate] = useState(madridToday);
@@ -123,12 +140,24 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     loadPlayers().catch(() => undefined);
     loadPastMatches().catch(() => undefined);
     getPositions().then(setPositions).catch(() => undefined);
+    getSeasons().then((seasons: Season[]) => {
+      const years = new Map<number, string>();
+      for (const season of seasons) {
+        const year = Number(season.startDate?.slice(0, 4)) || Number(season.name.match(/20\d{2}/)?.[0]);
+        if (year) years.set(year, season.name);
+      }
+      const currentYear = currentFootballSeasonYear();
+      for (const year of [currentYear, currentYear - 1]) {
+        if (!years.has(year)) years.set(year, `Temporada ${year}/${String(year + 1).slice(-2)}`);
+      }
+      setSeasonOptions([...years.entries()].map(([year, name]) => ({ year, name })).sort((a, b) => b.year - a.year));
+    }).catch((error) => console.error("No se pudieron cargar las temporadas para importar:", error));
   }, [loadPending, loadPlayers, loadPastMatches]);
 
   async function refreshQuota() {
     setCheckingQuota(true);
     try {
-      const response = await fetch(`/api/admin/sports/quota?competition=${competition}`, { cache: "no-store" });
+      const response = await fetch(`/api/admin/sports/quota?competition=${competition}&seasonYear=${seasonYear}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo consultar el saldo.");
       if (payload.remaining == null) throw new Error("Highlightly no informó el saldo en esta respuesta.");
@@ -143,15 +172,16 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   }
 
   const estimatedCalls = importMode === "round"
-    ? (competition === "laliga" ? 4 : 2)
+    ? 1 + (Math.floor(Math.max(0, (competition === "laliga" ? 380 : 144) - Number(round) * (competition === "laliga" ? 10 : 18)) / 100) > 0 ? 1 : 0)
     : Math.max(0, Math.floor((new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86_400_000) + 1);
   const invalidDateRange = importMode === "dates" && (!startDate || !endDate || endDate < startDate || estimatedCalls > 31);
   const filteredPastMatches = useMemo(() => pastMatches.filter((match) => {
     if (competitionKey(match.competition) !== competition) return false;
+    if (footballSeasonYear(match.date) !== seasonYear) return false;
     if (importMode === "round") return Number(match.stage.match(/\d+/)?.[0]) === Number(round);
     const matchDate = matchDateInMadrid(match.date);
     return Boolean(startDate && endDate && matchDate >= startDate && matchDate <= endDate);
-  }), [pastMatches, competition, importMode, round, startDate, endDate]);
+  }), [pastMatches, competition, seasonYear, importMode, round, startDate, endDate]);
 
   useEffect(() => {
     if (filteredPastMatches.some((match) => String(match.matchId) === selectedPastMatch)) return;
@@ -166,8 +196,8 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(importMode === "round"
-          ? { competition, mode: importMode, round: Number(round) }
-          : { competition, mode: importMode, startDate, endDate }),
+          ? { competition, mode: importMode, round: Number(round), seasonYear }
+          : { competition, mode: importMode, startDate, endDate, seasonYear }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo importar el calendario.");
@@ -271,6 +301,12 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
 
     <div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2 sm:p-4">
       <label className="block min-w-0">
+        <span className="mb-1 block text-sm font-medium text-slate-700">Temporada</span>
+        <select value={seasonYear} onChange={(event) => setSeasonYear(Number(event.target.value))} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+          {seasonOptions.map((season) => <option key={season.year} value={season.year}>{season.name}</option>)}
+        </select>
+      </label>
+      <label className="block min-w-0">
         <span className="mb-1 block text-sm font-medium text-slate-700">Competición</span>
         <select value={competition} onChange={(event) => { setCompetition(event.target.value as CompetitionKey); setRound("1"); }} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
           <option value="laliga">LaLiga</option>
@@ -304,7 +340,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         <p>{importMode === "round" ? "Estimación aproximada" : "Estimación"}: <strong className="text-slate-900">{estimatedCalls} llamada(s)</strong> a Highlightly para consultar estos partidos.</p>
         <p>Saldo de la cuenta: <strong className="text-slate-900">{quota?.remaining ?? "Sin consultar"}{quota?.limit != null ? ` / ${quota.limit}` : ""}</strong>{quota?.checkedAt ? ` · última lectura ${new Date(quota.checkedAt).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
       </div>
-      <p className="text-xs text-slate-500 sm:col-span-2">Por jornada, Highlightly no ofrece un filtro directo: se consulta el calendario de la competición y se extrae esa jornada (aprox. 4 llamadas para LaLiga y 2 para Champions). Por fechas, se realiza una llamada por día. Actualizar el saldo también consume 1 llamada; el contador muestra el saldo de la última respuesta de Highlightly.</p>
+      <p className="text-xs text-slate-500 sm:col-span-2">Por jornada, Highlightly no ofrece un filtro directo: se consulta una página de referencia y otra página cercana a la jornada elegida. La estimación puede subir si el calendario de esa temporada tiene una distribución distinta. Por fechas, se realiza una llamada por día. Actualizar el saldo también consume 1 llamada; el contador muestra el saldo de la última respuesta de Highlightly.</p>
     </div>
     <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-4">
       <label className="block min-w-0">

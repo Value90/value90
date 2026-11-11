@@ -187,39 +187,41 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
     lineupPlayers(team).map(({ player }) => ({ team, player, externalKey: player.id ? String(player.id) : `${team.id}:${normalize(player.name)}` })));
   const externalKeys = [...new Set(sourceEntries.map((entry) => entry.externalKey))];
   const externalPlayerIds = [...new Set(sourceEntries.map(({ player }) => Number(player.id)).filter((id) => Number.isSafeInteger(id) && id > 0))];
-  const [teamMapResult, playersResult, positionsResult, linkedPlayersResult] = await Promise.all([
+  const seasonId = Number(match.season_id);
+  const [teamMapResult, playersResult, positionsResult] = await Promise.all([
     supabase.from("external_team_mappings").select("external_team_id,team_id").eq("provider", "highlightly")
       .in("external_team_id", [lineups.homeTeam.id, lineups.awayTeam.id]),
     supabase.from("players").select("id,name,short_name,country_id,active"),
     supabase.from("positions").select("id,name,short_name").eq("active", true),
-    externalKeys.length
-      ? supabase.from("external_player_mappings").select("external_player_key,external_player_id,player_id,position_id,team_id,season_id,shirt_number,source_name").eq("provider", "highlightly").eq("status", "linked").in("external_player_key", externalKeys)
+  ]);
+  for (const result of [teamMapResult, playersResult, positionsResult]) if (result.error) throw new Error(result.error.message);
+  const teamMap = new Map((teamMapResult.data ?? []).map((row) => [Number(row.external_team_id), Number(row.team_id)]));
+  const positions = positionsResult.data ?? [];
+  const localTeamIds = [...teamMap.values()];
+  const [linkedPlayersResult, rosterResult] = await Promise.all([
+    externalKeys.length && localTeamIds.length
+      ? supabase.from("external_player_mappings").select("external_player_key,external_player_id,player_id,position_id,team_id,season_id,shirt_number,source_name").eq("provider", "highlightly").eq("season_id", seasonId).eq("status", "linked").in("team_id", localTeamIds).in("external_player_key", externalKeys)
+      : Promise.resolve({ data: [], error: null }),
+    localTeamIds.length
+      ? supabase.from("hist_player_teams").select("player_id,team_id,season_id,shirt_number,position_id")
+        .eq("season_id", seasonId).in("team_id", localTeamIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
-  for (const result of [teamMapResult, playersResult, positionsResult, linkedPlayersResult]) if (result.error) throw new Error(result.error.message);
-  const teamMap = new Map((teamMapResult.data ?? []).map((row) => [Number(row.external_team_id), Number(row.team_id)]));
-  const linkedPlayers = new Map((linkedPlayersResult.data ?? []).map((row) => [row.external_player_key, row]));
-  const positions = positionsResult.data ?? [];
-  const seasonId = Number(match.season_id);
-  const localTeamIds = [...teamMap.values()];
-  const rosterResult = localTeamIds.length
-    ? await supabase.from("hist_player_teams").select("player_id,team_id,season_id,shirt_number,position_id")
-      .eq("season_id", seasonId).in("team_id", localTeamIds)
-    : { data: [], error: null };
-  if (rosterResult.error) throw new Error(rosterResult.error.message);
+  if (linkedPlayersResult.error || rosterResult.error) throw new Error(linkedPlayersResult.error?.message ?? rosterResult.error?.message);
   const rosterRows = rosterResult.data ?? [];
   const [linkedByIdResult, linkedRosterResult] = await Promise.all([
-    externalPlayerIds.length
-      ? supabase.from("external_player_mappings").select("external_player_key,external_player_id,player_id,position_id,team_id,season_id,shirt_number,source_name").eq("provider", "highlightly").eq("status", "linked").in("external_player_id", externalPlayerIds).limit(5000)
+    externalPlayerIds.length && localTeamIds.length
+      ? supabase.from("external_player_mappings").select("external_player_key,external_player_id,player_id,position_id,team_id,season_id,shirt_number,source_name").eq("provider", "highlightly").eq("season_id", seasonId).eq("status", "linked").in("team_id", localTeamIds).in("external_player_id", externalPlayerIds).limit(5000)
       : Promise.resolve({ data: [], error: null }),
     localTeamIds.length && rosterRows.length
       ? supabase.from("external_player_mappings").select("external_player_key,external_player_id,player_id,position_id,team_id,season_id,shirt_number,source_name").eq("provider", "highlightly").eq("status", "linked").eq("season_id", seasonId).in("team_id", localTeamIds).in("shirt_number", [...new Set(rosterRows.map((row) => Number(row.shirt_number)).filter(Number.isFinite))]).limit(5000)
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (linkedByIdResult.error || linkedRosterResult.error) throw new Error(linkedByIdResult.error?.message ?? linkedRosterResult.error?.message);
+  const linkedPlayers = new Map((linkedPlayersResult.data ?? []).map((row) => [`${row.external_player_key}:${row.team_id}`, row]));
   const playersById = new Map((playersResult.data ?? []).map((player) => [Number(player.id), player]));
   const linkedByExternalId = new Map((linkedByIdResult.data ?? []).filter((row) => row.external_player_id != null)
-    .map((row) => [Number(row.external_player_id), row]));
+    .map((row) => [`${row.external_player_id}:${row.team_id}`, row]));
   const linkedHistory = [...(linkedRosterResult.data ?? [])];
   const participants: Array<Record<string, unknown>> = [];
   let pending = 0;
@@ -230,8 +232,8 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
     for (const entry of lineupPlayers(sourceTeam)) {
       const player = entry.player;
       const externalKey = player.id ? String(player.id) : `${sourceTeam.id}:${normalize(player.name)}`;
-      const knownMapping = linkedPlayers.get(externalKey)
-        ?? (player.id ? linkedByExternalId.get(Number(player.id)) : undefined)
+      const knownMapping = linkedPlayers.get(`${externalKey}:${teamId}`)
+        ?? (player.id ? linkedByExternalId.get(`${player.id}:${teamId}`) : undefined)
         ?? linkedHistory.find((row) => Number(row.team_id) === teamId && Number(row.season_id) === seasonId
           && Number(row.shirt_number) === Number(player.number)
           && row.player_id != null
@@ -405,6 +407,9 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
         captain: sourcePlayer.isCaptain === true,
         shirt_number: shirtNumber,
         minutes_played: minutesPlayed,
+        source_statistics: Array.isArray(sourcePlayer.statistics)
+          ? sourcePlayer.statistics[0] ?? null
+          : sourcePlayer.statistics ?? null,
         substitute_in_minute: substitutionMinutes?.incoming ?? playerMapping.substitute_in_minute,
         substitute_out_minute: substitutionMinutes?.outgoing ?? playerMapping.substitute_out_minute,
         updated_at: new Date().toISOString(),
@@ -537,8 +542,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "El partido seleccionado no es válido." }, { status: 400 });
     }
     const supabase = createAdminSupabaseClient();
-    const cronCompetition = validCron ? scheduledCompetitionForNow(new Date()) : null;
-    if (validCron && !cronCompetition) {
+    const cronCompetition = validCron && manualMatchId == null ? scheduledCompetitionForNow(new Date()) : null;
+    if (validCron && manualMatchId == null && !cronCompetition) {
       return NextResponse.json({ ok: true, scheduled: true, skipped: "Fuera del horario automático configurado para Europe/Madrid." });
     }
     const { data: mappings, error } = await supabase.from("external_match_mappings")
@@ -546,7 +551,7 @@ export async function POST(request: NextRequest) {
       .eq("provider", "highlightly").order("external_match_id", { ascending: true }).limit(1000);
     if (error) throw error;
     let candidates = manualMatchId == null ? mappings ?? [] : (mappings ?? []).filter((item) => Number(item.match_id) === manualMatchId);
-    if (validCron && cronCompetition && candidates.length) {
+    if (validCron && manualMatchId == null && cronCompetition && candidates.length) {
       const competitionIds = [...new Set(candidates.map((item) => {
         const match = Array.isArray(item.match) ? item.match[0] : item.match;
         return Number(match?.competition_id);

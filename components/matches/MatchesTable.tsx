@@ -25,6 +25,7 @@ import {
 } from "@/services/team.service";
 
 import { getStages, type Stage } from "@/services/stage.service";
+import { getSeasons, type Season } from "@/services/season.service";
 
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -95,6 +96,8 @@ export default function MatchesTable({
   const [stages, setStages] = useState<Stage[]>([]);
   const [stagesLoading, setStagesLoading] = useState(true);
   const [selectedStageId, setSelectedStageId] = useState(0);
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState(0);
 
   /*
    * ============================================================
@@ -181,6 +184,30 @@ export default function MatchesTable({
       setSyncingMatchId(null);
     }
   }
+
+  useEffect(() => {
+    let mounted = true;
+
+    getSeasons()
+      .then((data) => {
+        if (mounted) setSeasons(data);
+      })
+      .catch((error) => {
+        console.error("Error obteniendo temporadas:", error);
+        if (mounted) setSeasons([]);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSeasonId && seasons.length) {
+      const activeSeason = seasons.find((season) => season.active);
+      if (activeSeason) setSelectedSeasonId(activeSeason.id);
+    }
+  }, [seasons, selectedSeasonId]);
 
   useEffect(() => {
     let mounted = true;
@@ -304,23 +331,26 @@ export default function MatchesTable({
   const filteredMatches =
     useMemo(() => {
       return matches.filter(
-        (match) => (!selectedCompetitionId || match.competitionId === selectedCompetitionId)
+        (match) => (!selectedSeasonId || match.seasonId === selectedSeasonId)
+          && (!selectedCompetitionId || match.competitionId === selectedCompetitionId)
           && (!selectedStageId || match.stageId === selectedStageId)
       );
     }, [
       matches,
+      selectedSeasonId,
       selectedCompetitionId,
       selectedStageId,
     ]);
 
   const availableStages = useMemo(() => {
     const stageIds = new Set(matches
-      .filter((match) => !selectedCompetitionId || match.competitionId === selectedCompetitionId)
+      .filter((match) => (!selectedSeasonId || match.seasonId === selectedSeasonId)
+        && (!selectedCompetitionId || match.competitionId === selectedCompetitionId))
       .map((match) => match.stageId)
       .filter((stageId): stageId is number => stageId > 0));
 
     return sortStagesDescending(stages.filter((stage) => stageIds.has(stage.id)));
-  }, [matches, selectedCompetitionId, stages]);
+  }, [matches, selectedSeasonId, selectedCompetitionId, stages]);
 
   /*
    * ============================================================
@@ -716,7 +746,20 @@ export default function MatchesTable({
           FILTRO DE COMPETICIÓN
           ====================================================== */}
 
-      <div className="grid w-full gap-3 sm:grid-cols-2">
+      <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-3">
+
+        <select
+          value={selectedSeasonId}
+          onChange={(event) => {
+            setSelectedSeasonId(Number(event.target.value));
+            setSelectedStageId(0);
+          }}
+          aria-label="Filtrar por temporada"
+          className="w-full min-w-0 max-w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-500"
+        >
+          <option value={0}>Todas las temporadas</option>
+          {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}</option>)}
+        </select>
 
         <select
           value={

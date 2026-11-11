@@ -241,6 +241,42 @@ export async function POST(request: NextRequest) {
   if (participationRows.length) {
     const saved = await supabase.from("participations").upsert(participationRows, { onConflict: "match_id,player_id", defaultToNull: false });
     if (saved.error) return NextResponse.json({ error: saved.error.message }, { status: 500 });
+
+    // Box-score stats are staged on the pending mapping so they survive manual
+    // identity review. Apply them only after the player has been resolved.
+    const participationIds = await supabase.from("participations")
+      .select("id,match_id,player_id").in("match_id", [...new Set(participationRows.map((row) => row.match_id))])
+      .eq("player_id", player.id);
+    if (participationIds.error) return NextResponse.json({ error: participationIds.error.message }, { status: 500 });
+    const participationIdByMatch = new Map((participationIds.data ?? []).map((row) => [Number(row.match_id), Number(row.id)]));
+    const count = (value: unknown) => Number.isFinite(Number(value)) ? Math.max(0, Math.trunc(Number(value))) : 0;
+    const stagedStats = mappings.flatMap((mapping) => {
+      const participationId = participationIdByMatch.get(Number(mapping.match_id));
+      const stats = mapping.source_statistics as Record<string, unknown> | null | undefined;
+      if (!participationId || !stats) return [];
+      return [{
+        participation_id: participationId,
+        goals: count(stats.goalsScored),
+        shots: count(stats.shotsTotal),
+        shots_on_target: count(stats.shotsOnTarget),
+        dribbles: count(stats.dribblesTotal),
+        dribbles_completed: count(stats.dribblesSuccessful),
+        assists: count(stats.assists),
+        duels: count(stats.duelsTotal),
+        duels_won: count(stats.duelsWon),
+        recoveries: count(stats.interceptionsTotal),
+        saves: count(stats.goalsSaved),
+        tackles: count(stats.tacklesTotal),
+        passes: count(stats.passesTotal),
+        passes_completed: count(stats.passesSuccessful),
+        yellow_cards: count(stats.cardsYellow),
+        red_cards: count(stats.cardsRed),
+      }];
+    });
+    if (stagedStats.length) {
+      const savedStats = await supabase.from("player_match_stats").upsert(stagedStats, { onConflict: "participation_id" });
+      if (savedStats.error) return NextResponse.json({ error: savedStats.error.message }, { status: 500 });
+    }
   }
 
   const rosterKeys = new Set<string>();

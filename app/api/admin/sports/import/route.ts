@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getHighlightlyMatches, type HighlightlyMatch } from "@/lib/highlightly.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
-const SEASON_YEAR = 2026;
+const DEFAULT_SEASON_YEAR = 2026;
 const TARGETS = {
   laliga: { leagueId: 119924, competition: "laliga" as const, competitionName: "LaLiga" },
   champions: { leagueId: 2486, competition: "champions" as const, competitionName: "Champions League" },
@@ -22,6 +24,7 @@ const TEAM_ALIASES: Record<string, string[]> = {
   "slavia praha": ["SK Slavia Praga"], "sabah fa": ["Sabah FK"], viking: ["Viking FK"],
   feyenoord: ["Feyenoord Rotterdam"], "aek athens fc": ["AEK Athens"], "bodø/glimt": ["Bodo/Glimt"],
   "lask linz": ["Linzer Athletik-Sport-Klub"], osasuna: ["CA. Osasuna"], levante: ["Levante UD."],
+  mallorca: ["RCD Mallorca"], oviedo: ["Real Oviedo"],
 };
 
 function normalize(value: string) {
@@ -74,32 +77,54 @@ function dateRange(start: string, end: string) {
   return Array.from({ length: days }, (_, index) => new Date(startDate.getTime() + index * 86_400_000).toISOString().slice(0, 10));
 }
 
-async function fetchAllLeagueMatches(leagueId: number) {
-  const matches: HighlightlyMatch[] = [];
-  let total = Number.POSITIVE_INFINITY;
+async function fetchMatchesForRound(leagueId: number, seasonYear: number, round: number, matchesPerRound: number) {
+  const pages = new Map<number, HighlightlyMatch[]>();
+  let total = 0;
   let remaining: string | null = null;
   let limit: string | null = null;
   let requests = 0;
   let quotaExhausted = false;
-  for (let offset = 0; offset < total; offset += 100) {
-    const response = await getHighlightlyMatches(leagueId, SEASON_YEAR, offset);
+  const fetchPage = async (offset: number) => {
+    const response = await getHighlightlyMatches(leagueId, seasonYear, offset);
     requests += 1;
     remaining = response.remaining;
     limit = response.limit;
     const page = response.body;
     if (!page?.pagination || !Array.isArray(page.data)) throw new Error("Highlightly devolvió una respuesta de calendario no válida.");
-    matches.push(...page.data);
     total = page.pagination.totalCount;
-    if (!page.data.length) break;
-    if (remaining === "0" && offset + 100 < total) {
-      quotaExhausted = true;
-      break;
-    }
+    pages.set(offset, page.data);
+    return page.data;
+  };
+
+  await fetchPage(0);
+  const estimatedIndex = Math.max(0, total - round * matchesPerRound);
+  const targetOffset = Math.floor(estimatedIndex / 100) * 100;
+  if (!pages.has(targetOffset)) {
+    if (remaining !== "0") await fetchPage(targetOffset);
+    else quotaExhausted = true;
   }
-  return { matches, remaining, limit, requests, quotaExhausted };
+  const filterRound = (matches: HighlightlyMatch[]) => matches.filter((match) =>
+    Number(match.league?.season) === seasonYear && roundNumber(match.round) === round);
+  let targetMatches = [...new Map([...pages.values()].flat().map((match) => [Number(match.id), match])).values()]
+    .filter((match) => Number(match.league?.season) === seasonYear);
+  let matchingRound = filterRound(targetMatches);
+
+  // If the provider's ordering/count does not line up with the expected fixtures
+  // per round, scan pages not already fetched before reporting an empty round.
+  if (!matchingRound.length && !quotaExhausted) {
+    for (let offset = 0; offset < total; offset += 100) {
+      if (pages.has(offset)) continue;
+      if (remaining === "0") { quotaExhausted = true; break; }
+      await fetchPage(offset);
+    }
+    targetMatches = [...new Map([...pages.values()].flat().map((match) => [Number(match.id), match])).values()]
+      .filter((match) => Number(match.league?.season) === seasonYear);
+    matchingRound = filterRound(targetMatches);
+  }
+  return { matches: matchingRound, remaining, limit, requests, quotaExhausted };
 }
 
-async function fetchMatchesForDates(leagueId: number, dates: string[]) {
+async function fetchMatchesForDates(leagueId: number, seasonYear: number, dates: string[]) {
   const matches: HighlightlyMatch[] = [];
   let remaining: string | null = null;
   let limit: string | null = null;
@@ -108,7 +133,7 @@ async function fetchMatchesForDates(leagueId: number, dates: string[]) {
   dateLoop: for (const [dateIndex, date] of dates.entries()) {
     let total = Number.POSITIVE_INFINITY;
     for (let offset = 0; offset < total; offset += 100) {
-      const response = await getHighlightlyMatches(leagueId, SEASON_YEAR, offset, date);
+      const response = await getHighlightlyMatches(leagueId, seasonYear, offset, date);
       requests += 1;
       remaining = response.remaining;
       limit = response.limit;
@@ -128,15 +153,23 @@ async function fetchMatchesForDates(leagueId: number, dates: string[]) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Inicia sesión para importar partidos." }, { status: 401 });
+    const cronSecret = process.env.CRON_SECRET;
+    const validCron = Boolean(cronSecret && request.headers.get("authorization") === `Bearer ${cronSecret}`);
+    const supabase = validCron ? createAdminSupabaseClient() : await createClient();
+    if (!validCron) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return NextResponse.json({ error: "Inicia sesión para importar partidos." }, { status: 401 });
+    }
 
     const input = await request.json().catch(() => null) as {
-      competition?: string; mode?: string; round?: number; startDate?: string; endDate?: string;
+      competition?: string; mode?: string; round?: number; startDate?: string; endDate?: string; seasonYear?: number;
     } | null;
     if (!input || typeof input.competition !== "string" || !Object.prototype.hasOwnProperty.call(TARGETS, input.competition)) {
       return NextResponse.json({ error: "Selecciona LaLiga o Champions League." }, { status: 400 });
+    }
+    const seasonYear = Number(input.seasonYear ?? DEFAULT_SEASON_YEAR);
+    if (!Number.isInteger(seasonYear) || seasonYear < 1990 || seasonYear > 2100) {
+      return NextResponse.json({ error: "Selecciona una temporada válida." }, { status: 400 });
     }
     const target = TARGETS[input.competition as keyof typeof TARGETS];
     let fetched: { matches: HighlightlyMatch[]; remaining: string | null; limit: string | null; requests: number; quotaExhausted: boolean };
@@ -145,15 +178,14 @@ export async function POST(request: NextRequest) {
       if (!Number.isInteger(input.round) || Number(input.round) < 1 || Number(input.round) > maxRound) {
         return NextResponse.json({ error: `Selecciona una jornada entre 1 y ${maxRound}.` }, { status: 400 });
       }
-      fetched = await fetchAllLeagueMatches(target.leagueId);
-      fetched.matches = fetched.matches.filter((match) => Number(match.league?.season) === SEASON_YEAR && roundNumber(match.round) === Number(input.round));
+      fetched = await fetchMatchesForRound(target.leagueId, seasonYear, Number(input.round), target.competition === "laliga" ? 10 : 18);
     } else if (input.mode === "dates") {
       if (!isDate(input.startDate) || !isDate(input.endDate)) {
         return NextResponse.json({ error: "Indica una fecha inicial y final válidas." }, { status: 400 });
       }
       const dates = dateRange(input.startDate, input.endDate);
-      fetched = await fetchMatchesForDates(target.leagueId, dates);
-      fetched.matches = fetched.matches.filter((match) => Number(match.league?.season) === SEASON_YEAR);
+      fetched = await fetchMatchesForDates(target.leagueId, seasonYear, dates);
+      fetched.matches = fetched.matches.filter((match) => Number(match.league?.season) === seasonYear);
     } else {
       return NextResponse.json({ error: "Selecciona si quieres importar una jornada o un periodo." }, { status: 400 });
     }
@@ -172,11 +204,21 @@ export async function POST(request: NextRequest) {
     for (const result of [seasonsResult, competitionsResult, stagesResult, teamsResult]) {
       if (result.error) throw new Error(result.error.message);
     }
-    const season = (seasonsResult.data ?? []).find((item) => {
+    let season = (seasonsResult.data ?? []).find((item) => {
       const startYear = item.start_date ? Number(item.start_date.slice(0, 4)) : Number(normalize(item.name).match(/20\d{2}/)?.[0]);
-      return startYear === SEASON_YEAR;
+      return startYear === seasonYear;
     });
-    if (!season) throw new Error("No encuentro la temporada 2026/27 en la configuración. Créala antes de importar.");
+    if (!season) {
+      const seasonName = `Temporada ${seasonYear}/${String(seasonYear + 1).slice(-2)}`;
+      const created = await supabase.from("seasons").insert({
+        name: seasonName,
+        start_date: `${seasonYear}-07-01`,
+        end_date: `${seasonYear + 1}-06-30`,
+        active: false,
+      }).select("id,name,start_date,end_date,active").single();
+      if (created.error) throw new Error(`No se pudo preparar la temporada histórica ${seasonName}: ${created.error.message}`);
+      season = created.data;
+    }
 
     const competition = (competitionsResult.data ?? []).find((item) => {
       const name = normalize(`${item.name} ${item.short_name ?? ""}`);

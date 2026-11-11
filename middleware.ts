@@ -7,9 +7,10 @@ export async function middleware(request: NextRequest) {
   const isPublicApiRoute = pathname === "/api/public" || pathname.startsWith("/api/public/");
   const isPublicCrawlerFile = pathname === "/ads.txt" || pathname === "/robots.txt" || pathname === "/sitemap.xml";
   const isSportsCron = pathname === "/api/admin/sports/sync" && request.method === "POST";
+  const isSportsImportCron = pathname === "/api/admin/sports/import" && request.method === "POST";
 
   // Public pages do not need a Supabase auth round trip on every navigation.
-  if (isPublicRoute || isPublicApiRoute || isPublicCrawlerFile || isSportsCron) {
+  if (isPublicRoute || isPublicApiRoute || isPublicCrawlerFile || isSportsCron || isSportsImportCron) {
     return NextResponse.next({ request });
   }
 
