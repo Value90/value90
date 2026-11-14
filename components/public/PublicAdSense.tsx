@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Script from "next/script";
 import { normalizeAdSensePublisherId } from "@/lib/adsense";
 
 declare global {
@@ -11,7 +12,7 @@ declare global {
 
 export default function PublicAdSense() {
   const publisherId = normalizeAdSensePublisherId(process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID ?? "pub-6147383489510665");
-  const slotId = process.env.NEXT_PUBLIC_ADSENSE_SLOT_ID;
+  const slotId = process.env.NEXT_PUBLIC_ADSENSE_SLOT_ID?.trim() || "4253906821";
   const adRef = useRef<HTMLModElement>(null);
   const slotConfigured = Boolean(slotId && /^\d+$/.test(slotId));
 
@@ -30,6 +31,13 @@ export default function PublicAdSense() {
 
   return (
     <>
+      <Script
+        id="google-adsense"
+        async
+        strategy="afterInteractive"
+        src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${publisherId}`}
+        crossOrigin="anonymous"
+      />
       {slotConfigured && slotId && (
         <aside className="border-b border-slate-200 bg-slate-50 px-3 py-2 sm:px-6" aria-label="Publicidad">
           <div className="mx-auto flex min-h-[58px] max-w-[1440px] flex-col items-center justify-center gap-1 sm:min-h-[100px]">
