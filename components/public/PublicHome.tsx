@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import PublicHeader from "@/components/public/PublicHeader";
+import PublicAdSense from "@/components/public/PublicAdSense";
 import PublicFooter from "@/components/public/PublicFooter";
 import { getPublicJson } from "@/components/public/public-api";
 
@@ -90,7 +91,11 @@ export default function PublicHome({ initialData }: { initialData?: Overview }) 
           </div>
         </section>
 
-        <section className="mx-auto grid max-w-[1440px] grid-cols-2 gap-3 px-4 py-8 sm:grid-cols-3 sm:gap-4 sm:px-8 lg:grid-cols-5 lg:px-10">
+        <div className="mx-auto max-w-[1440px] px-4 pt-3 sm:px-8 lg:px-10">
+          <PublicAdSense />
+        </div>
+
+        <section className="mx-auto grid max-w-[1440px] grid-cols-2 gap-3 px-4 py-5 sm:grid-cols-3 sm:gap-4 sm:px-8 sm:py-6 lg:grid-cols-5 lg:px-10">
           {[
             ["Jugadores", data?.statistics.players], ["Equipos", data?.statistics.teams],
             ["Partidos", data?.statistics.matches], ["Valoraciones V90", data?.statistics.calculatedRatings],

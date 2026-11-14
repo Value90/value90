@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Script from "next/script";
 import { normalizeAdSensePublisherId } from "@/lib/adsense";
 
 declare global {
@@ -29,31 +28,22 @@ export default function PublicAdSense() {
 
   if (!publisherId) return null;
 
+  if (!slotConfigured || !slotId) return null;
+
   return (
-    <>
-      <Script
-        id="google-adsense"
-        async
-        strategy="afterInteractive"
-        src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${publisherId}`}
-        crossOrigin="anonymous"
-      />
-      {slotConfigured && slotId && (
-        <aside className="border-b border-slate-200 bg-slate-50 px-3 py-2 sm:px-6" aria-label="Publicidad">
-          <div className="mx-auto flex min-h-[58px] max-w-[1440px] flex-col items-center justify-center gap-1 sm:min-h-[100px]">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Publicidad</span>
-            <ins
-              ref={adRef}
-              className="adsbygoogle block w-full"
-              style={{ display: "block", minHeight: "50px" }}
-              data-ad-client={publisherId}
-              data-ad-slot={slotId}
-              data-ad-format="auto"
-              data-full-width-responsive="true"
-            />
-          </div>
-        </aside>
-      )}
-    </>
+    <aside className="border-y border-slate-200 bg-slate-50 px-2 py-1" aria-label="Publicidad">
+      <div className="mx-auto flex min-h-[38px] max-w-[970px] items-center gap-2 sm:min-h-[48px]">
+        <span className="shrink-0 text-[9px] font-medium uppercase tracking-wider text-slate-400">Publicidad</span>
+        <ins
+          ref={adRef}
+          className="adsbygoogle block min-w-0 flex-1"
+          style={{ display: "block", minHeight: "36px" }}
+          data-ad-client={publisherId}
+          data-ad-slot={slotId}
+          data-ad-format="horizontal"
+          data-full-width-responsive="true"
+        />
+      </div>
+    </aside>
   );
 }

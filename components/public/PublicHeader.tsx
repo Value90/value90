@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import PublicAdSense from "@/components/public/PublicAdSense";
+import { normalizeAdSensePublisherId } from "@/lib/adsense";
 
 const navigation = [
   { label: "Inicio", href: "/public" },
@@ -14,12 +15,19 @@ const navigation = [
 ];
 
 export default function PublicHeader() {
+  const publisherId = normalizeAdSensePublisherId(process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID ?? "pub-6147383489510665");
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <>
-    <PublicAdSense />
+    {publisherId && <Script
+      id="google-adsense"
+      async
+      strategy="afterInteractive"
+      src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${publisherId}`}
+      crossOrigin="anonymous"
+    />}
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex min-h-[52px] max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-8 lg:px-10">
         <Link href="/public" className="flex shrink-0 items-center gap-2" aria-label="Value90, inicio">
