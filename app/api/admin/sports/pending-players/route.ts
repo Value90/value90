@@ -75,13 +75,21 @@ export async function GET() {
   const seasonIds = [...new Set(rows.map((row) => Number(row.season_id)))];
   const matchesResult = await supabase.from("matches").select("id,date,status,home_team_id,away_team_id").in("id", matchIds);
   if (matchesResult.error) return NextResponse.json({ error: matchesResult.error.message }, { status: 500 });
-  const rosterResult = await supabase.from("hist_player_teams").select("player_id,team_id,season_id,shirt_number,position_id,active")
-    .in("season_id", seasonIds);
-  if (rosterResult.error) return NextResponse.json({ error: rosterResult.error.message }, { status: 500 });
+  // PostgREST returns at most 1,000 rows by default. A single season can have
+  // more roster rows than that, which previously hid valid historical squads
+  // and shirt numbers from the incident resolver.
+  const rosterRows: Array<{ player_id: number; team_id: number; season_id: number; shirt_number: number | null; position_id: number | null; active: boolean }> = [];
+  for (let from = 0; ; from += 1000) {
+    const page = await supabase.from("hist_player_teams").select("player_id,team_id,season_id,shirt_number,position_id,active")
+      .in("season_id", seasonIds).order("id").range(from, from + 999);
+    if (page.error) return NextResponse.json({ error: page.error.message }, { status: 500 });
+    rosterRows.push(...(page.data ?? []));
+    if ((page.data ?? []).length < 1000) break;
+  }
   const allTeamIds = [...new Set([
     ...teamIds,
     ...(matchesResult.data ?? []).flatMap((match) => [Number(match.home_team_id), Number(match.away_team_id)]),
-    ...(rosterResult.data ?? []).map((row) => Number(row.team_id)),
+    ...rosterRows.map((row) => Number(row.team_id)),
   ])];
   const teamsResult = allTeamIds.length
     ? await supabase.from("teams").select("id,name").in("id", allTeamIds)
@@ -97,6 +105,17 @@ export async function GET() {
   const teams = new Map((teamsResult.data ?? []).map((team) => [Number(team.id), team]));
   const matches = new Map((matchesResult.data ?? []).map((match) => [Number(match.id), match]));
   const playerById = new Map(players.map((player) => [Number(player.id), player]));
+  const rostersByIdentity = new Map<string, typeof rosterRows>();
+  const rostersByPlayer = new Map<number, typeof rosterRows>();
+  for (const roster of rosterRows) {
+    const identityKey = `${roster.team_id}:${roster.season_id}:${roster.shirt_number}`;
+    const identityRows = rostersByIdentity.get(identityKey) ?? [];
+    identityRows.push(roster);
+    rostersByIdentity.set(identityKey, identityRows);
+    const playerRows = rostersByPlayer.get(Number(roster.player_id)) ?? [];
+    playerRows.push(roster);
+    rostersByPlayer.set(Number(roster.player_id), playerRows);
+  }
   const grouped = new Map<string, typeof rows>();
   for (const row of rows) {
     const key = `${row.provider}:${row.external_player_key}`;
@@ -115,13 +134,13 @@ export async function GET() {
     for (const occurrence of occurrences) {
       if (occurrence.shirt_number == null) { safePlayerIds = new Set<number>(); break; }
       const occurrenceIds = new Set<number>();
-      for (const roster of rosterResult.data ?? []) {
+      for (const roster of rostersByIdentity.get(`${occurrence.team_id}:${occurrence.season_id}:${occurrence.shirt_number}`) ?? []) {
         const localPlayerId = Number(roster.player_id);
         const localPlayer = playerById.get(localPlayerId);
         const isProvisional = provisionalIds.includes(localPlayerId);
-        const identityMatches = localPlayer && namesMatch(String(occurrence.source_name), String(localPlayer.name), String(localPlayer.short_name ?? ""));
-        if (!isProvisional && identityMatches && Number(roster.team_id) === Number(occurrence.team_id)
-          && Number(roster.season_id) === Number(occurrence.season_id) && Number(roster.shirt_number) === Number(occurrence.shirt_number)) {
+        const identityMatches = localPlayer && (namesMatch(String(occurrence.source_name), String(localPlayer.name), String(localPlayer.short_name ?? ""))
+          || Math.max(similarity(String(occurrence.source_name), String(localPlayer.name)), similarity(String(occurrence.source_name), String(localPlayer.short_name ?? ""))) >= 0.82);
+        if (!isProvisional && identityMatches) {
           occurrenceIds.add(localPlayerId);
         }
       }
@@ -134,10 +153,17 @@ export async function GET() {
       if (!safePlayerIds.size) break;
     }
     const safePlayerId = safePlayerIds?.size === 1 ? [...safePlayerIds][0] : null;
-    const safeRosterRow = safePlayerId == null ? null : (rosterResult.data ?? []).find((roster) => Number(roster.player_id) === safePlayerId
+    const safeRosterRow = safePlayerId == null ? null : (rostersByIdentity.get(`${first.team_id}:${first.season_id}:${first.shirt_number}`) ?? []).find((roster) => Number(roster.player_id) === safePlayerId
       && Number(roster.team_id) === Number(first.team_id) && Number(roster.season_id) === Number(first.season_id)
       && Number(roster.shirt_number) === Number(first.shirt_number));
     const safePlayer = safePlayerId == null ? null : playerById.get(safePlayerId) ?? null;
+    const relevantRosterFor = (playerId: number) => {
+      const rowsForPlayer = rostersByPlayer.get(playerId) ?? [];
+      const exactTeamAndSeason = rowsForPlayer.filter((roster) => Number(roster.team_id) === Number(first.team_id)
+        && Number(roster.season_id) === Number(first.season_id));
+      return [...(exactTeamAndSeason.length ? exactTeamAndSeason : rowsForPlayer)]
+        .sort((a, b) => Number(b.active) - Number(a.active) || Number(b.season_id) - Number(a.season_id))[0] ?? null;
+    };
     return {
       provider: first.provider,
       external_player_key: first.external_player_key,
@@ -150,15 +176,16 @@ export async function GET() {
       is_starting_xi: Boolean(first.is_starting_xi),
       provisional_player: provisional ? { id: Number(provisional.id), name: String(provisional.name), shortName: String(provisional.short_name ?? ""), countryId: provisional.country_id == null ? null : Number(provisional.country_id), birthDate: provisional.birth_date ?? null, active: Boolean(provisional.active) } : null,
       suggestions: playerSuggestions(String(first.source_name), players, provisionalId).map((candidate) => {
-        const roster = (rosterResult.data ?? []).filter((row) => Number(row.player_id) === candidate.id)
-          .sort((a, b) => Number(b.active) - Number(a.active) || Number(b.season_id) - Number(a.season_id))[0];
+        const roster = relevantRosterFor(candidate.id);
         return {
           ...candidate,
           teamName: roster ? teams.get(Number(roster.team_id))?.name ?? null : null,
           shirtNumber: roster?.shirt_number == null ? null : Number(roster.shirt_number),
         };
       }),
-      auto_match: safePlayer && safeRosterRow?.position_id != null ? { player_id: safePlayerId, player_name: String(safePlayer.name), position_id: Number(safeRosterRow.position_id) } : null,
+      auto_match: safePlayer && (positionId != null || safeRosterRow?.position_id != null)
+        ? { player_id: safePlayerId, player_name: String(safePlayer.name), position_id: Number(positionId ?? safeRosterRow?.position_id) }
+        : null,
       occurrences: occurrences.map((item) => {
         const match = matches.get(Number(item.match_id));
         return {

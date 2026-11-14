@@ -5,7 +5,7 @@ import { getHighlightlyMatches } from "@/lib/highlightly.server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const LEAGUES = { laliga: 119924, champions: 2486 } as const;
+const LEAGUES = { laliga: 119924, champions: 2486, worldcup: 1635 } as const;
 
 function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
   if (!Number.isInteger(seasonYear) || seasonYear < 1990 || seasonYear > 2100) return NextResponse.json({ error: "Selecciona una temporada válida." }, { status: 400 });
 
   try {
-    const response = await getHighlightlyMatches(LEAGUES[competition as keyof typeof LEAGUES], seasonYear, 0, madridToday(), 1);
+    const providerSeasonYear = competition === "worldcup" ? seasonYear + 1 : seasonYear;
+    const response = await getHighlightlyMatches(LEAGUES[competition as keyof typeof LEAGUES], providerSeasonYear, 0, madridToday(), 1);
     const limitHeader = response.limit;
     const remaining = response.remaining;
     return NextResponse.json({

@@ -11,6 +11,8 @@ node_modules/
 .next-codex-check*/
 .next-codex-build/
 .next-codex-verify*/
+.next-codex-worldcup/
+.next-dev-worldcup/
 out/
 
 # Variables de entorno

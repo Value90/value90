@@ -14,6 +14,7 @@ interface MarketValueRow {
   rating_career: number;
   career_matches: number;
   market_rating: number;
+  model_version: string;
   age_at_valuation: number | null;
   eligible_matches: number;
   period_start: string;
@@ -26,7 +27,10 @@ interface MarketRunResult {
   period_start?: string;
   season_id?: number;
   player_count?: number;
+  model_version?: string;
 }
+
+const CURRENT_MARKET_MODEL = "V90-MV-1.2";
 
 const euro = new Intl.NumberFormat("es-ES", {
   style: "currency",
@@ -60,7 +64,7 @@ export default function MarketPage() {
     try {
       const { data, error: marketError } = await supabase
         .from("player_market_values")
-        .select("player_id,team_id,current_value_eur,previous_value_eur,change_percent,rating_last_30_days,rating_current_season,rating_career,career_matches,market_rating,age_at_valuation,eligible_matches,period_start,updated_at")
+        .select("player_id,team_id,current_value_eur,previous_value_eur,change_percent,rating_last_30_days,rating_current_season,rating_career,career_matches,market_rating,age_at_valuation,eligible_matches,period_start,updated_at,model_version")
         .order("current_value_eur", { ascending: false })
         .range(0, 4999);
       if (marketError) throw marketError;
@@ -94,6 +98,11 @@ export default function MarketPage() {
     if (!query) return rows;
     return rows.filter((row) => `${playerNames.get(row.player_id) ?? ""} ${teamNames.get(Number(row.team_id)) ?? ""}`.toLocaleLowerCase("es").includes(query));
   }, [rows, playerNames, teamNames, search]);
+
+  const savedModelVersions = new Set(rows.map((row) => row.model_version));
+  const hasOutdatedMarketValues = savedModelVersions.size > 0
+    && (savedModelVersions.size !== 1 || !savedModelVersions.has(CURRENT_MARKET_MODEL));
+  const hasOutdatedMarketRun = Boolean(lastRun?.model_version && lastRun.model_version !== CURRENT_MARKET_MODEL);
 
   const handleUpdate = async () => {
     setUpdating(true);
@@ -133,6 +142,7 @@ export default function MarketPage() {
 
       {error && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
       {notice && <p className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">{notice}</p>}
+      {!loading && (hasOutdatedMarketValues || hasOutdatedMarketRun) && <p className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="status">Los importes guardados pertenecen al modelo {lastRun?.model_version ?? [...savedModelVersions].join(", ")}. La trayectoria puede estar vacía porque aún no se han recalculado con V90-MV-1.2. Pulsa <strong>Actualizar estimaciones</strong> para incorporar los V90 históricos, incluidos los del Mundial 25/26.</p>}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Resumen del mercado">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Jugadores estimados</p><p className="mt-2 text-2xl font-black text-slate-900">{loading ? "—" : rows.length.toLocaleString("es-ES")}</p></article>
@@ -147,11 +157,11 @@ export default function MarketPage() {
         </div>
         {loading ? <p className="p-8 text-center text-sm text-slate-500" role="status">Cargando estimaciones…</p> : visibleRows.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">{rows.length ? "No hay resultados para la búsqueda." : "Todavía no se han calculado valores. Ejecuta la migración y la primera estimación."}</p> : (
           <>
-          <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 lg:hidden">{visibleRows.map((row) => <article key={row.player_id} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold">{playerNames.get(row.player_id) ?? `Jugador ${row.player_id}`}</h3><p className="mt-1 truncate text-xs text-slate-500">{row.team_id == null ? "Sin equipo actual" : teamNames.get(row.team_id) ?? "Equipo"}{row.age_at_valuation == null ? "" : ` · ${row.age_at_valuation} años`}</p></div><p className="shrink-0 text-right font-black text-emerald-700">{euro.format(Number(row.current_value_eur))}</p></div><div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs"><p className="text-slate-500">Cambio <strong className={Number(row.change_percent ?? 0) >= 0 ? "text-emerald-700" : "text-red-600"}>{row.change_percent == null ? "—" : `${Number(row.change_percent) > 0 ? "+" : ""}${Number(row.change_percent).toLocaleString("es-ES", { maximumFractionDigits: 2 })}%`}</strong></p><p className="text-right text-slate-500">Partidos temporada <strong className="text-slate-700">{row.eligible_matches}</strong></p><p className="text-slate-500">V90 mes <strong className="text-slate-700">{row.rating_last_30_days == null ? "—" : rating.format(Number(row.rating_last_30_days))}</strong></p><p className="text-right text-slate-500">V90 temporada <strong className="text-slate-700">{rating.format(Number(row.rating_current_season))}</strong></p><p className="text-slate-500">V90 trayectoria <strong className="text-slate-700">{rating.format(Number(row.rating_career))} · {row.career_matches} partidos</strong></p></div></article>)}</div>
+          <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 lg:hidden">{visibleRows.map((row) => <article key={row.player_id} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold">{playerNames.get(row.player_id) ?? `Jugador ${row.player_id}`}</h3><p className="mt-1 truncate text-xs text-slate-500">{row.team_id == null ? "Sin equipo actual" : teamNames.get(row.team_id) ?? "Equipo"}{row.age_at_valuation == null ? "" : ` · ${row.age_at_valuation} años`}</p></div><p className="shrink-0 text-right font-black text-emerald-700">{euro.format(Number(row.current_value_eur))}</p></div><div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs"><p className="text-slate-500">Cambio <strong className={Number(row.change_percent ?? 0) >= 0 ? "text-emerald-700" : "text-red-600"}>{row.change_percent == null ? "—" : `${Number(row.change_percent) > 0 ? "+" : ""}${Number(row.change_percent).toLocaleString("es-ES", { maximumFractionDigits: 2 })}%`}</strong></p><p className="text-right text-slate-500">Partidos temporada <strong className="text-slate-700">{row.eligible_matches}</strong></p><p className="text-slate-500">V90 mes <strong className="text-slate-700">{row.rating_last_30_days == null ? "—" : rating.format(Number(row.rating_last_30_days))}</strong></p><p className="text-right text-slate-500">V90 temporada <strong className="text-slate-700">{rating.format(Number(row.rating_current_season))}</strong></p><p className="text-slate-500">V90 trayectoria <strong className="text-slate-700">{row.rating_career == null ? "—" : `${rating.format(Number(row.rating_career))} · ${row.career_matches} partidos`}</strong></p></div></article>)}</div>
           <div className="hidden overflow-x-auto lg:block">
             <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Jugador</th><th className="px-4 py-3">Equipo</th><th className="px-4 py-3 text-right">Valor estimado</th><th className="px-4 py-3 text-right">Variación</th><th className="px-4 py-3 text-right">V90 mes</th><th className="px-4 py-3 text-right">V90 temporada</th><th className="px-4 py-3 text-right">V90 trayectoria</th><th className="px-4 py-3 text-right">Partidos trayectoria</th><th className="px-4 py-3 text-right">Partidos temporada</th></tr></thead>
-              <tbody className="divide-y divide-slate-100">{visibleRows.map((row) => <tr key={row.player_id} className="hover:bg-slate-50"><td className="px-4 py-3 font-bold">{playerNames.get(row.player_id) ?? `Jugador ${row.player_id}`}<span className="ml-2 text-xs font-normal text-slate-400">{row.age_at_valuation == null ? "" : `${row.age_at_valuation} años`}</span></td><td className="px-4 py-3 text-slate-600">{row.team_id == null ? "Sin equipo actual" : teamNames.get(row.team_id) ?? "Equipo"}</td><td className="px-4 py-3 text-right font-black text-emerald-700">{euro.format(Number(row.current_value_eur))}</td><td className={`px-4 py-3 text-right font-bold ${Number(row.change_percent ?? 0) > 0 ? "text-emerald-700" : Number(row.change_percent ?? 0) < 0 ? "text-red-600" : "text-slate-500"}`}>{row.change_percent == null ? "—" : `${Number(row.change_percent) > 0 ? "+" : ""}${Number(row.change_percent).toLocaleString("es-ES", { maximumFractionDigits: 2 })}%`}</td><td className="px-4 py-3 text-right tabular-nums">{row.rating_last_30_days == null ? "—" : rating.format(Number(row.rating_last_30_days))}</td><td className="px-4 py-3 text-right tabular-nums">{rating.format(Number(row.rating_current_season))}</td><td className="px-4 py-3 text-right tabular-nums">{rating.format(Number(row.rating_career))}</td><td className="px-4 py-3 text-right">{row.career_matches}</td><td className="px-4 py-3 text-right">{row.eligible_matches}</td></tr>)}</tbody>
+              <tbody className="divide-y divide-slate-100">{visibleRows.map((row) => <tr key={row.player_id} className="hover:bg-slate-50"><td className="px-4 py-3 font-bold">{playerNames.get(row.player_id) ?? `Jugador ${row.player_id}`}<span className="ml-2 text-xs font-normal text-slate-400">{row.age_at_valuation == null ? "" : `${row.age_at_valuation} años`}</span></td><td className="px-4 py-3 text-slate-600">{row.team_id == null ? "Sin equipo actual" : teamNames.get(row.team_id) ?? "Equipo"}</td><td className="px-4 py-3 text-right font-black text-emerald-700">{euro.format(Number(row.current_value_eur))}</td><td className={`px-4 py-3 text-right font-bold ${Number(row.change_percent ?? 0) > 0 ? "text-emerald-700" : Number(row.change_percent ?? 0) < 0 ? "text-red-600" : "text-slate-500"}`}>{row.change_percent == null ? "—" : `${Number(row.change_percent) > 0 ? "+" : ""}${Number(row.change_percent).toLocaleString("es-ES", { maximumFractionDigits: 2 })}%`}</td><td className="px-4 py-3 text-right tabular-nums">{row.rating_last_30_days == null ? "—" : rating.format(Number(row.rating_last_30_days))}</td><td className="px-4 py-3 text-right tabular-nums">{rating.format(Number(row.rating_current_season))}</td><td className="px-4 py-3 text-right tabular-nums">{row.rating_career == null ? "—" : rating.format(Number(row.rating_career))}</td><td className="px-4 py-3 text-right">{row.career_matches > 0 ? row.career_matches : "—"}</td><td className="px-4 py-3 text-right">{row.eligible_matches}</td></tr>)}</tbody>
             </table>
           </div>
           </>

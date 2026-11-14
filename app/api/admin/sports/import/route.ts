@@ -9,8 +9,9 @@ export const maxDuration = 120;
 
 const DEFAULT_SEASON_YEAR = 2026;
 const TARGETS = {
-  laliga: { leagueId: 119924, competition: "laliga" as const, competitionName: "LaLiga" },
-  champions: { leagueId: 2486, competition: "champions" as const, competitionName: "Champions League" },
+  laliga: { leagueId: 119924, competition: "laliga" as const, competitionName: "LaLiga", matchesPerRound: 10, totalMatches: 380 },
+  champions: { leagueId: 2486, competition: "champions" as const, competitionName: "Champions League", matchesPerRound: 18, totalMatches: 144 },
+  worldcup: { leagueId: 1635, competition: "worldcup" as const, competitionName: "Copa Mundial FIFA", matchesPerRound: 16, totalMatches: 104 },
 } as const;
 const MAX_DATE_RANGE_DAYS = 31;
 
@@ -25,6 +26,18 @@ const TEAM_ALIASES: Record<string, string[]> = {
   feyenoord: ["Feyenoord Rotterdam"], "aek athens fc": ["AEK Athens"], "bodø/glimt": ["Bodo/Glimt"],
   "lask linz": ["Linzer Athletik-Sport-Klub"], osasuna: ["CA. Osasuna"], levante: ["Levante UD."],
   mallorca: ["RCD Mallorca"], oviedo: ["Real Oviedo"],
+  spain: ["España"], england: ["Inglaterra"], "cape verde": ["Cabo Verde"],
+  "bosnia & herzegovina": ["Bosnia y Herzegovina"], "bosnia and herzegovina": ["Bosnia y Herzegovina"],
+  "congo dr": ["RD. del Congo"], "dr congo": ["RD. del Congo"], "ivory coast": ["Costa de Marfil"],
+  "cote d'ivoire": ["Costa de Marfil"], netherlands: ["Países Bajos"], "south africa": ["Sudáfrica"],
+  "saudi arabia": ["Arabia Saudí"], turkey: ["TurquIa"], türkiye: ["TurquIa"], tunisia: ["Tunez"],
+  "south korea": ["Corea del Sur"], "korea republic": ["Corea del Sur"], "czech republic": ["República Checa"],
+  curacao: ["Curazao"], "united states": ["Estados Unidos"], usa: ["Estados Unidos"],
+  france: ["Francia"], switzerland: ["Suiza"], norway: ["Noruega"], belgium: ["Bélgica"],
+  morocco: ["Marruecos"], egypt: ["Egipto"], brazil: ["Brasil"], algeria: ["Argelia"],
+  croatia: ["Croacia"], sweden: ["Suecia"], germany: ["Alemania"], japan: ["Japón"],
+  jordan: ["Jordania"], "new zealand": ["Nueva Zelanda"], iraq: ["Irak"], scotland: ["Escocia"],
+  qatar: ["Catar"],
 };
 
 function normalize(value: string) {
@@ -37,10 +50,46 @@ function roundNumber(round: string) {
   return match ? Number(match[1]) : null;
 }
 
-function stageName(competition: "laliga" | "champions", round: string) {
+function stageName(competition: "laliga" | "champions" | "worldcup", round: string) {
   const number = roundNumber(round);
-  if (number != null && (competition === "laliga" || /league\s+stage/i.test(round))) return `Jornada ${number}`;
+  if (number != null && (competition === "laliga" || /league\s+stage|group\s+stage/i.test(round))) return `Jornada ${number}`;
+  if (competition === "worldcup") {
+    const normalized = normalize(round);
+    if (/roundof32|roundofthirtytwo|dieciseisavos/.test(normalized)) return "Dieciseisavos de final";
+    if (/roundof16|roundofsixteen|octavos/.test(normalized)) return "Octavos de final";
+    if (/quarterfinal/.test(normalized)) return "Cuartos de final";
+    if (/semifinal/.test(normalized)) return "Semifinal";
+    if (/thirdplace/.test(normalized)) return "Tercer puesto";
+    if (/final/.test(normalized)) return "Final";
+    return round;
+  }
   return `Champions League - ${round}`;
+}
+
+function providerSeasonYear(competition: keyof typeof TARGETS, seasonYear: number) {
+  return competition === "worldcup" ? seasonYear + 1 : seasonYear;
+}
+
+async function fetchMatchesForSeason(leagueId: number, seasonYear: number) {
+  const matches: HighlightlyMatch[] = [];
+  let remaining: string | null = null;
+  let limit: string | null = null;
+  let requests = 0;
+  let quotaExhausted = false;
+  let total = Number.POSITIVE_INFINITY;
+  for (let offset = 0; offset < total; offset += 100) {
+    if (remaining === "0") { quotaExhausted = true; break; }
+    const response = await getHighlightlyMatches(leagueId, seasonYear, offset);
+    requests += 1;
+    remaining = response.remaining;
+    limit = response.limit;
+    const page = response.body;
+    if (!page?.pagination || !Array.isArray(page.data)) throw new Error("Highlightly devolvió una respuesta de calendario no válida.");
+    matches.push(...page.data);
+    total = page.pagination.totalCount;
+    if (!page.data.length) break;
+  }
+  return { matches, remaining, limit, requests, quotaExhausted };
 }
 
 function findTeam(teams: Array<{ id: number; name: string; short_name: string | null; stadium: string | null }>, name: string) {
@@ -165,27 +214,31 @@ export async function POST(request: NextRequest) {
       competition?: string; mode?: string; round?: number; startDate?: string; endDate?: string; seasonYear?: number;
     } | null;
     if (!input || typeof input.competition !== "string" || !Object.prototype.hasOwnProperty.call(TARGETS, input.competition)) {
-      return NextResponse.json({ error: "Selecciona LaLiga o Champions League." }, { status: 400 });
+      return NextResponse.json({ error: "Selecciona una competición compatible con Highlightly." }, { status: 400 });
     }
     const seasonYear = Number(input.seasonYear ?? DEFAULT_SEASON_YEAR);
     if (!Number.isInteger(seasonYear) || seasonYear < 1990 || seasonYear > 2100) {
       return NextResponse.json({ error: "Selecciona una temporada válida." }, { status: 400 });
     }
     const target = TARGETS[input.competition as keyof typeof TARGETS];
+    const providerYear = providerSeasonYear(target.competition, seasonYear);
     let fetched: { matches: HighlightlyMatch[]; remaining: string | null; limit: string | null; requests: number; quotaExhausted: boolean };
     if (input.mode === "round") {
-      const maxRound = target.competition === "laliga" ? 38 : 8;
+      const maxRound = target.competition === "laliga" ? 38 : target.competition === "champions" ? 8 : 3;
       if (!Number.isInteger(input.round) || Number(input.round) < 1 || Number(input.round) > maxRound) {
         return NextResponse.json({ error: `Selecciona una jornada entre 1 y ${maxRound}.` }, { status: 400 });
       }
-      fetched = await fetchMatchesForRound(target.leagueId, seasonYear, Number(input.round), target.competition === "laliga" ? 10 : 18);
+      fetched = await fetchMatchesForRound(target.leagueId, providerYear, Number(input.round), target.matchesPerRound);
     } else if (input.mode === "dates") {
       if (!isDate(input.startDate) || !isDate(input.endDate)) {
         return NextResponse.json({ error: "Indica una fecha inicial y final válidas." }, { status: 400 });
       }
       const dates = dateRange(input.startDate, input.endDate);
-      fetched = await fetchMatchesForDates(target.leagueId, seasonYear, dates);
-      fetched.matches = fetched.matches.filter((match) => Number(match.league?.season) === seasonYear);
+      fetched = await fetchMatchesForDates(target.leagueId, providerYear, dates);
+      fetched.matches = fetched.matches.filter((match) => Number(match.league?.season) === providerYear);
+    } else if (input.mode === "season") {
+      fetched = await fetchMatchesForSeason(target.leagueId, providerYear);
+      fetched.matches = fetched.matches.filter((match) => Number(match.league?.season) === providerYear);
     } else {
       return NextResponse.json({ error: "Selecciona si quieres importar una jornada o un periodo." }, { status: 400 });
     }
@@ -222,11 +275,16 @@ export async function POST(request: NextRequest) {
 
     const competition = (competitionsResult.data ?? []).find((item) => {
       const name = normalize(`${item.name} ${item.short_name ?? ""}`);
-      return target.competition === "laliga"
-        ? name.includes("laliga") || name.includes("primeradivision")
-        : name.includes("championsleague");
+      if (target.competition === "laliga") return name.includes("laliga") || name.includes("primeradivision");
+      if (target.competition === "champions") return name.includes("championsleague");
+      return (name.includes("mundial") && name.includes("fifa")) || name.includes("worldcup");
     });
     if (!competition) throw new Error(`Crea o activa ${target.competitionName} en Value90 antes de importar.`);
+    const existingMatchesResult = await supabase.from("matches")
+      .select("id,home_team_id,away_team_id,date")
+      .eq("season_id", season.id).eq("competition_id", competition.id).order("id");
+    if (existingMatchesResult.error) throw new Error(`No se pudieron preparar las asociaciones existentes: ${existingMatchesResult.error.message}`);
+    const existingMatches = existingMatchesResult.data ?? [];
 
     const imported: Array<{ round: string; home: string; away: string; date: string }> = [];
     const skipped: Array<{ round: string; home: string; away: string; reason: string }> = [];
@@ -255,16 +313,17 @@ export async function POST(request: NextRequest) {
         .select("match_id").eq("provider", "highlightly").eq("external_match_id", match.id).maybeSingle();
       if (mappingError) throw new Error(`No se pudo consultar la asociación Highlightly: ${mappingError.message}`);
       let localMatchId = existingMapping?.match_id as number | undefined;
-      if (!localMatchId) {
-        const { data: possibleDuplicate, error: duplicateError } = await supabase.from("matches")
-          .select("id").eq("season_id", season.id).eq("competition_id", competition.id)
-          .eq("home_team_id", home.id).eq("away_team_id", away.id).eq("date", match.date).maybeSingle();
-        if (duplicateError) throw new Error(`No se pudo comprobar si el partido ya existía: ${duplicateError.message}`);
-        if (possibleDuplicate) {
-          localMatchId = Number(possibleDuplicate.id);
-          const savedMapping = await supabase.from("external_match_mappings").upsert({ provider: "highlightly", external_match_id: match.id, match_id: localMatchId });
-          if (savedMapping.error) throw new Error(`No se pudo asociar el partido existente: ${savedMapping.error.message}`);
-        }
+      const kickoff = new Date(match.date).getTime();
+      const possibleDuplicate = existingMatches.find((candidate) => Number(candidate.home_team_id) === home.id
+        && Number(candidate.away_team_id) === away.id
+        && Math.abs(new Date(String(candidate.date)).getTime() - kickoff) <= 36 * 60 * 60_000);
+      // Historical fixtures can have kickoff times corrected by the provider.
+      // Match the same teams within 36 hours, preferring the oldest local row,
+      // so repeating a calendar import updates the original instead of cloning it.
+      if (possibleDuplicate && (!localMatchId || Number(possibleDuplicate.id) < Number(localMatchId))) {
+        localMatchId = Number(possibleDuplicate.id);
+        const savedMapping = await supabase.from("external_match_mappings").upsert({ provider: "highlightly", external_match_id: match.id, match_id: localMatchId });
+        if (savedMapping.error) throw new Error(`No se pudo asociar el partido existente: ${savedMapping.error.message}`);
       }
 
       const score = parseScore(match.state?.score?.current);
@@ -288,6 +347,7 @@ export async function POST(request: NextRequest) {
         localMatchId = Number(localMatch.id);
         const savedMapping = await supabase.from("external_match_mappings").insert({ provider: "highlightly", external_match_id: match.id, match_id: localMatchId });
         if (savedMapping.error) throw new Error(`Partido creado, pero no se pudo guardar su referencia externa: ${savedMapping.error.message}`);
+        existingMatches.push({ id: localMatchId, home_team_id: home.id, away_team_id: away.id, date: match.date });
       }
 
       for (const team of [{ external: match.homeTeam.id, local: home.id }, { external: match.awayTeam.id, local: away.id }]) {

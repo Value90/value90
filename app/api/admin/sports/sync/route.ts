@@ -133,6 +133,21 @@ function nameMatchesAbbreviation(sourceName: string, playerName: string, shortNa
   const playerParts = parts(playerName);
   if (sourceParts.length === 1 && sourceParts[0].length >= 4
     && playerParts.some((part) => part.startsWith(sourceParts[0]))) return true;
+  const similarity = (left: string, right: string) => {
+    const a = normalize(left);
+    const b = normalize(right);
+    if (!a || !b || Math.abs(a.length - b.length) / Math.max(a.length, b.length) > 0.4) return 0;
+    let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+    for (let row = 1; row <= a.length; row += 1) {
+      const current = [row];
+      for (let column = 1; column <= b.length; column += 1) {
+        current[column] = Math.min(current[column - 1] + 1, previous[column] + 1, previous[column - 1] + (a[row - 1] === b[column - 1] ? 0 : 1));
+      }
+      previous = current;
+    }
+    return 1 - previous[b.length] / Math.max(a.length, b.length);
+  };
+  if (Math.max(similarity(sourceName, playerName), similarity(sourceName, shortName)) >= 0.82) return true;
   if (sourceParts.length < 2 || playerParts.length < 2) return false;
   const sourceFirst = sourceParts[0];
   const playerFirst = playerParts[0];
@@ -622,7 +637,7 @@ export async function GET() {
   try {
     const supabase = createAdminSupabaseClient();
     const { data: mappings, error } = await supabase.from("external_match_mappings")
-      .select("external_match_id,match_id,final_synced_at,last_sync_error,result_attempts,next_result_sync_at,match:matches!inner(id,date,status,home_score,away_score,stadium,home_team_id,away_team_id,competition_id,stage_id)")
+      .select("external_match_id,match_id,final_synced_at,last_sync_error,result_attempts,next_result_sync_at,match:matches!inner(id,date,status,home_score,away_score,stadium,home_team_id,away_team_id,competition_id,season_id,stage_id)")
       .eq("provider", "highlightly").limit(1000);
     if (error) throw error;
     const rows = (mappings ?? []).map((mapping) => ({
@@ -632,19 +647,23 @@ export async function GET() {
     const teamIds = [...new Set(rows.flatMap(({ match }) => [Number(match.home_team_id), Number(match.away_team_id)]))];
     const competitionIds = [...new Set(rows.map(({ match }) => Number(match.competition_id)))];
     const stageIds = [...new Set(rows.map(({ match }) => Number(match.stage_id)))];
-    const [teamsResult, competitionsResult, stagesResult] = await Promise.all([
+    const seasonIds = [...new Set(rows.map(({ match }) => Number(match.season_id)))];
+    const [teamsResult, competitionsResult, stagesResult, seasonsResult] = await Promise.all([
       teamIds.length ? supabase.from("teams").select("id,name").in("id", teamIds) : Promise.resolve({ data: [], error: null }),
       competitionIds.length ? supabase.from("competitions").select("id,name").in("id", competitionIds) : Promise.resolve({ data: [], error: null }),
       stageIds.length ? supabase.from("stages").select("id,name").in("id", stageIds) : Promise.resolve({ data: [], error: null }),
+      seasonIds.length ? supabase.from("seasons").select("id,name,start_date").in("id", seasonIds) : Promise.resolve({ data: [], error: null }),
     ]);
-    for (const result of [teamsResult, competitionsResult, stagesResult]) if (result.error) throw result.error;
+    for (const result of [teamsResult, competitionsResult, stagesResult, seasonsResult]) if (result.error) throw result.error;
     const teams = teamsResult.data;
     const names = new Map((teams ?? []).map((team) => [Number(team.id), String(team.name)]));
     const competitionNames = new Map((competitionsResult.data ?? []).map((item) => [Number(item.id), String(item.name)]));
     const stageNames = new Map((stagesResult.data ?? []).map((item) => [Number(item.id), String(item.name)]));
+    const seasonYears = new Map((seasonsResult.data ?? []).map((item) => [Number(item.id), Number(String(item.start_date ?? "").slice(0, 4)) || Number(String(item.name).match(/20\d{2}/)?.[0]) || null]));
     const matches = rows.map(({ mapping, match }) => ({
       matchId: Number(mapping.match_id),
       date: String(match.date),
+      seasonYear: seasonYears.get(Number(match.season_id)) ?? null,
       status: String(match.status ?? ""),
       homeScore: match.home_score == null ? null : Number(match.home_score),
       awayScore: match.away_score == null ? null : Number(match.away_score),

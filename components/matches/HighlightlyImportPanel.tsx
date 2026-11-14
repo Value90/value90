@@ -13,10 +13,10 @@ type PendingPlayer = {
   shirt_number: number | null; position_id: number | null; is_starting_xi: boolean; provisional_player: Player | null;
   suggestions: Candidate[]; occurrences: PendingOccurrence[]; auto_match: { player_id: number; player_name: string; position_id: number } | null;
 };
-type CompetitionKey = "laliga" | "champions";
-type ImportMode = "round" | "dates";
+type CompetitionKey = "laliga" | "champions" | "worldcup";
+type ImportMode = "round" | "dates" | "season";
 type QuotaState = { remaining: number | null; limit: number | null; checkedAt: string };
-type ImportedMatch = { matchId: number; date: string; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; competitionId: number; competition: string; stageId: number; stage: string; finalSynced: boolean; syncError: string | null; resultAttempts: number; nextAttemptAt: string | null };
+type ImportedMatch = { matchId: number; date: string; seasonYear?: number | null; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; competitionId: number; competition: string; stageId: number; stage: string; finalSynced: boolean; syncError: string | null; resultAttempts: number; nextAttemptAt: string | null };
 
 const QUOTA_STORAGE_KEY = "value90-highlightly-quota";
 
@@ -49,6 +49,7 @@ function matchDateInMadrid(value: string) {
 function competitionKey(value: string): CompetitionKey | null {
   const normalized = normalize(value);
   if (normalized.includes("champions")) return "champions";
+  if (normalized.includes("mundial") || normalized.includes("worldcup")) return "worldcup";
   if (normalized.includes("laliga") || normalized.includes("primeradivision")) return "laliga";
   return null;
 }
@@ -84,6 +85,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   const [pastMatches, setPastMatches] = useState<ImportedMatch[]>([]);
   const [selectedPastMatch, setSelectedPastMatch] = useState("");
   const [syncingPastMatch, setSyncingPastMatch] = useState(false);
+  const [syncingFilteredMatches, setSyncingFilteredMatches] = useState(false);
 
   useEffect(() => {
     try {
@@ -171,14 +173,19 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     }
   }
 
-  const estimatedCalls = importMode === "round"
-    ? 1 + (Math.floor(Math.max(0, (competition === "laliga" ? 380 : 144) - Number(round) * (competition === "laliga" ? 10 : 18)) / 100) > 0 ? 1 : 0)
-    : Math.max(0, Math.floor((new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86_400_000) + 1);
+  const totalMatches = competition === "laliga" ? 380 : competition === "champions" ? 144 : 104;
+  const matchesPerRound = competition === "laliga" ? 10 : competition === "champions" ? 18 : 16;
+  const estimatedCalls = importMode === "season"
+    ? Math.ceil(totalMatches / 100)
+    : importMode === "round"
+      ? 1 + (Math.floor(Math.max(0, totalMatches - Number(round) * matchesPerRound) / 100) > 0 ? 1 : 0)
+      : Math.max(0, Math.floor((new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86_400_000) + 1);
   const invalidDateRange = importMode === "dates" && (!startDate || !endDate || endDate < startDate || estimatedCalls > 31);
   const filteredPastMatches = useMemo(() => pastMatches.filter((match) => {
     if (competitionKey(match.competition) !== competition) return false;
-    if (footballSeasonYear(match.date) !== seasonYear) return false;
+    if ((match.seasonYear ?? footballSeasonYear(match.date)) !== seasonYear) return false;
     if (importMode === "round") return Number(match.stage.match(/\d+/)?.[0]) === Number(round);
+    if (importMode === "season") return true;
     const matchDate = matchDateInMadrid(match.date);
     return Boolean(startDate && endDate && matchDate >= startDate && matchDate <= endDate);
   }), [pastMatches, competition, seasonYear, importMode, round, startDate, endDate]);
@@ -197,7 +204,9 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(importMode === "round"
           ? { competition, mode: importMode, round: Number(round), seasonYear }
-          : { competition, mode: importMode, startDate, endDate, seasonYear }),
+          : importMode === "dates"
+            ? { competition, mode: importMode, startDate, endDate, seasonYear }
+            : { competition, mode: importMode, seasonYear }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo importar el calendario.");
@@ -246,6 +255,57 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       setMessage(error instanceof Error ? error.message : "No se pudo sincronizar el partido.");
     } finally {
       setSyncingPastMatch(false);
+    }
+  }
+
+  async function syncFilteredMatches() {
+    const candidates = filteredPastMatches.filter((match) => !match.finalSynced);
+    if (!candidates.length) {
+      setMessage("No hay partidos pendientes de sincronización con los filtros seleccionados.");
+      return;
+    }
+    setSyncingFilteredMatches(true);
+    setMessage("Consultando el saldo y preparando la sincronización por lotes…");
+    let remaining: number | null = null;
+    let processed = 0;
+    let errors = 0;
+    try {
+      const quotaResponse = await fetch(`/api/admin/sports/quota?competition=${competition}&seasonYear=${seasonYear}`, { cache: "no-store" });
+      const quotaPayload = await quotaResponse.json();
+      if (!quotaResponse.ok) throw new Error(quotaPayload.error ?? "No se pudo comprobar el saldo de Highlightly.");
+      remaining = quotaPayload.remaining == null ? null : Number(quotaPayload.remaining);
+      if (remaining == null) throw new Error("Highlightly no informó el saldo; por seguridad, no inicio el lote.");
+      setQuota({ remaining, limit: quotaPayload.limit == null ? null : Number(quotaPayload.limit), checkedAt: quotaPayload.checkedAt });
+      localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify({ remaining, limit: quotaPayload.limit == null ? null : Number(quotaPayload.limit), checkedAt: quotaPayload.checkedAt }));
+      for (const match of candidates) {
+        // A match sync uses at most four endpoints (match, lineups, box score, events).
+        // Keep that amount in reserve so the batch does not hit the provider's daily cap mid-match.
+        if (remaining < 4) break;
+        const response = await fetch("/api/admin/sports/sync", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ matchId: match.matchId }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? `No se pudo sincronizar ${match.home} - ${match.away}.`);
+        const result = payload.results?.[0];
+        if (result?.error) { errors += 1; break; }
+        if (!result || result.waiting) { errors += result?.waiting ? 0 : 1; break; }
+        processed += 1;
+        if (result.callsRemaining != null) {
+          remaining = Number(result.callsRemaining);
+          const next = { remaining, limit: result.callsLimit == null ? quotaPayload.limit ?? null : Number(result.callsLimit), checkedAt: new Date().toISOString() };
+          setQuota(next);
+          localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(next));
+        } else break;
+        setMessage(`Sincronizando partidos visibles: ${processed}/${candidates.length}. Saldo restante: ${remaining}.`);
+      }
+      await Promise.all([loadPastMatches(), loadPending()]);
+      onImported?.();
+      const left = Math.max(0, candidates.length - processed);
+      setMessage(`Lote terminado: ${processed} partido(s) sincronizado(s), ${errors} con incidencia y ${left} pendiente(s) dentro de estos filtros. Saldo estimado: ${remaining ?? "no informado"}.${left ? " Continúa cuando se restablezca o actualice la cuota." : ""}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo sincronizar el lote.");
+    } finally {
+      setSyncingFilteredMatches(false);
     }
   }
 
@@ -302,15 +362,16 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     <div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2 sm:p-4">
       <label className="block min-w-0">
         <span className="mb-1 block text-sm font-medium text-slate-700">Temporada</span>
-        <select value={seasonYear} onChange={(event) => setSeasonYear(Number(event.target.value))} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+        <select value={seasonYear} onChange={(event) => { const nextYear = Number(event.target.value); setSeasonYear(nextYear); if (nextYear !== 2025 && competition === "worldcup") { setCompetition("laliga"); setImportMode("round"); } }} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
           {seasonOptions.map((season) => <option key={season.year} value={season.year}>{season.name}</option>)}
         </select>
       </label>
       <label className="block min-w-0">
         <span className="mb-1 block text-sm font-medium text-slate-700">Competición</span>
-        <select value={competition} onChange={(event) => { setCompetition(event.target.value as CompetitionKey); setRound("1"); }} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+        <select value={competition} onChange={(event) => { setCompetition(event.target.value as CompetitionKey); setRound("1"); if (event.target.value === "worldcup") setImportMode("season"); }} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
           <option value="laliga">LaLiga</option>
           <option value="champions">Champions League</option>
+          {seasonYear === 2025 && <option value="worldcup">Copa Mundial FIFA</option>}
         </select>
       </label>
       <label className="block min-w-0">
@@ -318,14 +379,15 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         <select value={importMode} onChange={(event) => setImportMode(event.target.value as ImportMode)} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
           <option value="round">Una jornada / fase</option>
           <option value="dates">Periodo de fechas</option>
+          <option value="season">Temporada completa</option>
         </select>
       </label>
       {importMode === "round" ? <label className="block min-w-0 sm:col-span-2">
         <span className="mb-1 block text-sm font-medium text-slate-700">Jornada</span>
         <select value={round} onChange={(event) => setRound(event.target.value)} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm sm:max-w-sm">
-          {Array.from({ length: competition === "laliga" ? 38 : 8 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{competition === "champions" ? `League stage · Jornada ${value}` : `Jornada ${value}`}</option>)}
+          {Array.from({ length: competition === "laliga" ? 38 : competition === "champions" ? 8 : 3 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{competition === "champions" ? `League stage · Jornada ${value}` : `Jornada ${value}`}</option>)}
         </select>
-      </label> : <>
+      </label> : importMode === "dates" ? <>
         <label className="block min-w-0">
           <span className="mb-1 block text-sm font-medium text-slate-700">Desde</span>
           <input type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm" />
@@ -335,17 +397,17 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
           <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm" />
         </label>
         {invalidDateRange && <p className="text-sm text-red-700 sm:col-span-2">El intervalo debe ser válido y no superar 31 días.</p>}
-      </>}
+      </> : <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600 sm:col-span-2">Se consultará todo el calendario de la competición para esa temporada y se asociarán los partidos existentes; los que falten se crearán.</p>}
       <div className="flex flex-col justify-center gap-1 text-sm text-slate-600 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
         <p>{importMode === "round" ? "Estimación aproximada" : "Estimación"}: <strong className="text-slate-900">{estimatedCalls} llamada(s)</strong> a Highlightly para consultar estos partidos.</p>
         <p>Saldo de la cuenta: <strong className="text-slate-900">{quota?.remaining ?? "Sin consultar"}{quota?.limit != null ? ` / ${quota.limit}` : ""}</strong>{quota?.checkedAt ? ` · última lectura ${new Date(quota.checkedAt).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
       </div>
-      <p className="text-xs text-slate-500 sm:col-span-2">Por jornada, Highlightly no ofrece un filtro directo: se consulta una página de referencia y otra página cercana a la jornada elegida. La estimación puede subir si el calendario de esa temporada tiene una distribución distinta. Por fechas, se realiza una llamada por día. Actualizar el saldo también consume 1 llamada; el contador muestra el saldo de la última respuesta de Highlightly.</p>
+      <p className="text-xs text-slate-500 sm:col-span-2">Para una jornada se consultan las páginas necesarias del calendario; por fechas se realiza una llamada por día y una temporada completa usa las páginas del calendario. La Copa Mundial usa la temporada del proveedor 2026 asociada a Value90 2025/26. Actualizar el saldo también consume 1 llamada.</p>
     </div>
     <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-4">
       <label className="block min-w-0">
         <span className="mb-1 block text-sm font-semibold text-amber-950">Sincronizar ahora un partido ya importado</span>
-        <select value={selectedPastMatch} onChange={(event) => setSelectedPastMatch(event.target.value)} disabled={!filteredPastMatches.length || syncingPastMatch} className="min-h-11 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm">
+        <select value={selectedPastMatch} onChange={(event) => setSelectedPastMatch(event.target.value)} disabled={!filteredPastMatches.length || syncingPastMatch || syncingFilteredMatches} className="min-h-11 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm">
           {!filteredPastMatches.length && <option value="">No hay partidos importados para los filtros seleccionados</option>}
           {filteredPastMatches.map((match) => <option key={match.matchId} value={match.matchId}>{new Date(match.date).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {match.home} {match.homeScore ?? 0}-{match.awayScore ?? 0} {match.away}{match.syncError ? " · requiere revisión" : match.finalSynced ? " · volver a consultar" : " · pendiente"}</option>)}
         </select>
@@ -354,7 +416,10 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         </p>}
         <span className="mt-1 block text-xs text-amber-900">Consulta Highlightly ahora mismo y actualiza resultado, alineaciones y minutos. Cada llamada utilizada se descuenta del saldo diario.</span>
       </label>
-      <button type="button" onClick={syncPastMatchNow} disabled={!selectedPastMatch || syncingPastMatch} className="min-h-11 w-full rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto">{syncingPastMatch ? "Consultando Highlightly…" : "Sincronizar ahora"}</button>
+      <div className="flex flex-col gap-2 sm:w-auto">
+        <button type="button" onClick={syncPastMatchNow} disabled={!selectedPastMatch || syncingPastMatch || syncingFilteredMatches} className="min-h-11 w-full rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto">{syncingPastMatch ? "Consultando Highlightly…" : "Sincronizar ahora"}</button>
+        <button type="button" onClick={syncFilteredMatches} disabled={syncingPastMatch || syncingFilteredMatches || !filteredPastMatches.some((match) => !match.finalSynced)} className="min-h-11 w-full rounded-lg border border-amber-700 px-4 py-2 text-sm font-semibold text-amber-950 disabled:opacity-60 sm:w-auto">{syncingFilteredMatches ? "Sincronizando lote…" : `Sincronizar pendientes visibles (${filteredPastMatches.filter((match) => !match.finalSynced).length})`}</button>
+      </div>
     </div>
     {message && <p role="status" className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{message}</p>}
 
