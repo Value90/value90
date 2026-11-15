@@ -304,6 +304,7 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
 
 async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>, mapping: SyncMapping, match: SyncMatch) {
   const matchResponse = await getHighlightlyMatch(Number(mapping.external_match_id));
+  let callsUsed = 1;
   let callsRemaining = matchResponse.remaining;
   let callsLimit = matchResponse.limit;
   const { body } = matchResponse;
@@ -315,7 +316,7 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
     const retry = await supabase.from("external_match_mappings").update({ next_result_sync_at: null, last_sync_error: `Highlightly aún indica «${state}». Reintenta manualmente cuando el partido haya finalizado.`, updated_at: new Date().toISOString() })
       .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
     if (retry.error) throw new Error(retry.error.message);
-    return { matchId: mapping.match_id, waiting: true, callsRemaining, callsLimit };
+    return { matchId: mapping.match_id, waiting: true, callsUsed, callsRemaining, callsLimit };
   }
 
   const [homeScore, awayScore] = score(detail.state?.score?.current);
@@ -332,6 +333,7 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
   let lineupSummary: { participants: number; pendingPlayers: number } | null = null;
   if (!isCancelled(state) && !mapping.lineup_synced_at) {
     const lineupResponse = await getHighlightlyLineups(Number(mapping.external_match_id));
+    callsUsed += 1;
     callsRemaining = lineupResponse.remaining;
     callsLimit = lineupResponse.limit;
     lineupSummary = await syncLineup(supabase, mapping, match, lineupResponse.body);
@@ -340,12 +342,14 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
   const boxScoreResponse = !isCancelled(state)
     ? await getHighlightlyBoxScore(Number(mapping.external_match_id))
     : { body: [], remaining: callsRemaining, limit: callsLimit };
+  if (!isCancelled(state)) callsUsed += 1;
   callsRemaining = boxScoreResponse.remaining;
   callsLimit = boxScoreResponse.limit;
   const boxScoreTeams = boxScoreResponse.body;
   let events = Array.isArray(detail.events) ? detail.events : [];
   if (!isCancelled(state) && !events.length && boxScoreTeams.some((team) => (team.players ?? []).some((player) => player.isSubstitute && Number(player.minutesPlayed) === 0))) {
     const eventResponse = await getHighlightlyEvents(Number(mapping.external_match_id));
+    callsUsed += 1;
     callsRemaining = eventResponse.remaining;
     callsLimit = eventResponse.limit;
     events = eventResponse.body;
@@ -518,7 +522,7 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
   const marked = await supabase.from("external_match_mappings").update({ final_synced_at: new Date().toISOString(), next_result_sync_at: null, last_sync_error: null, updated_at: new Date().toISOString() })
     .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
   if (marked.error) throw new Error(marked.error.message);
-  return { matchId: mapping.match_id, status: isCancelled(state) ? "Cancelado" : "Jugado", score: `${homeScore ?? "?"}-${awayScore ?? "?"}`, substitutions: substitutions.length, importedPlayerStats, ownRatings: ownRating.calculated, ownRatingNote: ownRating.reason, ...lineupSummary, callsRemaining, callsLimit };
+  return { matchId: mapping.match_id, status: isCancelled(state) ? "Cancelado" : "Jugado", score: `${homeScore ?? "?"}-${awayScore ?? "?"}`, substitutions: substitutions.length, importedPlayerStats, ownRatings: ownRating.calculated, ownRatingNote: ownRating.reason, ...lineupSummary, callsUsed, callsRemaining, callsLimit };
 }
 
 export async function POST(request: NextRequest) {

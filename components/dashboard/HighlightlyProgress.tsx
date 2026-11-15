@@ -36,6 +36,7 @@ interface HighlightlyProgressMatch {
 interface Props {
   seasonId: number;
   competitionId: number | "";
+  stageId: number | "";
 }
 
 const dateTime = new Intl.DateTimeFormat("es-ES", {
@@ -43,7 +44,7 @@ const dateTime = new Intl.DateTimeFormat("es-ES", {
   timeZone: "Europe/Madrid",
 });
 
-export default function HighlightlyProgress({ seasonId, competitionId }: Props) {
+export default function HighlightlyProgress({ seasonId, competitionId, stageId }: Props) {
   const [matches, setMatches] = useState<HighlightlyProgressMatch[]>([]);
   const [summary, setSummary] = useState({ total: 0, pendingMatchData: 0, pendingStats: 0, pendingV90: 0, complete: 0 });
   const [loading, setLoading] = useState(false);
@@ -59,6 +60,7 @@ export default function HighlightlyProgress({ seasonId, competitionId }: Props) 
     try {
       const params = new URLSearchParams({ seasonId: String(seasonId) });
       if (competitionId !== "") params.set("competitionId", String(competitionId));
+      if (stageId !== "") params.set("stageId", String(stageId));
       const response = await fetch(`/api/admin/sports/progress?${params}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo leer el progreso de Highlightly.");
@@ -69,7 +71,7 @@ export default function HighlightlyProgress({ seasonId, competitionId }: Props) 
     } finally {
       setLoading(false);
     }
-  }, [seasonId, competitionId]);
+  }, [seasonId, competitionId, stageId]);
 
   useEffect(() => { void loadProgress(); }, [loadProgress]);
 
@@ -90,7 +92,7 @@ export default function HighlightlyProgress({ seasonId, competitionId }: Props) 
       const result = payload.results?.[0];
       setNotice(result?.waiting
         ? `Highlightly todavía no da el partido ${match.homeTeamName} vs ${match.awayTeamName} por finalizado. Puedes volver a intentarlo más tarde.`
-        : `Sincronización completada para ${match.homeTeamName} vs ${match.awayTeamName}: resultado, participaciones y ${Number(result?.importedPlayerStats ?? 0)} registro(s) de estadísticas revisados. V90: ${Number(result?.ownRatings ?? 0)} valoración(es) actualizadas.${result?.callsRemaining != null ? ` Saldo restante: ${result.callsRemaining} llamadas.` : ""}`);
+        : `Sincronización completada para ${match.homeTeamName} vs ${match.awayTeamName}: resultado, participaciones y ${Number(result?.importedPlayerStats ?? 0)} registro(s) de estadísticas recibidos. Se usaron ${Number(result?.callsUsed ?? 0)} llamadas; V90: ${Number(result?.ownRatings ?? 0)} valoración(es) actualizadas.${result?.callsRemaining != null ? ` Saldo restante: ${result.callsRemaining} llamadas.` : ""}`);
       await loadProgress();
     } catch (retryError) {
       setError(retryError instanceof Error ? retryError.message : "No se pudo completar la importación.");
@@ -106,7 +108,7 @@ export default function HighlightlyProgress({ seasonId, competitionId }: Props) 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-800">Pendientes de Highlightly</h2>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Revisa qué partidos de esta temporada tienen pendiente el resultado o las participaciones, y qué partidos jugados aún necesitan estadísticas individuales. Los reintentos usan los filtros de temporada y competición seleccionados arriba.</p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Revisa qué partidos de esta temporada tienen pendiente el resultado o las participaciones, y qué partidos jugados aún necesitan estadísticas individuales. Los filtros de temporada, competición y jornada seleccionados arriba se aplican a esta lista. Cada reintento de un partido finalizado suele consumir entre 2 y 4 llamadas a Highlightly, según si faltan alineaciones o eventos. No se puede garantizar antes de consultar que el proveedor devuelva todas las estadísticas: el resultado indicará cuántas llamadas se usaron y cuántos registros se guardaron; si faltan datos, el partido seguirá pendiente.</p>
           </div>
           <button type="button" onClick={() => void loadProgress()} disabled={loading || busyMatchId !== null} className="min-h-10 shrink-0 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">{loading ? "Actualizando…" : "Actualizar lista"}</button>
         </div>
@@ -126,7 +128,7 @@ export default function HighlightlyProgress({ seasonId, competitionId }: Props) 
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {loading && matches.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">Consultando partidos y estadísticas…</p> : visibleMatches.length === 0 ? (
-          <div className="p-6 text-center"><p className="font-semibold text-emerald-800">{matches.length ? "No hay partidos atrasados pendientes para estos filtros." : "No hay partidos en esta temporada y competición."}</p><p className="mt-1 text-sm text-slate-500">La lista se actualiza con los partidos cuya fecha ya pasó y que aún necesitan resultado, participaciones o estadísticas.</p></div>
+          <div className="p-6 text-center"><p className="font-semibold text-emerald-800">{matches.length ? "No hay partidos atrasados pendientes para estos filtros." : "No hay partidos en esta temporada, competición y jornada."}</p><p className="mt-1 text-sm text-slate-500">La lista se actualiza con los partidos cuya fecha ya pasó y que aún necesitan resultado, participaciones, estadísticas o V90.</p></div>
         ) : (
           <div className="divide-y divide-slate-100">
             {visibleMatches.map((match) => {

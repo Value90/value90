@@ -1237,6 +1237,7 @@ export default function ProgresoPage() {
             <HighlightlyProgress
               seasonId={selectedSeasonId}
               competitionId={selectedCompetitionId}
+              stageId={selectedStageId}
             />
           )}
 

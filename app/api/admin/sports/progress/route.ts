@@ -31,8 +31,10 @@ export async function GET(request: NextRequest) {
     const seasonId = Number(request.nextUrl.searchParams.get("seasonId"));
     const competitionValue = request.nextUrl.searchParams.get("competitionId");
     const competitionId = competitionValue ? Number(competitionValue) : null;
-    if (!Number.isSafeInteger(seasonId) || seasonId <= 0 || (competitionId != null && (!Number.isSafeInteger(competitionId) || competitionId <= 0))) {
-      return NextResponse.json({ error: "Selecciona una temporada y una competición válida." }, { status: 400 });
+    const stageValue = request.nextUrl.searchParams.get("stageId");
+    const stageId = stageValue ? Number(stageValue) : null;
+    if (!Number.isSafeInteger(seasonId) || seasonId <= 0 || (competitionId != null && (!Number.isSafeInteger(competitionId) || competitionId <= 0)) || (stageId != null && (!Number.isSafeInteger(stageId) || stageId <= 0))) {
+      return NextResponse.json({ error: "Selecciona una temporada, competición y jornada válidas." }, { status: 400 });
     }
 
     const supabase = createAdminSupabaseClient();
@@ -41,6 +43,7 @@ export async function GET(request: NextRequest) {
         .select("id,date,status,home_score,away_score,stadium,season_id,competition_id,stage_id,home_team_id,away_team_id")
         .eq("season_id", seasonId).order("date", { ascending: false });
       if (competitionId != null) query = query.eq("competition_id", competitionId);
+      if (stageId != null) query = query.eq("stage_id", stageId);
       return query.range(from, to);
     });
 
