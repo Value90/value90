@@ -61,18 +61,6 @@ const PlayerMatchStatsPage = dynamic(
   () => import("@/components/player-match-stats/PlayerMatchStatsPage"),
   { loading: AdminPageLoading },
 );
-const MatchRatingsPage = dynamic(
-  () => import("@/components/match-ratings/MatchRatingsPage"),
-  { loading: AdminPageLoading },
-);
-const MatchDataPage = dynamic(
-  () => import("@/components/match-data/MatchDataPage"),
-  { loading: AdminPageLoading },
-);
-const DatosV90Page = dynamic(
-  () => import("@/components/dashboard/DatosV90Page"),
-  { loading: AdminPageLoading },
-);
 const ProgresoPage = dynamic(
   () => import("@/components/dashboard/ProgresoPage"),
   { loading: AdminPageLoading },
@@ -112,21 +100,6 @@ export default function AdminContent({
 
     case "player-match-stats":
       return <PlayerMatchStatsPage />;
-
-    case "match-ratings":
-      return <MatchRatingsPage />;
-
-    case "match-data":
-      return <MatchDataPage />;
-
-    /*
-     * ============================================================
-     * DATOS V90
-     * ============================================================
-     */
-
-    case "datos-v90":
-      return <DatosV90Page />;
 
     case "progreso":
       return <ProgresoPage />;

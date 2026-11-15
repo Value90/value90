@@ -8,9 +8,9 @@ import { getTeams } from "@/services/team.service";
 import { getStages } from "@/services/stage.service";
 import { getMatches } from "@/services/match.service";
 import { getParticipations } from "@/services/participation.service";
-import { getMatchRatings } from "@/services/match-rating.service";
 import { getPlayerMatchStats } from "@/services/player-match-stat.service";
 import OwnRatingsProgress from "@/components/dashboard/OwnRatingsProgress";
+import HighlightlyProgress from "@/components/dashboard/HighlightlyProgress";
 import {
   getHistPlayerTeamsByTeamAndSeason,
 } from "@/services/hist-player-team.service";
@@ -21,11 +21,10 @@ import type { Team } from "@/services/team.service";
 import type { Stage } from "@/services/stage.service";
 import type { Match } from "@/services/match.service";
 import type { Participation } from "@/services/participation.service";
-import type { MatchRating } from "@/services/match-rating.service";
 import type { PlayerMatchStat } from "@/services/player-match-stat.service";
 import type { HistPlayerTeam } from "@/services/hist-player-team.service";
 
-type Tab = "teams" | "stages" | "own-ratings";
+type Tab = "teams" | "stages" | "highlightly" | "own-ratings";
 
 interface TeamProgress {
   team: Team;
@@ -39,7 +38,7 @@ interface StageProgress {
   stage: Stage;
   matchCount: number;
   participationTeamCount: number;
-  matchRatingCount: number;
+  statsCount: number;
   participationCount: number;
 }
 
@@ -49,8 +48,6 @@ interface MatchProgress {
   awayTeamName: string;
   hasParticipationHome: boolean;
   hasParticipationAway: boolean;
-  hasRatingHome: boolean;
-  hasRatingAway: boolean;
   hasStatsHome: boolean;
   hasStatsAway: boolean;
 }
@@ -79,9 +76,6 @@ export default function ProgresoPage() {
 
   const [participations, setParticipations] =
     useState<Participation[]>([]);
-
-  const [matchRatings, setMatchRatings] =
-    useState<MatchRating[]>([]);
 
   const [playerMatchStats, setPlayerMatchStats] =
     useState<PlayerMatchStat[]>([]);
@@ -128,7 +122,6 @@ export default function ProgresoPage() {
           stagesData,
           matchesData,
           participationsData,
-          matchRatingsData,
           playerMatchStatsData,
         ] = await Promise.all([
           getSeasons(),
@@ -137,7 +130,6 @@ export default function ProgresoPage() {
           getStages(),
           getMatches(),
           getParticipations(),
-          getMatchRatings(),
           getPlayerMatchStats(),
         ]);
 
@@ -147,7 +139,6 @@ export default function ProgresoPage() {
         setStages(stagesData);
         setMatches(matchesData);
         setParticipations(participationsData);
-        setMatchRatings(matchRatingsData);
         setPlayerMatchStats(playerMatchStatsData);
 
         if (seasonsData.length > 0) {
@@ -608,19 +599,8 @@ export default function ProgresoPage() {
             }
           );
 
-          /*
-           * ======================================================
-           * MATCH RATINGS
-           * ======================================================
-           */
-
-          const matchRatingCount =
-            matchRatings.filter(
-              (rating) =>
-                matchIds.has(
-                  rating.matchId
-                )
-            ).length;
+          const participationIds = new Set(stageParticipations.map((item) => item.id));
+          const statsCount = playerMatchStats.filter((stat) => participationIds.has(stat.participationId)).length;
 
           return {
             stage,
@@ -634,7 +614,7 @@ export default function ProgresoPage() {
             participationCount:
               stageParticipations.length,
 
-            matchRatingCount,
+            statsCount,
           };
         }
       );
@@ -644,7 +624,7 @@ export default function ProgresoPage() {
       stages,
       matches,
       participations,
-      matchRatings,
+      playerMatchStats,
     ]);
 
   /*
@@ -718,24 +698,6 @@ export default function ProgresoPage() {
         const hasParticipationAway =
           awayParticipationIds.size > 0;
 
-        const hasRatingHome =
-          matchRatings.some(
-            (rating) =>
-              rating.matchId === match.id &&
-              homeParticipationIds.has(
-                rating.participationId
-              )
-          );
-
-        const hasRatingAway =
-          matchRatings.some(
-            (rating) =>
-              rating.matchId === match.id &&
-              awayParticipationIds.has(
-                rating.participationId
-              )
-          );
-
         const hasStatsHome =
           playerMatchStats.some(
             (stat) =>
@@ -772,8 +734,6 @@ export default function ProgresoPage() {
 
           hasParticipationHome,
           hasParticipationAway,
-          hasRatingHome,
-          hasRatingAway,
           hasStatsHome,
           hasStatsAway,
         };
@@ -782,7 +742,6 @@ export default function ProgresoPage() {
     matches,
     teams,
     participations,
-    matchRatings,
     playerMatchStats,
     selectedSeasonId,
     selectedStageId,
@@ -996,6 +955,18 @@ export default function ProgresoPage() {
           Valoración propia
         </button>
 
+        <button
+          type="button"
+          onClick={() => setActiveTab("highlightly")}
+          className={`shrink-0 px-4 py-3 text-sm font-semibold transition sm:px-5 ${
+            activeTab === "highlightly"
+              ? "border-b-2 border-slate-800 text-slate-800"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Highlightly
+        </button>
+
       </div>
 
       {/* ======================================================
@@ -1206,7 +1177,7 @@ export default function ProgresoPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-slate-100 text-xs uppercase text-slate-600">
-                      <tr><th className="px-5 py-3">Jornada</th><th className="px-5 py-3 text-center">Partidos</th><th className="px-5 py-3 text-center">Participaciones</th><th className="px-5 py-3 text-center">Match Rating</th></tr>
+                      <tr><th className="px-5 py-3">Jornada</th><th className="px-5 py-3 text-center">Partidos</th><th className="px-5 py-3 text-center">Equipos con participación</th><th className="px-5 py-3 text-center">Participaciones con estadísticas</th></tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {stageProgress.map((item) => (
@@ -1214,7 +1185,7 @@ export default function ProgresoPage() {
                           <td className="px-5 py-3 font-medium text-slate-800">{item.stage.name}</td>
                           <td className="px-5 py-3 text-center text-slate-700">{item.matchCount}</td>
                           <td className="px-5 py-3 text-center text-slate-700">{item.participationTeamCount}</td>
-                          <td className="px-5 py-3 text-center text-slate-700">{item.matchRatingCount}/{item.participationCount}</td>
+                          <td className="px-5 py-3 text-center text-slate-700">{item.statsCount}/{item.participationCount}</td>
                         </tr>
                       ))}
                       {stageProgress.length === 0 && <tr><td colSpan={4} className="px-5 py-8 text-center text-slate-500">No hay jornadas para los filtros seleccionados.</td></tr>}
@@ -1232,12 +1203,9 @@ export default function ProgresoPage() {
                         <tr>
                           <th rowSpan={2} className="px-5 py-3 align-middle">Partido</th>
                           <th colSpan={2} className="px-5 py-2 text-center">Participación</th>
-                          <th colSpan={2} className="px-5 py-2 text-center">Valoración</th>
-                          <th colSpan={2} className="px-5 py-2 text-center">Estadísticas</th>
+                          <th colSpan={2} className="px-5 py-2 text-center">Estadísticas de Highlightly</th>
                         </tr>
                         <tr>
-                          <th className="px-5 py-2 text-center">Local</th>
-                          <th className="px-5 py-2 text-center">Visitante</th>
                           <th className="px-5 py-2 text-center">Local</th>
                           <th className="px-5 py-2 text-center">Visitante</th>
                           <th className="px-5 py-2 text-center">Local</th>
@@ -1250,13 +1218,11 @@ export default function ProgresoPage() {
                             <td className="px-5 py-3 font-medium text-slate-800">{item.homeTeamName} vs {item.awayTeamName}</td>
                             <td className="px-5 py-3 text-center"><span className={item.hasParticipationHome ? "font-bold text-green-600" : "font-bold text-red-600"}>{item.hasParticipationHome ? "V" : "X"}</span></td>
                             <td className="px-5 py-3 text-center"><span className={item.hasParticipationAway ? "font-bold text-green-600" : "font-bold text-red-600"}>{item.hasParticipationAway ? "V" : "X"}</span></td>
-                            <td className="px-5 py-3 text-center"><span className={item.hasRatingHome ? "font-bold text-green-600" : "font-bold text-red-600"}>{item.hasRatingHome ? "V" : "X"}</span></td>
-                            <td className="px-5 py-3 text-center"><span className={item.hasRatingAway ? "font-bold text-green-600" : "font-bold text-red-600"}>{item.hasRatingAway ? "V" : "X"}</span></td>
                             <td className="px-5 py-3 text-center"><span className={item.hasStatsHome ? "font-bold text-green-600" : "font-bold text-red-600"}>{item.hasStatsHome ? "V" : "X"}</span></td>
                             <td className="px-5 py-3 text-center"><span className={item.hasStatsAway ? "font-bold text-green-600" : "font-bold text-red-600"}>{item.hasStatsAway ? "V" : "X"}</span></td>
                           </tr>
                         ))}
-                        {matchProgress.length === 0 && <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-500">No hay partidos para la jornada y los filtros seleccionados.</td></tr>}
+                        {matchProgress.length === 0 && <tr><td colSpan={5} className="px-5 py-8 text-center text-slate-500">No hay partidos para la jornada y los filtros seleccionados.</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -1266,6 +1232,13 @@ export default function ProgresoPage() {
           )}
 
           {activeTab === "own-ratings" && <OwnRatingsProgress />}
+
+          {activeTab === "highlightly" && (
+            <HighlightlyProgress
+              seasonId={selectedSeasonId}
+              competitionId={selectedCompetitionId}
+            />
+          )}
 
         </>
 

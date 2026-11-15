@@ -1,0 +1,169 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+interface HighlightlyProgressMatch {
+  id: number;
+  date: string;
+  status: string;
+  homeScore: number;
+  awayScore: number;
+  stadium: string;
+  competitionId: number;
+  competitionName: string;
+  seasonName: string;
+  stageName: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  hasHighlightlyMapping: boolean;
+  resultComplete: boolean;
+  participationComplete: boolean;
+  statsComplete: boolean;
+  v90Calculated: number;
+  v90Pending: number;
+  v90Errors: number;
+  v90Average: number | null;
+  pendingV90: boolean;
+  participationCount: number;
+  missingStats: number;
+  pendingMatchData: boolean;
+  pendingStats: boolean;
+  pending: boolean;
+  lastSyncError: string | null;
+  lastSyncedAt: string | null;
+}
+
+interface Props {
+  seasonId: number;
+  competitionId: number | "";
+}
+
+const dateTime = new Intl.DateTimeFormat("es-ES", {
+  day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  timeZone: "Europe/Madrid",
+});
+
+export default function HighlightlyProgress({ seasonId, competitionId }: Props) {
+  const [matches, setMatches] = useState<HighlightlyProgressMatch[]>([]);
+  const [summary, setSummary] = useState({ total: 0, pendingMatchData: 0, pendingStats: 0, pendingV90: 0, complete: 0 });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busyMatchId, setBusyMatchId] = useState<number | null>(null);
+  const [onlyPending, setOnlyPending] = useState(true);
+
+  const loadProgress = useCallback(async () => {
+    if (!seasonId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ seasonId: String(seasonId) });
+      if (competitionId !== "") params.set("competitionId", String(competitionId));
+      const response = await fetch(`/api/admin/sports/progress?${params}`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "No se pudo leer el progreso de Highlightly.");
+      setMatches(payload.matches ?? []);
+      setSummary(payload.summary ?? { total: 0, pendingMatchData: 0, pendingStats: 0, pendingV90: 0, complete: 0 });
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "No se pudo leer el progreso de Highlightly.");
+    } finally {
+      setLoading(false);
+    }
+  }, [seasonId, competitionId]);
+
+  useEffect(() => { void loadProgress(); }, [loadProgress]);
+
+  const visibleMatches = useMemo(() => onlyPending ? matches.filter((item) => item.pending) : matches, [matches, onlyPending]);
+
+  async function retry(match: HighlightlyProgressMatch) {
+    setBusyMatchId(match.id);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/admin/sports/sync", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ matchId: match.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "No se pudieron volver a importar los datos del partido.");
+      const failed = payload.results?.find((item: { error?: string }) => item.error);
+      if (failed) throw new Error(failed.error);
+      const result = payload.results?.[0];
+      setNotice(result?.waiting
+        ? `Highlightly todavía no da el partido ${match.homeTeamName} vs ${match.awayTeamName} por finalizado. Puedes volver a intentarlo más tarde.`
+        : `Sincronización completada para ${match.homeTeamName} vs ${match.awayTeamName}: resultado, participaciones y ${Number(result?.importedPlayerStats ?? 0)} registro(s) de estadísticas revisados. V90: ${Number(result?.ownRatings ?? 0)} valoración(es) actualizadas.${result?.callsRemaining != null ? ` Saldo restante: ${result.callsRemaining} llamadas.` : ""}`);
+      await loadProgress();
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : "No se pudo completar la importación.");
+      await loadProgress();
+    } finally {
+      setBusyMatchId(null);
+    }
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">Pendientes de Highlightly</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">Revisa qué partidos de esta temporada tienen pendiente el resultado o las participaciones, y qué partidos jugados aún necesitan estadísticas individuales. Los reintentos usan los filtros de temporada y competición seleccionados arriba.</p>
+          </div>
+          <button type="button" onClick={() => void loadProgress()} disabled={loading || busyMatchId !== null} className="min-h-10 shrink-0 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60">{loading ? "Actualizando…" : "Actualizar lista"}</button>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-5">
+          {[["Partidos en filtro", summary.total], ["Pendiente resultado / participaciones", summary.pendingMatchData], ["Pendiente estadísticas", summary.pendingStats], ["Pendiente V90", summary.pendingV90], ["Completos", summary.complete]].map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-slate-50 px-3 py-3"><div className="text-xs font-medium text-slate-500">{label}</div><div className="mt-1 text-xl font-bold text-slate-800">{value}</div></div>
+          ))}
+        </div>
+        <label className="mt-4 inline-flex min-h-10 cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+          <input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} className="h-4 w-4 accent-slate-800" />
+          Mostrar solo pendientes
+        </label>
+      </div>
+
+      {notice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{notice}</p>}
+      {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {loading && matches.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">Consultando partidos y estadísticas…</p> : visibleMatches.length === 0 ? (
+          <div className="p-6 text-center"><p className="font-semibold text-emerald-800">{matches.length ? "No hay partidos atrasados pendientes para estos filtros." : "No hay partidos en esta temporada y competición."}</p><p className="mt-1 text-sm text-slate-500">La lista se actualiza con los partidos cuya fecha ya pasó y que aún necesitan resultado, participaciones o estadísticas.</p></div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {visibleMatches.map((match) => {
+              const needsFullSync = match.pendingMatchData;
+              const reason = !match.hasHighlightlyMapping
+                ? "Sin asociación con Highlightly"
+                : needsFullSync && !match.resultComplete
+                  ? "Pendiente resultado o sincronización final"
+                  : needsFullSync && !match.participationComplete
+                    ? "No hay participaciones registradas"
+                    : match.pendingStats
+                      ? `${match.missingStats} participación(es) sin estadísticas`
+                      : `Cálculo V90 pendiente: ${match.v90Pending} pendiente(s), ${match.v90Errors} error(es), ${match.v90Calculated} calculada(s)`;
+              return (
+                <article key={match.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500"><span>{match.competitionName}</span><span>·</span><span>{match.stageName}</span><span>·</span><span>{dateTime.format(new Date(match.date))}</span></div>
+                    <h3 className="mt-1 font-bold text-slate-800">{match.homeTeamName} {match.homeScore}–{match.awayScore} {match.awayTeamName}</h3>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span className={`rounded-full px-2.5 py-1 ${match.resultComplete ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>Resultado: {match.resultComplete ? "completo" : "pendiente"}</span>
+                      <span className={`rounded-full px-2.5 py-1 ${match.participationComplete ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>Participaciones: {match.status === "Cancelado" ? "no aplican" : match.participationComplete ? `${match.participationCount} registradas` : "pendientes"}</span>
+                      <span className={`rounded-full px-2.5 py-1 ${match.statsComplete ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>Estadísticas: {match.status === "Cancelado" ? "no aplican" : match.statsComplete ? "completas" : match.participationCount ? `${match.missingStats} pendientes` : "sin comprobar"}</span>
+                      <span className={`rounded-full px-2.5 py-1 ${!match.pendingV90 ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>V90: {match.status === "Cancelado" ? "no aplica" : match.pendingV90 ? `${match.v90Pending + match.v90Errors || "pendiente"}` : match.v90Calculated ? "calculado" : "sin cálculo necesario"}</span>
+                    </div>
+                    <p className="mt-2 text-sm text-amber-900">{reason}{match.lastSyncError ? ` · Último error: ${match.lastSyncError}` : ""}</p>
+                  </div>
+                  {match.hasHighlightlyMapping ? (
+                    <button type="button" onClick={() => void retry(match)} disabled={busyMatchId !== null || loading} className="min-h-11 w-full shrink-0 rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60 sm:w-auto">
+                      {busyMatchId === match.id ? "Importando…" : "Reintentar importación"}
+                    </button>
+                  ) : <span className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 text-center text-xs font-semibold text-slate-600">Importa o vincula el partido primero</span>}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
