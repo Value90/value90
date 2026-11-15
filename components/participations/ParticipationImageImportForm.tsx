@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Image from "next/image";
 
 import {
   getSeasons,
@@ -1991,9 +1992,12 @@ setAnalyzing(true);
             </p>
 
             <div className="max-h-[600px] w-full overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2 sm:p-3">
-              <img
+              <Image
                 src={imagePreview}
                 alt="Vista previa de la alineación"
+                width={1200}
+                height={1600}
+                unoptimized
                 className="mx-auto max-h-[560px] max-w-full rounded-md object-contain"
               />
             </div>

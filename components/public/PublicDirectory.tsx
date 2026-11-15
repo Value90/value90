@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import PublicHeader from "@/components/public/PublicHeader";
 import PublicFooter from "@/components/public/PublicFooter";
@@ -48,12 +48,15 @@ export default function PublicDirectory({ kind, initialFilters, initialResult }:
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const params = new URLSearchParams({ section: kind, page: String(page), limit: "24" });
-  if (stableSearch) params.set("q", stableSearch);
-  if (competitionId) params.set("competitionId", competitionId);
-  if (seasonId) params.set("seasonId", seasonId);
-  if (teamId) params.set("teamId", teamId);
-  if (kind === "teams") params.set("type", teamType);
+  const params = useMemo(() => {
+    const query = new URLSearchParams({ section: kind, page: String(page), limit: "24" });
+    if (stableSearch) query.set("q", stableSearch);
+    if (competitionId) query.set("competitionId", competitionId);
+    if (seasonId) query.set("seasonId", seasonId);
+    if (teamId) query.set("teamId", teamId);
+    if (kind === "teams") query.set("type", teamType);
+    return query;
+  }, [kind, page, stableSearch, competitionId, seasonId, teamId, teamType]);
   const requestKey = params.toString();
   const lastRequestKey = useRef(initialResult ? new URLSearchParams({ section: kind, page: "1", limit: "24", ...(kind === "teams" ? { type: "Club" } : {}) }).toString() : "");
 
@@ -68,7 +71,7 @@ export default function PublicDirectory({ kind, initialFilters, initialResult }:
       .catch((loadError: unknown) => { if (!controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : "No se han podido cargar los datos."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [requestKey]);
+  }, [requestKey, params]);
 
   function changeFilter(setter: (value: string) => void, value: string) {
     setter(value);

@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 
 import {
   getSeasons,
@@ -1754,9 +1755,12 @@ export default function MatchDataPage() {
                                   </button>
                                 </div>
 
-                                <img
+                                <Image
                                   src={image.previewUrl}
                                   alt={`${source.label}, captura ${imageIndex + 1}`}
+                                  width={1200}
+                                  height={800}
+                                  unoptimized
                                   className="max-h-80 w-full object-contain"
                                 />
                               </div>

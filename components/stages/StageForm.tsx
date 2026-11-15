@@ -94,13 +94,8 @@ export default function StageForm({
                 season.active
             );
 
-          if (
-            firstActiveSeason &&
-            !seasonId
-          ) {
-            setSeasonId(
-              firstActiveSeason.id
-            );
+          if (firstActiveSeason) {
+            setSeasonId((currentSeasonId) => currentSeasonId || firstActiveSeason.id);
           }
         }
       } catch (loadError) {

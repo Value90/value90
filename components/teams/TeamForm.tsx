@@ -288,12 +288,6 @@ export default function TeamForm({
 
   useEffect(() => {
     if (!team || !seasonId) {
-      if (!team) {
-        setSelectedCompetitionIds(
-          competitionId ? [competitionId] : []
-        );
-      }
-
       return;
     }
 
@@ -359,6 +353,12 @@ export default function TeamForm({
       mounted = false;
     };
   }, [team, seasonId]);
+
+  useEffect(() => {
+    if (!team) {
+      setSelectedCompetitionIds(competitionId ? [competitionId] : []);
+    }
+  }, [team, competitionId]);
 
   /*
    * ============================================================

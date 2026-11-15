@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PublicHeader from "@/components/public/PublicHeader";
 import PublicFooter from "@/components/public/PublicFooter";
 import PublicPageHeader from "@/components/public/PublicPageHeader";
@@ -37,12 +37,15 @@ export default function PublicMatches({ initialFilters, initialResult }: { initi
     return () => controller.abort();
   }, [initialFilters]);
 
-  const params = new URLSearchParams({ section: "matches", page: String(page), limit: "24" });
-  if (competitionId) params.set("competitionId", competitionId);
-  if (seasonId) params.set("seasonId", seasonId);
-  if (stageId) params.set("stageId", stageId);
-  if (teamId) params.set("teamId", teamId);
-  if (date) params.set("date", date);
+  const params = useMemo(() => {
+    const query = new URLSearchParams({ section: "matches", page: String(page), limit: "24" });
+    if (competitionId) query.set("competitionId", competitionId);
+    if (seasonId) query.set("seasonId", seasonId);
+    if (stageId) query.set("stageId", stageId);
+    if (teamId) query.set("teamId", teamId);
+    if (date) query.set("date", date);
+    return query;
+  }, [page, competitionId, seasonId, stageId, teamId, date]);
   const requestKey = params.toString();
   const lastRequestKey = useRef(initialResult ? new URLSearchParams({ section: "matches", page: "1", limit: "24", date: madridToday() }).toString() : "");
 
@@ -56,7 +59,7 @@ export default function PublicMatches({ initialFilters, initialResult }: { initi
       .catch((loadError: unknown) => { if (!controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar los partidos."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [requestKey]);
+  }, [requestKey, params]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
