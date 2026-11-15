@@ -277,7 +277,7 @@ export default function ParticipationForm({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [participation]);
 
   // Trae únicamente las participaciones del partido seleccionado.
   useEffect(() => {

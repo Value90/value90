@@ -98,7 +98,7 @@ export default function MatchForm({
     };
 
     loadData();
-  }, []);
+  }, [match]);
 
   useEffect(() => {
     const loadTeams = async () => {

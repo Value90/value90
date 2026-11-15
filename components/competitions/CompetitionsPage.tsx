@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   deleteCompetition,
@@ -143,7 +143,7 @@ export default function CompetitionsPage() {
    * ============================================================
    */
 
-  const getCountryName = (
+  const getCountryName = useCallback((
     countryId: number | null
   ) => {
     if (countryId === null) {
@@ -155,7 +155,7 @@ export default function CompetitionsPage() {
         (country) => country.id === countryId
       )?.name ?? "—"
     );
-  };
+  }, [countries]);
 
   /*
    * ============================================================
@@ -192,7 +192,7 @@ export default function CompetitionsPage() {
           .includes(normalizedSearch)
       );
     });
-  }, [competitions, countries, search]);
+  }, [competitions, getCountryName, search]);
 
   /*
    * ============================================================

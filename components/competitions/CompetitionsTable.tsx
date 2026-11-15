@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import DataTable from "@/components/shared/tables/DataTable";
 
@@ -94,7 +94,7 @@ export default function CompetitionsTable({
     };
   }, []);
 
-  const getCountryName = (
+  const getCountryName = useCallback((
     countryId: number | null
   ) => {
     if (countryId === null) {
@@ -110,7 +110,7 @@ export default function CompetitionsTable({
       country?.name ??
       "País no encontrado"
     );
-  };
+  }, [countries]);
 
   const columns = useMemo<
     ColumnDef<Competition, unknown>[]
@@ -205,7 +205,7 @@ export default function CompetitionsTable({
       },
     ],
     [
-      countries,
+      getCountryName,
       onEdit,
       onDelete,
     ]

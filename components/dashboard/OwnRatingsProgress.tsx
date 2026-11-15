@@ -36,11 +36,9 @@ const shortDate = (value: string | null) => value ? new Date(value).toLocaleDate
 
 export default function OwnRatingsProgress() {
   const [report, setReport] = useState<OwnRatingReport | null>(null);
-  const [busy, setBusy] = useState<"import" | "calculate" | "evaluate" | null>(null);
+  const [busy, setBusy] = useState<"calculate" | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [importProgress, setImportProgress] = useState("");
-  const [quota, setQuota] = useState<number | null>(null);
 
   const loadReport = useCallback(async () => {
     const response = await fetch("/api/admin/own-ratings", { cache: "no-store" });
@@ -52,61 +50,6 @@ export default function OwnRatingsProgress() {
   useEffect(() => {
     loadReport().catch((loadError) => setError(loadError instanceof Error ? loadError.message : "No se pudo cargar la comparación."));
   }, [loadReport]);
-
-  async function importEvaluationRounds() {
-    setBusy("import");
-    setError("");
-    setMessage("");
-    setImportProgress("Buscando estadísticas pendientes de las jornadas 6–11…");
-    try {
-      const prepareResponse = await fetch("/api/admin/own-ratings/import-stats", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "prepare" }),
-      });
-      const prepared = await prepareResponse.json();
-      if (!prepareResponse.ok) throw new Error(prepared.error ?? "No se pudieron preparar los partidos.");
-      const ids: number[] = prepared.matchIds ?? [];
-      setQuota(prepared.callsRemaining ?? null);
-      if (!ids.length) {
-        const missing = Number(prepared.skipped?.missingMappings?.length ?? 0);
-        setMessage(`No quedan estadísticas pendientes de las jornadas 6–11${missing ? `; ${missing} partidos necesitan asociación con Highlightly` : ""}. Las jornadas 1–5 ya estaban importadas; no se consumieron llamadas para preparar esta revisión.`);
-        setImportProgress("");
-        return;
-      }
-      let imported = 0;
-      let calls = 0;
-      const unmatched: Array<{ player: string }> = [];
-      let stoppedByQuota = false;
-      for (let start = 0; start < ids.length && !stoppedByQuota; start += 5) {
-        const batch = ids.slice(start, start + 5);
-        setImportProgress(`Importando partidos ${Math.min(start + batch.length, ids.length)} de ${ids.length}…`);
-        const response = await fetch("/api/admin/own-ratings/import-stats", {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "import_batch", matchIds: batch }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error ?? "Falló un lote de estadísticas.");
-        imported += Number(result.imported ?? 0);
-        calls += Number(result.callsUsed ?? 0);
-        if (Array.isArray(result.unmatched)) unmatched.push(...result.unmatched);
-        setQuota(result.callsRemaining ?? null);
-        if (result.callsRemaining === 0 && start + batch.length < ids.length) {
-          stoppedByQuota = true;
-          break;
-        }
-      }
-      const missingCount = Number(prepared.skipped?.missingMappings?.length ?? 0);
-      const summary = stoppedByQuota && imported === 0
-        ? `No se importaron estadísticas porque la cuota diaria quedó agotada al preparar los partidos. Se revisaron ${ids.length} partidos sin consumir más llamadas.`
-        : `${stoppedByQuota ? "Importación parcial por límite diario" : "Importación terminada"}: ${imported} participaciones con estadísticas en ${stoppedByQuota ? "parte de " : ""}${ids.length} partidos.`;
-      setMessage(`${summary} Se utilizaron ${calls} llamadas a Highlightly.${prepared.alreadyComplete ? ` ${prepared.alreadyComplete} partidos ya tenían sus estadísticas completas.` : ""}${unmatched.length ? ` ${unmatched.length} jugadores quedaron sin asociar para revisión.` : ""}${missingCount ? ` Hay ${missingCount} partidos sin asociación con Highlightly.` : ""}`);
-      setImportProgress("");
-    } catch (importError) {
-      setError(importError instanceof Error ? importError.message : "No se pudieron importar las estadísticas.");
-      setImportProgress("");
-    } finally {
-      setBusy(null);
-    }
-  }
 
   async function calculateOwnRatings() {
     setBusy("calculate");
@@ -120,23 +63,6 @@ export default function OwnRatingsProgress() {
       await loadReport();
     } catch (calculationError) {
       setError(calculationError instanceof Error ? calculationError.message : "No se pudo calcular la valoración propia.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function evaluateHeldOutRounds() {
-    setBusy("evaluate");
-    setError("");
-    setMessage("");
-    try {
-      const response = await fetch("/api/admin/own-ratings/evaluate", { method: "POST" });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "No se pudo evaluar el modelo.");
-      setMessage(`Evaluación independiente de las jornadas 6–10, sin reentrenar: ${payload.evaluatedSamples} valoraciones externas comparadas. MAE ${rating.format(payload.mae)} · RMSE ${rating.format(payload.rmse)}.`);
-      await loadReport();
-    } catch (evaluationError) {
-      setError(evaluationError instanceof Error ? evaluationError.message : "No se pudo evaluar el modelo.");
     } finally {
       setBusy(null);
     }

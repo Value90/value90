@@ -670,7 +670,6 @@ export default function MatchRatingForm({
       competitions,
       matches,
       seasonId,
-      inputMode,
     ]);
 
   /*
