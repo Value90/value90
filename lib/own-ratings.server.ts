@@ -1,4 +1,33 @@
-export const OWN_RATING_MODEL_VERSION = "V90-STAT-0.1";
+export const OWN_RATING_MODEL_VERSION = "V90-STATS-1.0";
+
+/**
+ * Direct, deterministic match rating from Highlightly box-score statistics.
+ * Coefficients are rating points per event per 90 minutes, with a position
+ * specific profile and a neutral 6.000 baseline. External ratings are never
+ * read or needed by this calculation.
+ */
+export function calculateOwnRatingFromStats(input: {
+  positionName: string;
+  minutesPlayed: number;
+  stats: Record<string, number | null | undefined>;
+}) {
+  const group = getPositionGroup(input.positionName);
+  const profiles: Record<PositionGroup, Record<string, number>> = {
+    goalkeeper: { saves: 0.14, recoveries: 0.025, tackles: 0.05, duels_won: 0.025, goals: 0.85, assists: 0.5, passes_completed: 0.002, shots_on_target: 0.04 },
+    defender: { tackles: 0.10, recoveries: 0.035, duels_won: 0.045, passes_completed: 0.002, assists: 0.7, goals: 1.05, shots_on_target: 0.08, dribbles_completed: 0.04 },
+    midfielder: { passes_completed: 0.0025, recoveries: 0.045, tackles: 0.055, duels_won: 0.04, assists: 0.85, goals: 1.1, shots_on_target: 0.1, shots: 0.04, dribbles_completed: 0.06 },
+    forward: { goals: 1.35, assists: 0.85, shots_on_target: 0.13, shots: 0.045, dribbles_completed: 0.07, duels_won: 0.035, recoveries: 0.02, tackles: 0.04 },
+    other: { goals: 1.15, assists: 0.75, shots_on_target: 0.1, shots: 0.035, dribbles_completed: 0.05, duels_won: 0.035, tackles: 0.045, recoveries: 0.025, saves: 0.1, passes_completed: 0.002 },
+  };
+  const minutes = Math.max(0, Math.min(120, Number(input.minutesPlayed) || 0));
+  if (minutes <= 0) return null;
+  const per90 = (field: string) => Math.max(0, Number(input.stats[field]) || 0) * 90 / Math.max(30, minutes);
+  let score = 6;
+  for (const [field, weight] of Object.entries(profiles[group])) score += Math.min(field === "goals" ? 5 : 25, per90(field)) * weight;
+  score -= per90("yellow_cards") * 0.35;
+  score -= per90("red_cards") * 1.5;
+  return Math.round(Math.max(0, Math.min(10, score)) * 1000) / 1000;
+}
 
 const ALL_FEATURES = [
   "goals", "assists", "shots", "shots_on_target", "dribbles_completed",

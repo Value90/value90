@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { OWN_RATING_MODEL_VERSION, trainOwnRatings, type OwnRatingSample } from "@/lib/own-ratings.server";
+import { OWN_RATING_MODEL_VERSION, calculateOwnRatingFromStats } from "@/lib/own-ratings.server";
+import { calculateV90Stage } from "@/services/v90-engine.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,11 +29,6 @@ async function readAll<T>(query: (from: number, to: number) => PromiseLike<{ dat
   throw new Error("La consulta superó el límite de seguridad de 100.000 filas.");
 }
 
-function roundNumber(name: string) {
-  const match = name.match(/\d+/);
-  return match ? Number(match[0]) : 0;
-}
-
 export async function POST() {
   try {
     const supabase = await adminClient();
@@ -54,7 +50,6 @@ export async function POST() {
     if (stageIds.length !== FIRST_ELEVEN_STAGES.length) {
       throw new Error("Faltan jornadas 1–11. Comprueba que estén creadas para la temporada activa.");
     }
-    const stageNumberById = new Map((stages ?? []).map((stage) => [Number(stage.id), roundNumber(stage.name)]));
     const matches = await readAll((from, to) => supabase.from("matches")
       .select("id,stage_id,competition_id,season_id").eq("season_id", season.id)
       .eq("competition_id", competition.id).in("stage_id", stageIds).eq("status", "Jugado").order("id").range(from, to));
@@ -65,22 +60,17 @@ export async function POST() {
       .order("id").range(from, to));
     if (!participations.length) throw new Error("Todavía no hay participaciones para esas jornadas.");
     const participationIds = participations.map((item) => Number(item.id));
-    const [stats, externalRatings, positions] = await Promise.all([
+    const [stats, positions] = await Promise.all([
       readAll((from, to) => supabase.from("player_match_stats").select("*")
-        .in("participation_id", participationIds).order("participation_id").range(from, to)),
-      readAll((from, to) => supabase.from("match_ratings").select("participation_id,external_average")
         .in("participation_id", participationIds).order("participation_id").range(from, to)),
       supabase.from("positions").select("id,name,short_name"),
     ]);
     if (positions.error) throw new Error(positions.error.message);
 
     const statsByParticipation = new Map(stats.map((row) => [Number(row.participation_id), row]));
-    const externalByParticipation = new Map(externalRatings
-      .filter((row) => row.external_average != null)
-      .map((row) => [Number(row.participation_id), Number(row.external_average)]));
     const positionById = new Map((positions.data ?? []).map((item) => [Number(item.id), String(item.name)]));
     const matchById = new Map(matches.map((match) => [Number(match.id), match]));
-    const samples: OwnRatingSample[] = participations.flatMap((participation) => {
+    const ratings = participations.flatMap((participation) => {
       const stat = statsByParticipation.get(Number(participation.id));
       if (!stat) return [];
       const match = matchById.get(Number(participation.match_id));
@@ -90,42 +80,31 @@ export async function POST() {
       const statValues = Object.fromEntries([
         "goals", "assists", "shots", "shots_on_target", "dribbles_completed", "duels_won", "tackles", "recoveries", "saves", "passes_completed", "yellow_cards", "red_cards",
       ].map((field) => [field, Number(stat[field]) || 0]));
-      return [{
-        participationId: Number(participation.id), playerId: Number(participation.player_id),
-        matchId: Number(participation.match_id), positionId: Number(participation.position_id),
-        positionName, stageNumber: stageNumberById.get(Number(match.stage_id)) ?? 0,
-        minutesPlayed: Number(participation.minutes_played) || 0,
-        externalAverage: externalByParticipation.get(Number(participation.id)) ?? null,
-        stats: statValues,
-      }];
+      const ownRating = calculateOwnRatingFromStats({ positionName, minutesPlayed: Number(participation.minutes_played) || 0, stats: statValues });
+      return ownRating == null ? [] : [{ participation, ownRating }];
     });
-    if (!samples.length) throw new Error("No hay participaciones con estadísticas importadas. Importa primero las estadísticas de las jornadas 1–11.");
-
-    const trained = trainOwnRatings(samples);
-    if (!trained) throw new Error(`Solo hay ${samples.filter((sample) => sample.externalAverage != null).length} valoraciones externas vinculadas a estadísticas; hacen falta al menos 17 para ajustar el modelo.`);
+    if (!ratings.length) throw new Error("No hay participaciones con minutos y estadísticas importadas para las jornadas 1–11.");
 
     const run = await supabase.from("own_rating_runs").insert({
       season_id: season.id,
       competition_id: competition.id,
       model_version: OWN_RATING_MODEL_VERSION,
       stage_ids: stageIds,
-      training_samples: trained.trainingSamples,
-      rated_samples: trained.ratedSamples,
-      cross_validation_mae: trained.crossValidationMae,
-      cross_validation_rmse: trained.crossValidationRmse,
-      position_models: trained.positionModels,
+      training_samples: 0,
+      rated_samples: ratings.length,
+      position_models: { method: "position-weighted-highlightly-statistics", baseline: 6, externalRatingsUsed: false },
     }).select("id").single();
     if (run.error) throw new Error(run.error.message);
 
-    const rows = trained.ratings.map((rating) => ({
+    const rows = ratings.map(({ participation, ownRating }) => ({
       run_id: run.data.id,
-      participation_id: rating.participationId,
-      match_id: rating.matchId,
-      player_id: rating.playerId,
-      position_id: rating.positionId,
-      own_rating: rating.ownRating,
-      external_average: rating.externalAverage,
-      absolute_error: rating.absoluteError,
+      participation_id: Number(participation.id),
+      match_id: Number(participation.match_id),
+      player_id: Number(participation.player_id),
+      position_id: Number(participation.position_id),
+      own_rating: ownRating,
+      external_average: null,
+      absolute_error: null,
       calculation_version: OWN_RATING_MODEL_VERSION,
     }));
     for (let offset = 0; offset < rows.length; offset += 500) {
@@ -133,11 +112,11 @@ export async function POST() {
       if (inserted.error) throw new Error(inserted.error.message);
     }
 
-    const finalRows = trained.ratings.map((rating) => ({
-      match_id: rating.matchId,
-      player_id: rating.playerId,
-      participation_id: rating.participationId,
-      final_match_rating: rating.ownRating,
+    const finalRows = ratings.map(({ participation, ownRating }) => ({
+      match_id: Number(participation.match_id),
+      player_id: Number(participation.player_id),
+      participation_id: Number(participation.id),
+      final_match_rating: ownRating,
       calculation_version: OWN_RATING_MODEL_VERSION,
       calculated_at: new Date().toISOString(),
     }));
@@ -145,6 +124,8 @@ export async function POST() {
       const saved = await supabase.from("match_ratings").upsert(finalRows.slice(offset, offset + 500), { onConflict: "participation_id" });
       if (saved.error) throw new Error(`No se pudo actualizar la valoración final del ranking: ${saved.error.message}`);
     }
+    const calculatedMatches = [...new Set(ratings.map(({ participation }) => Number(participation.match_id)))];
+    const v90Result = await calculateV90Stage(calculatedMatches, supabase);
 
     return NextResponse.json({
       ok: true,
@@ -153,14 +134,14 @@ export async function POST() {
       competition: competition.name,
       matchCount: matches.length,
       participationCount: participations.length,
-      statsCount: samples.length,
-      trainingSamples: trained.trainingSamples,
-      ratedSamples: trained.ratedSamples,
+      statsCount: ratings.length,
+      trainingSamples: 0,
+      ratedSamples: ratings.length,
       rankingRatingsUpdated: finalRows.length,
-      crossValidationMae: trained.crossValidationMae,
-      crossValidationRmse: trained.crossValidationRmse,
+      v90Calculated: v90Result.matches.reduce((sum, row) => sum + row.calculated, 0),
+      v90Pending: v90Result.matches.reduce((sum, row) => sum + row.pending, 0),
+      v90Errors: v90Result.matches.reduce((sum, row) => sum + row.errors, 0),
       modelVersion: OWN_RATING_MODEL_VERSION,
-      fallbackPositions: trained.fallbackPositions,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo calcular la valoración propia.";

@@ -116,8 +116,7 @@ export default function OwnRatingsProgress() {
       const response = await fetch("/api/admin/own-ratings", { method: "POST" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo calcular la valoración propia.");
-      setMessage(`Modelo ${payload.modelVersion}: ${payload.ratedSamples} notas propias. Validación cruzada: MAE ${payload.crossValidationMae == null ? "—" : rating.format(payload.crossValidationMae)} y RMSE ${payload.crossValidationRmse == null ? "—" : rating.format(payload.crossValidationRmse)}.`);
-      if (payload.fallbackPositions?.length) setMessage((current) => `${current} Muestra insuficiente para ajustar por separado: ${payload.fallbackPositions.join(", ")}; se usó el modelo general para esas posiciones.`);
+      setMessage(`Cálculo ${payload.modelVersion}: ${payload.ratedSamples} notas propias a partir de estadísticas Highlightly; V90 actualizado en ${payload.v90Calculated} participaciones${payload.v90Pending ? `, ${payload.v90Pending} pendientes por configuración o datos incompletos` : ""}${payload.v90Errors ? ` y ${payload.v90Errors} con error` : ""}.`);
       await loadReport();
     } catch (calculationError) {
       setError(calculationError instanceof Error ? calculationError.message : "No se pudo calcular la valoración propia.");
@@ -148,60 +147,28 @@ export default function OwnRatingsProgress() {
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-lg font-bold text-slate-800">Valoración propia a partir de estadísticas</h2>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-          Importa las estadísticas pendientes de las primeras 11 jornadas y entrena el modelo con las valoraciones externas disponibles. Después, cada sincronización automática de un partido finalizado calcula las notas propias y actualiza el ranking.
+          La nota propia se calcula por posición directamente desde las estadísticas individuales de Highlightly. Al sincronizar manualmente un partido finalizado, se actualizan la valoración final, el V90 y los datos del ranking; no hacen falta notas externas ni entrenamiento previo.
         </p>
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-          <button type="button" onClick={importEvaluationRounds} disabled={busy !== null} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">
-            {busy === "import" ? "Importando estadísticas…" : "Completar estadísticas: jornadas 6–11"}
-          </button>
-          <button type="button" onClick={evaluateHeldOutRounds} disabled={busy !== null} className="min-h-11 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60">
-            {busy === "evaluate" ? "Evaluando…" : "Evaluar modelo con jornadas 6–10"}
-          </button>
           <button type="button" onClick={calculateOwnRatings} disabled={busy !== null} className="min-h-11 rounded-lg border border-emerald-700 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-wait disabled:opacity-60">
-            {busy === "calculate" ? "Recalculando…" : "Recalcular modelo: jornadas 1–11"}
+            {busy === "calculate" ? "Recalculando…" : "Recalcular LaLiga: jornadas 1–11"}
           </button>
         </div>
-        {importProgress && <p className="mt-3 text-sm font-medium text-slate-600" role="status">{importProgress}</p>}
-        {quota != null && <p className="mt-2 text-xs text-slate-500">Llamadas Highlightly restantes: {quota}</p>}
         {message && <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" role="status">{message}</p>}
         {error && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-4 py-4 sm:px-6">
-          <h3 className="font-bold text-slate-800">Comparación con fuentes externas</h3>
-          {report?.run && (
-            <p className="mt-1 text-sm text-slate-500">
-              {report.run.model_version} · {report.run.evaluation_source_run_id
-                ? `Evaluación independiente: ${report.run.rated_samples} notas, MAE ${report.run.evaluation_mae == null ? "—" : rating.format(Number(report.run.evaluation_mae))} y RMSE ${report.run.evaluation_rmse == null ? "—" : rating.format(Number(report.run.evaluation_rmse))}. Modelo entrenado con ${report.run.training_samples} valoraciones externas.`
-                : `${report.run.training_samples} valoraciones externas para entrenar · validación cruzada inicial: MAE ${report.run.cross_validation_mae == null ? "—" : rating.format(Number(report.run.cross_validation_mae))} · RMSE ${report.run.cross_validation_rmse == null ? "—" : rating.format(Number(report.run.cross_validation_rmse))}`}
-            </p>
-          )}
+          <h3 className="font-bold text-slate-800">Valoraciones propias calculadas</h3>
+          {report?.run && <p className="mt-1 text-sm text-slate-500">{report.run.model_version} · {report.run.rated_samples} valoraciones calculadas desde estadísticas · última actualización {shortDate(report.run.created_at)}</p>}
         </div>
-        {report?.run && (
-          <details className="border-b border-slate-200 px-4 py-3 sm:px-6">
-            <summary className="cursor-pointer text-sm font-semibold text-slate-700">Ver pesos aprendidos por posición</summary>
-            <p className="mt-2 text-xs leading-5 text-slate-500">Coeficientes estandarizados: muestran cuánto influye cada estadística frente a su variación habitual en la muestra. Los pesos se recalibran al volver a calcular el modelo.</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {Object.entries(report.run.position_models).map(([group, model]) => (
-                <div key={group} className="rounded-lg bg-slate-50 p-3">
-                  <h4 className="text-sm font-bold capitalize text-slate-800">{group === "global" ? "Modelo general" : group} <span className="font-normal text-slate-500">· {model.source === "global" ? "general" : `${model.trainingSamples} muestras`}</span></h4>
-                  <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
-                    {model.features.map((feature, index) => (
-                      <li key={feature} className="flex justify-between gap-2"><span>{feature.replaceAll("_", " ")}</span><span className="font-mono">{rating.format(model.coefficients[index] ?? 0)}</span></li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
         {!report?.items.length ? (
-          <p className="p-6 text-center text-sm text-slate-500">Aún no hay una valoración propia calculada. Importa las estadísticas y pulsa el botón de cálculo manual.</p>
+          <p className="p-6 text-center text-sm text-slate-500">Aún no hay valoraciones propias. Sincroniza un partido con estadísticas de Highlightly o recalcula las estadísticas que ya están guardadas.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Jugador</th><th className="px-4 py-3">Jornada</th><th className="px-4 py-3">Posición</th><th className="px-4 py-3 text-right">V90 propia</th><th className="px-4 py-3 text-right">Media externa</th><th className="px-4 py-3 text-right">Propia − externa</th></tr></thead>
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Jugador</th><th className="px-4 py-3">Jornada</th><th className="px-4 py-3">Posición</th><th className="px-4 py-3 text-right">Valoración propia</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {report.items.map((item, index) => (
                   <tr key={`${item.playerName}-${item.date}-${index}`} className="hover:bg-slate-50">
@@ -209,8 +176,6 @@ export default function OwnRatingsProgress() {
                     <td className="px-4 py-3 text-slate-600">{item.stage}</td>
                     <td className="px-4 py-3 text-slate-600">{item.position}</td>
                     <td className="px-4 py-3 text-right font-bold text-emerald-700">{rating.format(item.ownRating)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{item.externalAverage == null ? "—" : rating.format(item.externalAverage)}</td>
-                    <td className={`px-4 py-3 text-right ${item.absoluteError != null && item.absoluteError > 1 ? "font-semibold text-amber-700" : "text-slate-600"}`}>{item.difference == null ? "—" : `${item.difference > 0 ? "+" : ""}${rating.format(item.difference)}`}</td>
                   </tr>
                 ))}
               </tbody>

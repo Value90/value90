@@ -348,6 +348,13 @@ Devuelve exclusivamente el JSON solicitado.
 }
 
 export async function POST(request: Request) {
+  if (process.env.ENABLE_EXTERNAL_RATINGS !== "true") {
+    return NextResponse.json({
+      error: "El reconocimiento de valoraciones externas está desactivado. La valoración propia se genera desde las estadísticas de Highlightly al sincronizar el partido.",
+      externalRatingsDisabled: true,
+    }, { status: 410 });
+  }
+
   const analysisStartedAt = Date.now();
   try {
     if (!process.env.OPENAI_API_KEY) {

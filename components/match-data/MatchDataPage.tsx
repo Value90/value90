@@ -301,6 +301,7 @@ async function readJsonResponse(response: Response) {
    ============================================================ */
 
 export default function MatchDataPage() {
+  const externalRatingsEnabled = process.env.NEXT_PUBLIC_ENABLE_EXTERNAL_RATINGS === "true";
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
@@ -863,6 +864,10 @@ export default function MatchDataPage() {
      ============================================================ */
 
   async function handlePrepareAnalysis() {
+    if (!externalRatingsEnabled) {
+      setError("La carga de valoraciones externas está desactivada. El V90 se calcula con las estadísticas individuales de Highlightly al sincronizar el partido.");
+      return;
+    }
     if (!selectedMatchId || !selectedMatch) {
       setError(
         "Selecciona primero el partido que quieres analizar."
@@ -1123,6 +1128,10 @@ export default function MatchDataPage() {
   }
 
   async function handleSaveRatings(teamSide: "home" | "away") {
+    if (!externalRatingsEnabled) {
+      setError("Ya no se guardan valoraciones externas. Sincroniza el partido con Highlightly para generar la valoración propia desde sus estadísticas.");
+      return;
+    }
     if (!selectedMatchId || !selectedMatch) {
       setError("Selecciona primero un partido.");
       return;
@@ -1659,7 +1668,14 @@ export default function MatchDataPage() {
           3. CARGAR CAPTURAS
           ======================================================== */}
 
-      {participationsSaved &&
+        {participationsSaved && (
+          <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 sm:p-5">
+            <h2 className="font-semibold">Valoración propia automática</h2>
+            <p className="mt-1 leading-6">Al sincronizar manualmente este partido con Highlightly, se importan el resultado, las participaciones, los minutos y las estadísticas individuales; con esos datos se calcula la valoración propia y se actualiza el V90. Ya no es necesario cargar capturas de fuentes externas.</p>
+          </section>
+        )}
+
+        {externalRatingsEnabled && participationsSaved &&
         analysisPlayers.length === 0 && (
           <>
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
@@ -1822,7 +1838,7 @@ export default function MatchDataPage() {
           5. REVISAR Y GUARDAR VALORACIONES
           ======================================================== */}
 
-      {analysisPlayers.length > 0 && (
+        {externalRatingsEnabled && analysisPlayers.length > 0 && (
         <section ref={ratingReviewSectionRef} className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
             <div>

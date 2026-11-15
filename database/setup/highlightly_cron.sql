@@ -1,33 +1,23 @@
--- Supabase Cron revisa el endpoint cada minuto. El endpoint solo consulta
--- Highlightly en los horarios locales Europe/Madrid configurados para cada liga.
--- Primero añade en Supabase Vault los secretos con estos nombres:
---   value90_app_url              = URL de producción de Vercel
---   value90_sports_cron_secret   = mismo valor configurado como CRON_SECRET en Vercel
--- Después ejecuta este archivo una sola vez en Supabase SQL Editor.
--- El endpoint protegido de Vercel también necesita SUPABASE_SECRET_KEY y HIGHLIGHTLY_API_KEY.
-
-CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
-CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
-
+-- Value90 now synchronizes Highlightly matches manually from the admin panel.
+-- Run this once in Supabase SQL Editor to remove the previous scheduled poll.
+-- The monthly market valuation job is intentionally not changed.
 DO $$
+DECLARE
+  v_job_id bigint;
 BEGIN
-  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'value90-highlightly-match-sync') THEN
-    PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'value90-highlightly-match-sync';
+  IF to_regclass('cron.job') IS NULL THEN
+    RETURN;
   END IF;
 
-  PERFORM cron.schedule(
-    'value90-highlightly-match-sync',
-    '* * * * *',
-    $job$
-      SELECT net.http_post(
-        url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'value90_app_url') || '/api/admin/sports/sync',
-        headers := jsonb_build_object(
-          'Content-Type', 'application/json',
-          'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'value90_sports_cron_secret')
-        ),
-        body := '{}'::jsonb,
-        timeout_milliseconds := 120000
-      );
-    $job$
-  );
-END $$;
+  FOR v_job_id IN EXECUTE $query$
+    SELECT jobid
+    FROM cron.job
+    WHERE jobname = 'value90-highlightly-match-sync'
+       OR lower(jobname) ~ '(highlightly.*(sync|result|match)|sports.*sync)'
+       OR lower(command) LIKE '%/api/admin/sports/sync%'
+  $query$
+  LOOP
+    PERFORM cron.unschedule(v_job_id);
+  END LOOP;
+END;
+$$;

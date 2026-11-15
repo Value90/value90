@@ -12,67 +12,17 @@ import {
   type HighlightlyMatch,
   type HighlightlyBoxScorePlayerStatistics,
 } from "@/lib/highlightly.server";
-import { OWN_RATING_MODEL_VERSION, predictWithStoredModels, type OwnRatingSample } from "@/lib/own-ratings.server";
+import { OWN_RATING_MODEL_VERSION, calculateOwnRatingFromStats } from "@/lib/own-ratings.server";
+import { calculateV90Stage } from "@/services/v90-engine.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-// Poll after the expected end, with bounded retries. A short time window made
-// a missed cron run permanently strand otherwise valid fixtures.
-const MAX_RESULT_ATTEMPTS = 12;
-const RESULT_RETRY_DELAY_MS = 5 * 60_000;
-// Keep automatic retries limited to recent fixtures, so a missed deployment
-// cannot trigger a large batch of calls for the entire season's archive.
-const MAX_RESULT_AUTO_AGE_MS = 7 * 24 * 60 * 60_000;
-
 type SyncMapping = { external_match_id: number | string; match_id: number | string; result_attempts?: number | null; lineup_synced_at?: string | null };
 type SyncMatch = { season_id: number | string; competition_id: number | string; home_team_id: number | string };
 
-const MADRID_TIME_ZONE = "Europe/Madrid";
-const AUTO_SYNC_WINDOW_MINUTES = 15;
-
-function madridClockParts(date: Date) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: MADRID_TIME_ZONE,
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-}
-
-function scheduledCompetitionForNow(date: Date): "laliga" | "champions" | null {
-  const parts = madridClockParts(date);
-  const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
-  const weekday = parts.weekday;
-  const slots = weekday === "Fri" ? [23 * 60 + 15]
-    : weekday === "Sat" || weekday === "Sun" ? [16 * 60 + 15, 18 * 60 + 30, 20 * 60 + 45, 23 * 60 + 15]
-      : weekday === "Mon" ? [23 * 60 + 15]
-        : weekday === "Tue" || weekday === "Wed" ? [21 * 60, 23 * 60 + 15]
-          : [];
-  if (!slots.some((slot) => minuteOfDay >= slot && minuteOfDay < slot + AUTO_SYNC_WINDOW_MINUTES)) return null;
-  return ["Fri", "Sat", "Sun", "Mon"].includes(weekday) ? "laliga"
-    : ["Tue", "Wed"].includes(weekday) ? "champions" : null;
-}
-
-function competitionMatchesSchedule(name: string, schedule: "laliga" | "champions") {
-  const normalized = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  return schedule === "laliga"
-    ? normalized.includes("laliga") || normalized.includes("ligaprofesional")
-    : normalized.includes("championsleague") || normalized.includes("uefachampions");
-}
-
 async function calculateOwnRatingForMatch(supabase: ReturnType<typeof createAdminSupabaseClient>, matchId: number, match: SyncMatch) {
-  const { data: run, error: runError } = await supabase.from("own_rating_runs")
-    .select("id,stage_ids,position_models,model_version")
-    .eq("season_id", match.season_id).eq("competition_id", match.competition_id)
-    .is("evaluation_source_run_id", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (runError) throw new Error(`No se pudo cargar el modelo de valoración: ${runError.message}`);
-  if (!run || !Array.isArray(run.stage_ids) || run.stage_ids.length < 11 || run.model_version !== OWN_RATING_MODEL_VERSION) {
-    return { calculated: 0, reason: "Aún no hay un modelo entrenado con las jornadas 1–11." };
-  }
   const [participationsResult, positionsResult] = await Promise.all([
     supabase.from("participations").select("id,match_id,player_id,position_id,minutes_played").eq("match_id", matchId),
     supabase.from("positions").select("id,name,short_name"),
@@ -81,42 +31,76 @@ async function calculateOwnRatingForMatch(supabase: ReturnType<typeof createAdmi
   const participations = participationsResult.data ?? [];
   const ids = participations.map((row) => Number(row.id));
   if (!ids.length) return { calculated: 0, reason: "El partido no contiene participaciones." };
-  const [statsResult, externalResult] = await Promise.all([
-    supabase.from("player_match_stats").select("*").in("participation_id", ids),
-    supabase.from("match_ratings").select("participation_id,external_average").in("participation_id", ids),
-  ]);
-  if (statsResult.error || externalResult.error) throw new Error(statsResult.error?.message ?? externalResult.error?.message);
+  const statsResult = await supabase.from("player_match_stats").select("*").in("participation_id", ids);
+  if (statsResult.error) throw new Error(statsResult.error.message);
   const statsByParticipation = new Map((statsResult.data ?? []).map((row) => [Number(row.participation_id), row]));
-  const externalByParticipation = new Map((externalResult.data ?? []).filter((row) => row.external_average != null).map((row) => [Number(row.participation_id), Number(row.external_average)]));
   const positionById = new Map((positionsResult.data ?? []).map((row) => [Number(row.id), String(row.name)]));
-  const samples: OwnRatingSample[] = participations.flatMap((participation) => {
+  const ratings = participations.flatMap((participation) => {
     const stats = statsByParticipation.get(Number(participation.id));
-    const positionId = Number(participation.position_id);
-    const positionName = positionById.get(positionId);
-    if (!stats || !positionName) return [];
-    return [{
-      participationId: Number(participation.id), playerId: Number(participation.player_id), matchId,
-      positionId, positionName, stageNumber: 0, minutesPlayed: Number(participation.minutes_played) || 0,
-      externalAverage: externalByParticipation.get(Number(participation.id)) ?? null,
+    const positionName = positionById.get(Number(participation.position_id));
+    if (!stats || !positionName || Number(participation.minutes_played) <= 0) return [];
+    const ownRating = calculateOwnRatingFromStats({
+      positionName,
+      minutesPlayed: Number(participation.minutes_played) || 0,
       stats: Object.fromEntries(["goals", "assists", "shots", "shots_on_target", "dribbles_completed", "duels_won", "tackles", "recoveries", "saves", "passes_completed", "yellow_cards", "red_cards"].map((key) => [key, Number(stats[key]) || 0])),
-    }];
+    });
+    return ownRating == null ? [] : [{ participation, positionName, ownRating }];
   });
-  if (!samples.length) return { calculated: 0, reason: "No hay estadísticas suficientes para puntuar este partido." };
-  const prediction = predictWithStoredModels(samples, run.position_models as Parameters<typeof predictWithStoredModels>[1]);
-  const ownRows = prediction.ratings.map((row) => ({
-    run_id: run.id, participation_id: row.participationId, match_id: matchId, player_id: row.playerId,
-    position_id: row.positionId, own_rating: row.ownRating, external_average: row.externalAverage,
-    absolute_error: row.absoluteError, calculation_version: OWN_RATING_MODEL_VERSION,
+  if (!ratings.length) return { calculated: 0, reason: "No hay participaciones con minutos y estadísticas de Highlightly." };
+
+  const { data: existingRun, error: existingRunError } = await supabase.from("own_rating_runs")
+    .select("id,rated_samples").eq("season_id", match.season_id).eq("competition_id", match.competition_id)
+    .eq("model_version", OWN_RATING_MODEL_VERSION).is("evaluation_source_run_id", null)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (existingRunError) throw new Error(`No se pudo consultar la ejecución V90: ${existingRunError.message}`);
+  let runId = existingRun?.id;
+  if (!runId) {
+    const runResult = await supabase.from("own_rating_runs").insert({
+      season_id: match.season_id,
+      competition_id: match.competition_id,
+      model_version: OWN_RATING_MODEL_VERSION,
+      stage_ids: [],
+      training_samples: 0,
+      rated_samples: ratings.length,
+      position_models: { method: "position-weighted-highlightly-statistics", baseline: 6, externalRatingsUsed: false },
+    }).select("id").single();
+    if (runResult.error) throw new Error(`No se pudo registrar el cálculo V90: ${runResult.error.message}`);
+    runId = runResult.data.id;
+  }
+  const ownRows = ratings.map(({ participation, ownRating }) => ({
+    run_id: runId,
+    participation_id: Number(participation.id),
+    match_id: matchId,
+    player_id: Number(participation.player_id),
+    position_id: Number(participation.position_id),
+    own_rating: ownRating,
+    external_average: null,
+    absolute_error: null,
+    calculation_version: OWN_RATING_MODEL_VERSION,
   }));
   const savedOwn = await supabase.from("own_match_ratings").upsert(ownRows, { onConflict: "run_id,participation_id" });
-  if (savedOwn.error) throw new Error(`No se pudo guardar la valoración propia: ${savedOwn.error.message}`);
-  const finalRows = prediction.ratings.map((row) => ({
-    match_id: matchId, player_id: row.playerId, participation_id: row.participationId,
-    final_match_rating: row.ownRating, calculation_version: OWN_RATING_MODEL_VERSION, calculated_at: new Date().toISOString(),
+  if (savedOwn.error) throw new Error(`No se pudo guardar la valoración estadística: ${savedOwn.error.message}`);
+  const { count: savedRatingCount, error: countError } = await supabase.from("own_match_ratings")
+    .select("id", { count: "exact", head: true }).eq("run_id", runId);
+  if (countError) throw new Error(`No se pudo contar el histórico de valoraciones: ${countError.message}`);
+  const updatedRun = await supabase.from("own_rating_runs").update({
+    rated_samples: savedRatingCount ?? 0,
+    position_models: { method: "position-weighted-highlightly-statistics", baseline: 6, externalRatingsUsed: false },
+  }).eq("id", runId);
+  if (updatedRun.error) throw new Error(`No se pudo actualizar la ejecución V90: ${updatedRun.error.message}`);
+  const finalRows = ratings.map(({ participation, ownRating }) => ({
+    match_id: matchId,
+    player_id: Number(participation.player_id),
+    participation_id: Number(participation.id),
+    final_match_rating: ownRating,
+    calculation_version: OWN_RATING_MODEL_VERSION,
+    calculated_at: new Date().toISOString(),
   }));
   const savedFinal = await supabase.from("match_ratings").upsert(finalRows, { onConflict: "participation_id" });
-  if (savedFinal.error) throw new Error(`No se pudo actualizar la columna de valoración final: ${savedFinal.error.message}`);
-  return { calculated: finalRows.length };
+  if (savedFinal.error) throw new Error(`No se pudo actualizar la valoración final: ${savedFinal.error.message}`);
+  const v90 = await calculateV90Stage([matchId], supabase);
+  if (!v90.success && v90.status === "ERROR") throw new Error(`V90 estadístico guardado, pero falló el cálculo contextual: ${v90.message}`);
+  return { calculated: ratings.length, v90Calculated: v90.matches.reduce((sum, row) => sum + row.calculated, 0), v90Pending: v90.matches.reduce((sum, row) => sum + row.pending, 0) };
 }
 
 function normalize(value: string | null | undefined) {
@@ -328,9 +312,7 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
   const detail = matchRecord as HighlightlyMatch & { events?: HighlightlyEvent[] };
   const state = detail.state?.description ?? "Unknown";
   if (!isTerminal(state)) {
-    const attempts = Number(mapping.result_attempts ?? 0);
-    const canRetry = attempts < MAX_RESULT_ATTEMPTS;
-    const retry = await supabase.from("external_match_mappings").update({ result_attempts: attempts, next_result_sync_at: canRetry ? new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString() : null, last_sync_error: canRetry ? `El proveedor aún indica «${state}»; volveré a consultar en 5 minutos.` : `El proveedor aún indica «${state}» después de ${MAX_RESULT_ATTEMPTS} comprobaciones. Requiere revisión manual.`, updated_at: new Date().toISOString() })
+    const retry = await supabase.from("external_match_mappings").update({ next_result_sync_at: null, last_sync_error: `Highlightly aún indica «${state}». Reintenta manualmente cuando el partido haya finalizado.`, updated_at: new Date().toISOString() })
       .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
     if (retry.error) throw new Error(retry.error.message);
     return { matchId: mapping.match_id, waiting: true, callsRemaining, callsLimit };
@@ -540,86 +522,40 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
 }
 
 export async function POST(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const validCron = Boolean(secret && request.headers.get("authorization") === `Bearer ${secret}`);
-  if (!validCron) {
-    const sessionClient = await createClient();
-    const { data: { user } } = await sessionClient.auth.getUser();
-    if (!user) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
-  }
+  const sessionClient = await createClient();
+  const { data: { user } } = await sessionClient.auth.getUser();
+  if (!user) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   if (!process.env.SUPABASE_SECRET_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
   try {
     const body = await request.json().catch(() => ({})) as { matchId?: number | string };
     const manualMatchId = body.matchId == null ? null : Number(body.matchId);
-    if (manualMatchId != null && (!Number.isSafeInteger(manualMatchId) || manualMatchId <= 0)) {
-      return NextResponse.json({ error: "El partido seleccionado no es válido." }, { status: 400 });
+    if (manualMatchId == null || !Number.isSafeInteger(manualMatchId) || manualMatchId <= 0) {
+      return NextResponse.json({ error: "Selecciona un partido para sincronizar manualmente." }, { status: 400 });
     }
     const supabase = createAdminSupabaseClient();
-    const cronCompetition = validCron && manualMatchId == null ? scheduledCompetitionForNow(new Date()) : null;
-    if (validCron && manualMatchId == null && !cronCompetition) {
-      return NextResponse.json({ ok: true, scheduled: true, skipped: "Fuera del horario automático configurado para Europe/Madrid." });
-    }
     const { data: mappings, error } = await supabase.from("external_match_mappings")
       .select("provider,external_match_id,match_id,lineup_synced_at,final_synced_at,next_result_sync_at,result_attempts,last_sync_error,match:matches!inner(id,date,status,season_id,competition_id,home_team_id,away_team_id)")
       .eq("provider", "highlightly").order("external_match_id", { ascending: true }).limit(1000);
     if (error) throw error;
-    let candidates = manualMatchId == null ? mappings ?? [] : (mappings ?? []).filter((item) => Number(item.match_id) === manualMatchId);
-    if (validCron && manualMatchId == null && cronCompetition && candidates.length) {
-      const competitionIds = [...new Set(candidates.map((item) => {
-        const match = Array.isArray(item.match) ? item.match[0] : item.match;
-        return Number(match?.competition_id);
-      }).filter(Number.isFinite))];
-      const competitions = competitionIds.length
-        ? await supabase.from("competitions").select("id,name").in("id", competitionIds)
-        : { data: [], error: null };
-      if (competitions.error) throw competitions.error;
-      const scheduledIds = new Set((competitions.data ?? [])
-        .filter((competition) => competitionMatchesSchedule(String(competition.name ?? ""), cronCompetition))
-        .map((competition) => Number(competition.id)));
-      candidates = candidates.filter((item) => {
-        const match = Array.isArray(item.match) ? item.match[0] : item.match;
-        return scheduledIds.has(Number(match?.competition_id));
-      });
-      if (!candidates.length) {
-        return NextResponse.json({ ok: true, scheduled: true, competition: cronCompetition, processed: 0, message: "No hay partidos importados de esta competición para sincronizar." });
-      }
-    }
+    const candidates = (mappings ?? []).filter((item) => Number(item.match_id) === manualMatchId);
     if (manualMatchId != null && !candidates.length) {
       return NextResponse.json({ error: "Este partido no está asociado a Highlightly. Impórtalo primero desde su fecha." }, { status: 404 });
     }
-    const now = Date.now();
     const results: Array<Record<string, unknown>> = [];
     for (const mapping of candidates) {
       const match = Array.isArray(mapping.match) ? mapping.match[0] : mapping.match;
       if (!match) continue;
-      const kickoff = new Date(match.date).getTime();
-      const resultDue = manualMatchId != null || (!mapping.final_synced_at && Number(mapping.result_attempts ?? 0) < MAX_RESULT_ATTEMPTS
-        && kickoff + 105 * 60_000 <= now && now <= kickoff + MAX_RESULT_AUTO_AGE_MS
-        && (!mapping.next_result_sync_at || new Date(mapping.next_result_sync_at).getTime() <= now));
-      if (resultDue) {
-        const claimedAttempts = Number(mapping.result_attempts ?? 0) + 1;
-        const claim = await supabase.from("external_match_mappings").update({
-          result_attempts: claimedAttempts,
-          next_result_sync_at: new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString(),
-          last_sync_error: null,
-          updated_at: new Date().toISOString(),
-        }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
-        if (claim.error) throw claim.error;
-        const claimedMapping = { ...mapping, result_attempts: claimedAttempts };
-        try {
-          results.push({ phase: "resultado-final-y-participaciones", ...await syncResult(supabase, claimedMapping, match) });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Error sincronizando resultado.";
-          const canRetry = claimedAttempts < MAX_RESULT_ATTEMPTS;
-          await supabase.from("external_match_mappings").update({ next_result_sync_at: canRetry ? new Date(Date.now() + RESULT_RETRY_DELAY_MS).toISOString() : null, last_sync_error: canRetry ? message : `${message} Se agotaron ${MAX_RESULT_ATTEMPTS} intentos; requiere revisión manual.`, updated_at: new Date().toISOString() }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
-          results.push({ phase: "resultado", matchId: mapping.match_id, error: message });
-        }
-        if (manualMatchId == null) break;
+      try {
+        results.push({ phase: "resultado-final-y-participaciones", ...await syncResult(supabase, mapping, match) });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Error sincronizando resultado.";
+        await supabase.from("external_match_mappings").update({ last_sync_error: message, updated_at: new Date().toISOString() }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
+        results.push({ phase: "resultado", matchId: mapping.match_id, error: message });
       }
     }
-    return NextResponse.json({ ok: true, manual: manualMatchId != null, checked: candidates.length, processed: results.length, results });
+    return NextResponse.json({ ok: true, manual: true, checked: candidates.length, processed: results.length, results });
   } catch (error) {
     console.error("Error en sincronización automática Highlightly:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Error en sincronización." }, { status: 500 });

@@ -31,6 +31,12 @@ async function adminClient() {
 }
 
 export async function POST() {
+  if (process.env.ENABLE_EXTERNAL_RATINGS !== "true") {
+    return NextResponse.json({
+      error: "La evaluación contra notas externas está desactivada. V90 utiliza exclusivamente estadísticas individuales de Highlightly.",
+      externalRatingsDisabled: true,
+    }, { status: 410 });
+  }
   try {
     const supabase = await adminClient();
     const [seasonsResult, competitionsResult] = await Promise.all([

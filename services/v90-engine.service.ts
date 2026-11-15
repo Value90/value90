@@ -51,6 +51,7 @@ interface MatchRatingRow {
   player_id: number;
   participation_id: number;
   external_average: number | null;
+  final_match_rating?: number | null;
 }
 
 interface CompetitionWeightRow {
@@ -299,7 +300,8 @@ async function getMatchRatingByParticipation(
       match_id,
       player_id,
       participation_id,
-      external_average
+      external_average,
+      final_match_rating
       `
     )
     .eq("participation_id", participationId)
@@ -422,7 +424,8 @@ async function getPlayerPreviousV90(
 async function loadMatchesByIds(
   matchIds: number[],
   seasonId?: number,
-  beforeDate?: string
+  beforeDate?: string,
+  client: typeof supabase = supabase,
 ): Promise<MatchRow[]> {
   if (matchIds.length === 0) {
     return [];
@@ -432,7 +435,7 @@ async function loadMatchesByIds(
   const results: MatchRow[] = [];
 
   for (const ids of chunk(uniqueIds)) {
-    let query = supabase
+    let query = client
       .from("matches")
       .select(
         `
@@ -624,7 +627,8 @@ export async function calculatePlayerV90Match(
 
     const matchRating = await getMatchRatingByParticipation(participationId);
 
-    if (!matchRating || matchRating.external_average === null) {
+    const ratingValue = matchRating?.final_match_rating ?? matchRating?.external_average ?? null;
+    if (!matchRating || ratingValue === null) {
       return pendingResult(
         participationId,
         participation.player_id,
@@ -635,7 +639,7 @@ export async function calculatePlayerV90Match(
       );
     }
 
-    const externalAverage = toNumber(matchRating.external_average);
+    const externalAverage = toNumber(ratingValue);
     const competitionWeight = await getCompetitionWeight(match.competition_id);
 
     if (competitionWeight === null) {
@@ -907,7 +911,8 @@ function pendingResult(
  */
 
 export async function calculateV90Stage(
-  matchIds: number[]
+  matchIds: number[],
+  client: typeof supabase = supabase,
 ): Promise<V90StageCalculationResult> {
   const startedAt = Date.now();
 
@@ -928,7 +933,7 @@ export async function calculateV90Stage(
      * 1. PARTIDOS DE LA JORNADA
      * ---------------------------------------------------------- */
 
-    const stageMatches = await loadMatchesByIds(uniqueStageMatchIds);
+    const stageMatches = await loadMatchesByIds(uniqueStageMatchIds, undefined, undefined, client);
 
     if (stageMatches.length !== uniqueStageMatchIds.length) {
       return {
@@ -999,7 +1004,7 @@ export async function calculateV90Stage(
       participationWeightsData,
       rivalWeightsData,
     ] = await Promise.all([
-      supabase
+      client
         .from("matches")
         .select(
           `
@@ -1016,16 +1021,16 @@ export async function calculateV90Stage(
         )
         .eq("season_id", seasonId)
         .order("date", { ascending: true }),
-      supabase
+      client
         .from("competition_weights")
         .select("competition_id, peso_v90, active")
         .eq("active", true),
-      supabase
+      client
         .from("participation_weights")
         .select("id, min_minutes, max_minutes, peso_v90, active")
         .eq("active", true)
         .order("min_minutes", { ascending: true }),
-      supabase
+      client
         .from("rival_weights")
         .select(
           "id, classification, min_difference, max_difference, peso_v90, active"
@@ -1072,7 +1077,7 @@ export async function calculateV90Stage(
     for (const ids of chunk(seasonMatchIds)) {
       const [participationsResponse, ratingsResponse, factsResponse] =
         await Promise.all([
-          supabase
+          client
             .from("participations")
             .select(
               `
@@ -1090,7 +1095,7 @@ export async function calculateV90Stage(
               `
             )
             .in("match_id", ids),
-          supabase
+          client
             .from("match_ratings")
             .select(
               `
@@ -1098,11 +1103,12 @@ export async function calculateV90Stage(
               match_id,
               player_id,
               participation_id,
-              external_average
+                external_average,
+                final_match_rating
               `
             )
             .in("match_id", ids),
-          supabase
+          client
             .from("fact_player_v90_match")
             .select(
               `
@@ -1159,7 +1165,7 @@ export async function calculateV90Stage(
     for (const ids of chunk(uniqueStageMatchIds)) {
       const [stageParticipationsResponse, stageRatingsResponse] =
         await Promise.all([
-          supabase
+          client
             .from("participations")
             .select(
               `
@@ -1177,7 +1183,7 @@ export async function calculateV90Stage(
               `
             )
             .in("match_id", ids),
-          supabase
+          client
             .from("match_ratings")
             .select(
               `
@@ -1185,7 +1191,8 @@ export async function calculateV90Stage(
               match_id,
               player_id,
               participation_id,
-              external_average
+              external_average,
+              final_match_rating
               `
             )
             .in("match_id", ids),
@@ -1266,7 +1273,10 @@ export async function calculateV90Stage(
     }
 
     for (const rating of matchRatings) {
-      ratingByParticipation.set(rating.participation_id, rating);
+      ratingByParticipation.set(rating.participation_id, {
+        ...rating,
+        external_average: rating.final_match_rating ?? rating.external_average,
+      });
     }
 
     for (const weight of competitionWeights) {
@@ -1796,7 +1806,7 @@ export async function calculateV90Stage(
         active: true,
       }));
 
-      const { error } = await supabase
+      const { error } = await client
         .from("fact_player_v90_match")
         .upsert(payload, { onConflict: "participation_id" });
 

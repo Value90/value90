@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getHighlightlyMatches, type HighlightlyMatch } from "@/lib/highlightly.server";
 
 export const runtime = "nodejs";
@@ -202,13 +201,9 @@ async function fetchMatchesForDates(leagueId: number, seasonYear: number, dates:
 
 export async function POST(request: NextRequest) {
   try {
-    const cronSecret = process.env.CRON_SECRET;
-    const validCron = Boolean(cronSecret && request.headers.get("authorization") === `Bearer ${cronSecret}`);
-    const supabase = validCron ? createAdminSupabaseClient() : await createClient();
-    if (!validCron) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return NextResponse.json({ error: "Inicia sesión para importar partidos." }, { status: 401 });
-    }
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Inicia sesión para importar partidos." }, { status: 401 });
 
     const input = await request.json().catch(() => null) as {
       competition?: string; mode?: string; round?: number; startDate?: string; endDate?: string; seasonYear?: number;

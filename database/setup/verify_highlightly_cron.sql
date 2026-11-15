@@ -1,31 +1,13 @@
--- Read-only diagnostic. Always returns one row and never reveals secret values.
-WITH cron_status AS (
-  SELECT
-    bool_or(active AND schedule = '* * * * *') AS active_on_expected_schedule,
-    max(schedule) AS schedule,
-    bool_or(active AND schedule = '* * * * *' AND position('timeout_milliseconds := 120000' in command) > 0) AS timeout_configured
-  FROM cron.job
-  WHERE jobname = 'value90-highlightly-match-sync'
-), vault_status AS (
-  SELECT
-    coalesce(bool_or(name = 'value90_app_url' AND length(btrim(decrypted_secret)) > 0), false) AS app_url_configured,
-    coalesce(bool_or(name = 'value90_sports_cron_secret' AND length(btrim(decrypted_secret)) > 0), false) AS cron_secret_configured
-  FROM vault.decrypted_secrets
-  WHERE name IN ('value90_app_url', 'value90_sports_cron_secret')
-)
+-- Read-only check: manual Highlightly sync should have no scheduled job.
 SELECT
-  coalesce(cron_status.active_on_expected_schedule, false) AS cron_job_ready,
-  cron_status.schedule,
-  coalesce(cron_status.timeout_configured, false) AS request_timeout_configured,
-  vault_status.app_url_configured,
-  vault_status.cron_secret_configured,
-  CASE
-    WHEN coalesce(cron_status.active_on_expected_schedule, false)
-      AND coalesce(cron_status.timeout_configured, false)
-      AND vault_status.app_url_configured
-      AND vault_status.cron_secret_configured
-    THEN 'ready'
-    ELSE 'not_ready'
-  END AS status
-FROM cron_status
-CROSS JOIN vault_status;
+  count(*) FILTER (
+    WHERE jobname = 'value90-highlightly-match-sync'
+       OR lower(jobname) ~ '(highlightly.*(sync|result|match)|sports.*sync)'
+       OR lower(command) LIKE '%/api/admin/sports/sync%'
+  ) AS remaining_highlightly_sync_jobs,
+  CASE WHEN count(*) FILTER (
+    WHERE jobname = 'value90-highlightly-match-sync'
+       OR lower(jobname) ~ '(highlightly.*(sync|result|match)|sports.*sync)'
+       OR lower(command) LIKE '%/api/admin/sports/sync%'
+  ) = 0 THEN 'manual_only' ELSE 'scheduled_job_found' END AS status
+FROM cron.job;
