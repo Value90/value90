@@ -26,11 +26,39 @@ interface HighlightlyProgressMatch {
   pendingV90: boolean;
   participationCount: number;
   missingStats: number;
+  missingPlayers: Array<{ participationId: number; playerId: number; playerName: string; teamName: string; shirtNumber: number | null; minutesPlayed: number; isStartingXi: boolean }>;
   pendingMatchData: boolean;
   pendingStats: boolean;
   pending: boolean;
   lastSyncError: string | null;
   lastSyncedAt: string | null;
+}
+
+const manualStatFields = [
+  ["goals", "Goles"], ["assists", "Asistencias"], ["shots", "Tiros"], ["shots_on_target", "A puerta"],
+  ["dribbles", "Regates"], ["dribbles_completed", "Regates completados"], ["duels", "Duelos"], ["duels_won", "Duelos ganados"],
+  ["tackles", "Entradas"], ["recoveries", "Recuperaciones"], ["saves", "Paradas"], ["passes", "Pases"],
+  ["passes_completed", "Pases completados"], ["yellow_cards", "Amarillas"], ["red_cards", "Rojas"],
+] as const;
+
+function ManualStatsForm({ player, busy, onSave }: {
+  player: HighlightlyProgressMatch["missingPlayers"][number];
+  busy: boolean;
+  onSave: (participationId: number, stats: Record<string, number>) => Promise<void>;
+}) {
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(manualStatFields.map(([key]) => [key, "0"])));
+  return <form className="mt-3 rounded-lg border border-slate-200 bg-white p-3" onSubmit={(event) => {
+    event.preventDefault();
+    void onSave(player.participationId, Object.fromEntries(manualStatFields.map(([key]) => [key, Number(values[key] || 0)])));
+  }}>
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      {manualStatFields.map(([key, label]) => <label key={key} className="text-xs font-medium text-slate-600">{label}
+        <input type="number" min="0" step="1" required value={values[key]} onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 min-h-9 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" />
+      </label>)}
+    </div>
+    <button type="submit" disabled={busy} className="mt-3 min-h-10 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60">{busy ? "Guardando y calculando…" : "Guardar estadísticas y calcular V90"}</button>
+    <span className="ml-3 text-xs text-slate-500">No consume llamadas de Highlightly.</span>
+  </form>;
 }
 
 interface Props {
@@ -51,6 +79,7 @@ export default function HighlightlyProgress({ seasonId, competitionId, stageId }
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busyMatchId, setBusyMatchId] = useState<number | null>(null);
+  const [busyParticipationId, setBusyParticipationId] = useState<number | null>(null);
   const [onlyPending, setOnlyPending] = useState(true);
 
   const loadProgress = useCallback(async () => {
@@ -102,6 +131,47 @@ export default function HighlightlyProgress({ seasonId, competitionId, stageId }
     }
   }
 
+  async function saveManualStats(participationId: number, stats: Record<string, number>) {
+    setBusyParticipationId(participationId);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/admin/sports/manual-stats", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ participationId, stats }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "No se pudieron guardar las estadísticas.");
+      const result = payload.recalculation;
+      setNotice(`Estadísticas guardadas. Valoración propia: ${Number(result?.calculated ?? 0)}; V90 calculado: ${Number(result?.v90Calculated ?? 0)}; V90 pendiente: ${Number(result?.v90Pending ?? 0)}. No se usaron llamadas de Highlightly.`);
+      await loadProgress();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "No se pudieron guardar las estadísticas.");
+    } finally {
+      setBusyParticipationId(null);
+    }
+  }
+
+  async function recalculate(match: HighlightlyProgressMatch) {
+    setBusyMatchId(match.id);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/admin/sports/manual-stats", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "recalculate", matchId: match.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "No se pudo recalcular el V90.");
+      const result = payload.recalculation;
+      const reasons = Array.isArray(result?.pendingReasons) ? result.pendingReasons.join("; ") : "";
+      setNotice(`Recalculado sin llamadas a Highlightly. Valoraciones propias: ${Number(result?.calculated ?? 0)}; V90 calculado: ${Number(result?.v90Calculated ?? 0)}; pendiente: ${Number(result?.v90Pending ?? 0)}.${reasons ? ` Motivo pendiente: ${reasons}` : ""}`);
+      await loadProgress();
+    } catch (recalcError) {
+      setError(recalcError instanceof Error ? recalcError.message : "No se pudo recalcular el V90.");
+    } finally {
+      setBusyMatchId(null);
+    }
+  }
+
   return (
     <section className="space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -143,7 +213,8 @@ export default function HighlightlyProgress({ seasonId, competitionId, stageId }
                       ? `${match.missingStats} participación(es) sin estadísticas`
                       : `Cálculo V90 pendiente: ${match.v90Pending} pendiente(s), ${match.v90Errors} error(es), ${match.v90Calculated} calculada(s)`;
               return (
-                <article key={match.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                <article key={match.id} className="flex flex-col gap-3 p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500"><span>{match.competitionName}</span><span>·</span><span>{match.stageName}</span><span>·</span><span>{dateTime.format(new Date(match.date))}</span></div>
                     <h3 className="mt-1 font-bold text-slate-800">{match.homeTeamName} {match.homeScore}–{match.awayScore} {match.awayTeamName}</h3>
@@ -160,6 +231,23 @@ export default function HighlightlyProgress({ seasonId, competitionId, stageId }
                       {busyMatchId === match.id ? "Importando…" : "Reintentar importación"}
                     </button>
                   ) : <span className="shrink-0 rounded-lg bg-slate-100 px-3 py-2 text-center text-xs font-semibold text-slate-600">Importa o vincula el partido primero</span>}
+                  </div>
+                  {match.missingPlayers?.length > 0 && match.pendingStats && (
+                    <details className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-amber-950">Ver jugadores sin estadísticas ({match.missingPlayers.length}) y completarlas manualmente</summary>
+                      <div className="mt-3 space-y-3">
+                        {match.missingPlayers.map((player) => <div key={player.participationId} className="rounded-lg border border-amber-100 bg-white p-3">
+                          <div className="font-semibold text-slate-800">{player.playerName}{player.shirtNumber != null ? ` · #${player.shirtNumber}` : ""} <span className="font-normal text-slate-600">— {player.teamName}, {player.minutesPlayed} min, {player.isStartingXi ? "titular" : "suplente"}</span></div>
+                          <ManualStatsForm player={player} busy={busyParticipationId === player.participationId || busyParticipationId !== null} onSave={saveManualStats} />
+                        </div>)}
+                      </div>
+                    </details>
+                  )}
+                  {match.pendingV90 && match.statsComplete && match.hasHighlightlyMapping && (
+                    <button type="button" onClick={() => void recalculate(match)} disabled={busyMatchId !== null || busyParticipationId !== null || loading} className="min-h-10 w-full rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-900 hover:bg-indigo-100 disabled:opacity-60 sm:w-auto">
+                      {busyMatchId === match.id ? "Recalculando…" : "Recalcular valoraciones sin llamada"}
+                    </button>
+                  )}
                 </article>
               );
             })}

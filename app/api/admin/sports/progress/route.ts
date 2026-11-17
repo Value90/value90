@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         .eq("provider", "highlightly").in("match_id", ids).order("match_id").range(from, to))))
         .then((pages) => pages.flat()),
       Promise.all(matchBatches.map((ids) => readAll((from, to) => supabase.from("participations")
-        .select("id,match_id,is_starting_xi,minutes_played").in("match_id", ids).order("id").range(from, to))))
+        .select("id,match_id,player_id,team_id,shirt_number,is_starting_xi,minutes_played").in("match_id", ids).order("id").range(from, to))))
         .then((pages) => pages.flat()),
     ]);
     const participationIds = participations.map((item) => Number(item.id));
@@ -68,9 +68,11 @@ export async function GET(request: NextRequest) {
       .then((pages) => pages.flat());
 
     const teamIds = [...new Set(matches.flatMap((item) => [Number(item.home_team_id), Number(item.away_team_id)]))];
+    const playerIds = [...new Set(participations.map((item) => Number(item.player_id)))];
     const stageIds = [...new Set(matches.map((item) => Number(item.stage_id)))];
-    const [teams, stages, competitions, seasons] = await Promise.all([
+    const [teams, players, stages, competitions, seasons] = await Promise.all([
       Promise.all(chunks(teamIds).map((ids) => supabase.from("teams").select("id,name").in("id", ids))).then((results) => results.flatMap((item) => { if (item.error) throw new Error(item.error.message); return item.data ?? []; })),
+      Promise.all(chunks(playerIds).map((ids) => supabase.from("players").select("id,name,short_name").in("id", ids))).then((results) => results.flatMap((item) => { if (item.error) throw new Error(item.error.message); return item.data ?? []; })),
       Promise.all(chunks(stageIds).map((ids) => supabase.from("stages").select("id,name").in("id", ids))).then((results) => results.flatMap((item) => { if (item.error) throw new Error(item.error.message); return item.data ?? []; })),
       Promise.all(chunks([...new Set(matches.map((item) => Number(item.competition_id)))]).map((ids) => supabase.from("competitions").select("id,name").in("id", ids)))
         .then((results) => results.flatMap((item) => { if (item.error) throw new Error(item.error.message); return item.data ?? []; })),
@@ -79,6 +81,7 @@ export async function GET(request: NextRequest) {
     if (seasons.error) throw new Error(seasons.error.message);
 
     const teamsById = new Map(teams.map((item) => [Number(item.id), item.name]));
+    const playersById = new Map(players.map((item) => [Number(item.id), item]));
     const stagesById = new Map(stages.map((item) => [Number(item.id), item.name]));
     const mappingsByMatch = new Map(mappings.map((item) => [Number(item.match_id), item]));
     const participationsByMatch = new Map<number, typeof participations>();
@@ -101,7 +104,8 @@ export async function GET(request: NextRequest) {
       const id = Number(match.id);
       const mapping = mappingsByMatch.get(id) ?? null;
       const appearanceRows = (participationsByMatch.get(id) ?? []).filter((item) => item.is_starting_xi || Number(item.minutes_played) > 0);
-      const missingStats = appearanceRows.filter((item) => !statsByParticipation.has(Number(item.id))).length;
+      const missingStatRows = appearanceRows.filter((item) => !statsByParticipation.has(Number(item.id)));
+      const missingStats = missingStatRows.length;
       const completedStatus = ["Jugado", "Cancelado"].includes(String(match.status));
       const cancelled = String(match.status) === "Cancelado";
       const v90 = v90ByMatch.get(id) ?? null;
@@ -141,6 +145,18 @@ export async function GET(request: NextRequest) {
         pendingV90,
         participationCount: appearanceRows.length,
         missingStats,
+        missingPlayers: missingStatRows.map((item) => {
+          const player = playersById.get(Number(item.player_id));
+          return {
+            participationId: Number(item.id),
+            playerId: Number(item.player_id),
+            playerName: player?.name ?? player?.short_name ?? `Jugador #${item.player_id}`,
+            teamName: teamsById.get(Number(item.team_id)) ?? "Equipo",
+            shirtNumber: item.shirt_number == null ? null : Number(item.shirt_number),
+            minutesPlayed: Number(item.minutes_played) || 0,
+            isStartingXi: Boolean(item.is_starting_xi),
+          };
+        }),
         pendingMatchData,
         pendingStats,
         pending: pendingMatchData || pendingStats || pendingV90,
