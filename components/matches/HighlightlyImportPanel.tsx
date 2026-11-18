@@ -19,6 +19,7 @@ type QuotaState = { remaining: number | null; limit: number | null; checkedAt: s
 type ImportedMatch = { matchId: number; date: string; seasonYear?: number | null; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; competitionId: number; competition: string; stageId: number; stage: string; finalSynced: boolean; syncError: string | null; resultAttempts: number; nextAttemptAt: string | null };
 
 const QUOTA_STORAGE_KEY = "value90-highlightly-quota";
+const INCIDENTS_PER_PAGE = 10;
 
 function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -64,6 +65,8 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState<PendingPlayer[]>([]);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [incidentPage, setIncidentPage] = useState(1);
   const [players, setPlayers] = useState<Player[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [selectedPosition, setSelectedPosition] = useState<Record<string, string>>({});
@@ -96,8 +99,8 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     }
   }, []);
 
-  const loadPending = useCallback(async () => {
-    const response = await fetch("/api/admin/sports/pending-players", { cache: "no-store" });
+  const loadPending = useCallback(async (page: number) => {
+    const response = await fetch(`/api/admin/sports/pending-players?page=${page}`, { cache: "no-store" });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? "No se pudieron cargar las incidencias.");
     let rows: PendingPlayer[] = payload.pending ?? [];
@@ -111,11 +114,14 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       if (linked.ok) autoLinked += 1;
     }
     if (autoLinked) {
-      const refreshed = await fetch("/api/admin/sports/pending-players", { cache: "no-store" });
+      const refreshed = await fetch(`/api/admin/sports/pending-players?page=${page}`, { cache: "no-store" });
       const refreshedPayload = await refreshed.json();
       if (!refreshed.ok) throw new Error(refreshedPayload.error ?? "No se pudieron actualizar las incidencias.");
       rows = refreshedPayload.pending ?? [];
+      setPendingTotal(Number(refreshedPayload.total ?? rows.length));
       setMessage(`${autoLinked} jugador(es) se asignaron automáticamente: coincidían el nombre, el equipo y el dorsal.`);
+    } else {
+      setPendingTotal(Number(payload.total ?? rows.length));
     }
     setPending(rows);
     return autoLinked;
@@ -138,7 +144,6 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   }, []);
 
   useEffect(() => {
-    loadPending().catch((error) => setMessage(error instanceof Error ? error.message : "Error cargando incidencias."));
     loadPlayers().catch(() => undefined);
     loadPastMatches().catch(() => undefined);
     getPositions().then(setPositions).catch(() => undefined);
@@ -160,7 +165,11 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       }
       setSeasonOptions([...years.entries()].map(([year, name]) => ({ year, name })).sort((a, b) => b.year - a.year));
     }).catch((error) => console.error("No se pudieron cargar las temporadas para importar:", error));
-  }, [loadPending, loadPlayers, loadPastMatches]);
+  }, [loadPlayers, loadPastMatches]);
+
+  useEffect(() => {
+    loadPending(incidentPage).catch((error) => setMessage(error instanceof Error ? error.message : "Error cargando incidencias."));
+  }, [loadPending, incidentPage]);
 
   async function refreshQuota() {
     setCheckingQuota(true);
@@ -184,17 +193,18 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   const selectedCompetition = competitions.find((item) => String(item.id) === competitionId) ?? null;
   const normalizedCompetition = normalize(selectedCompetition?.name ?? "");
   const isChampions = normalizedCompetition.includes("championsleague");
+  const isPremier = normalizedCompetition.includes("premierleague");
   const isWorldCup = normalizedCompetition.includes("mundial") || normalizedCompetition.includes("worldcup");
   const isLaLiga = normalizedCompetition.includes("laliga") || normalizedCompetition.includes("primeradivision");
-  const legacyCompetitionKey = isLaLiga ? "laliga" : isChampions ? "champions" : isWorldCup ? "worldcup" : null;
+  const legacyCompetitionKey = isLaLiga ? "laliga" : isChampions ? "champions" : isPremier ? "premier" : isWorldCup ? "worldcup" : null;
   const importCompetitionPayload = legacyCompetitionKey
     ? { competition: legacyCompetitionKey }
     : { competitionId: Number(competitionId), competitionName: selectedCompetition?.name ?? "" };
   const quotaQuery = selectedCompetition && legacyCompetitionKey
     ? `competition=${legacyCompetitionKey}`
     : `competitionId=${competitionId}&competitionName=${encodeURIComponent(selectedCompetition?.name ?? "")}`;
-  const totalMatches = isLaLiga ? 380 : isChampions ? 144 : isWorldCup ? 104 : selectedCompetition?.competitionType === "League" ? 380 : 160;
-  const matchesPerRound = isLaLiga ? 10 : isChampions ? 18 : isWorldCup ? 16 : selectedCompetition?.competitionType === "League" ? 10 : 16;
+  const totalMatches = isLaLiga || isPremier ? 380 : isChampions ? 144 : isWorldCup ? 104 : selectedCompetition?.competitionType === "League" ? 380 : 160;
+  const matchesPerRound = isLaLiga || isPremier ? 10 : isChampions ? 18 : isWorldCup ? 16 : selectedCompetition?.competitionType === "League" ? 10 : 16;
   const estimatedCalls = importMode === "season"
     ? Math.ceil(totalMatches / 100) + (legacyCompetitionKey ? 0 : 1)
     : importMode === "round"
@@ -215,6 +225,12 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     return Boolean(startDate && endDate && matchDate >= startDate && matchDate <= endDate);
   }), [pastMatches, competitionId, seasonYear, importMode, round, startDate, endDate]);
   const pendingSyncMatches = useMemo(() => filteredPastMatches.filter((match) => !match.finalSynced), [filteredPastMatches]);
+  const incidentPageCount = Math.max(1, Math.ceil(pendingTotal / INCIDENTS_PER_PAGE));
+  const visibleIncidents = pending;
+
+  useEffect(() => {
+    setIncidentPage((current) => Math.min(current, incidentPageCount));
+  }, [incidentPageCount]);
 
   useEffect(() => {
     if (filteredPastMatches.some((match) => String(match.matchId) === selectedPastMatch)) return;
@@ -243,7 +259,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       }
       await loadPastMatches();
       onImported?.();
-      const autoLinked = await loadPending();
+      const autoLinked = await loadPending(incidentPage);
       setMessage(`${payload.message} Partidos guardados o vinculados: ${payload.imported}. Pendientes por equipos no asociados: ${payload.skipped}. Jugadores asignados automáticamente: ${autoLinked}.${payload.missingTeams?.length ? ` Equipos por crear/asociar: ${payload.missingTeams.join(", ")}.` : ""}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo importar el calendario.");
@@ -270,7 +286,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         setQuota(next);
         localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(next));
       }
-      await Promise.all([loadPastMatches(), loadPending()]);
+      await Promise.all([loadPastMatches(), loadPending(incidentPage)]);
       onImported?.();
       setMessage(result?.waiting
         ? "Highlightly todavía no marca el partido como finalizado. Se volverá a consultar automáticamente."
@@ -324,7 +340,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         } else break;
         setMessage(`Sincronizando partidos visibles: ${processed}/${candidates.length}. Saldo restante: ${remaining}.`);
       }
-      await Promise.all([loadPastMatches(), loadPending()]);
+      await Promise.all([loadPastMatches(), loadPending(incidentPage)]);
       onImported?.();
       const left = Math.max(0, candidates.length - processed);
       setMessage(`Lote terminado: ${processed} partido(s) sincronizado(s), ${errors} con incidencia y ${left} pendiente(s) dentro de estos filtros. Saldo estimado: ${remaining ?? "no informado"}.${left ? " Continúa cuando se restablezca o actualice la cuota." : ""}`);
@@ -351,7 +367,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo resolver la incidencia.");
-      await Promise.all([loadPending(), loadPlayers()]);
+      await Promise.all([loadPending(incidentPage), loadPlayers()]);
       onImported?.();
       setMessage(decision === "updated_existing"
         ? `${item.source_name} vinculado y ficha actualizada: ${item.team_name} · dorsal ${item.shirt_number ?? "sin dorsal"}. Se actualizaron sus participaciones y esta coincidencia se reutilizará en futuras importaciones.`
@@ -410,7 +426,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       {importMode === "round" ? <label className="block min-w-0 sm:col-span-2">
         <span className="mb-1 block text-sm font-medium text-slate-700">Jornada</span>
         <select value={round} onChange={(event) => setRound(event.target.value)} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm sm:max-w-sm">
-          {Array.from({ length: isLaLiga ? 38 : isChampions ? 8 : isWorldCup ? 3 : selectedCompetition?.competitionType === "League" ? 38 : 50 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{isChampions ? `League stage · Jornada ${value}` : `Jornada ${value}`}</option>)}
+          {Array.from({ length: isLaLiga || isPremier ? 38 : isChampions ? 8 : isWorldCup ? 3 : selectedCompetition?.competitionType === "League" ? 38 : 50 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{isChampions ? `League stage · Jornada ${value}` : `Jornada ${value}`}</option>)}
         </select>
       </label> : importMode === "dates" ? <>
         <label className="block min-w-0">
@@ -456,10 +472,11 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     </div>
     {message && <p role="status" className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{message}</p>}
 
-    {pending.length > 0 && <div className="mt-5 border-t border-slate-200 pt-4">
-      <h3 className="font-semibold text-amber-900">Incidencias de jugadores ({pending.length})</h3>
+    {pendingTotal > 0 && <div className="mt-5 border-t border-slate-200 pt-4">
+      <h3 className="font-semibold text-amber-900">Incidencias de jugadores ({pendingTotal})</h3>
       <p className="mt-1 text-sm text-slate-600">No se crean jugadores automáticamente. Revisa las coincidencias propuestas; al resolver una incidencia, esa referencia se recordará para próximas importaciones.</p>
-      <ul className="mt-3 space-y-4">{pending.map((item) => {
+      <p className="mt-2 text-xs text-slate-500">Mostrando {Math.min((incidentPage - 1) * INCIDENTS_PER_PAGE + 1, pendingTotal)}–{Math.min((incidentPage - 1) * INCIDENTS_PER_PAGE + pending.length, pendingTotal)} de {pendingTotal} incidencias.</p>
+      <ul className="mt-3 space-y-4">{visibleIncidents.map((item) => {
         const key = incidentKey(item);
         const isSaving = savingKey === key;
         const isEditing = creatingFor != null && incidentKey(creatingFor) === key;
@@ -485,7 +502,12 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
           {isEditing && <div className="mt-3 rounded-lg border border-amber-200 bg-white p-3"><p className="mb-3 text-sm text-slate-600">Completa o corrige los datos de la ficha. Al guardar, el jugador se asociará a esta plantilla y a las participaciones que correspondan.</p><PlayerForm key={item.provisional_player?.id ?? key} player={item.provisional_player ?? undefined} onCancel={() => setCreatingFor(null)} onSaved={(savedPlayer) => confirmNewPlayer(item, savedPlayer)} /></div>}
         </li>;
       })}</ul>
+      {incidentPageCount > 1 && <nav aria-label="Paginación de incidencias de jugadores" className="mt-4 flex items-center justify-center gap-3">
+        <button type="button" disabled={incidentPage <= 1} onClick={() => setIncidentPage((current) => Math.max(1, current - 1))} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold disabled:opacity-40">Anterior</button>
+        <span aria-live="polite" className="text-sm text-slate-600">Página {incidentPage} de {incidentPageCount}</span>
+        <button type="button" disabled={incidentPage >= incidentPageCount} onClick={() => setIncidentPage((current) => Math.min(incidentPageCount, current + 1))} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold disabled:opacity-40">Siguiente</button>
+      </nav>}
     </div>}
-    {!pending.length && <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">No hay incidencias de jugadores pendientes.</p>}
+    {!pendingTotal && !pending.length && <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">No hay incidencias de jugadores pendientes.</p>}
   </section>;
 }

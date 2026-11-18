@@ -55,15 +55,17 @@ export default function PublicRankings({ initialFilters, initialResult }: { init
 
   useEffect(() => {
     if (requestKey === lastRequestKey.current) return;
-    lastRequestKey.current = requestKey;
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    getPublicJson<PublicPageResult<RankedPlayer>>(new URLSearchParams(requestKey), controller.signal)
-      .then(setResult)
-      .catch((loadError: unknown) => { if (!controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : "No se pudo cargar el ranking."); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
+    const timer = window.setTimeout(() => {
+      lastRequestKey.current = requestKey;
+      getPublicJson<PublicPageResult<RankedPlayer>>(new URLSearchParams(requestKey), controller.signal)
+        .then(setResult)
+        .catch((loadError: unknown) => { if (!controller.signal.aborted) setError(loadError instanceof Error ? loadError.message : "No se pudo cargar el ranking."); })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    }, 150);
+    return () => { window.clearTimeout(timer); controller.abort(); };
   }, [requestKey]);
 
   const totalPages = Math.max(1, Math.ceil((result?.total ?? 0) / (result?.pageSize ?? 20)));

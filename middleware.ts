@@ -10,6 +10,7 @@ export async function middleware(request: NextRequest) {
     "/api/admin/sports/import",
     "/api/admin/sports/sync",
     "/api/admin/sports/sync-season",
+    "/api/admin/sports/scheduled-sync",
     "/api/admin/own-ratings/recalculate-round",
   ]);
   const cronSecret = process.env.CRON_SECRET;

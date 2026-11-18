@@ -11,6 +11,7 @@ const DEFAULT_SEASON_YEAR = 2026;
 const TARGETS = {
   laliga: { leagueId: 119924, competition: "laliga" as const, competitionName: "LaLiga", matchesPerRound: 10, totalMatches: 380 },
   champions: { leagueId: 2486, competition: "champions" as const, competitionName: "Champions League", matchesPerRound: 18, totalMatches: 144 },
+  premier: { leagueId: 33973, competition: "premier" as const, competitionName: "Premier League", matchesPerRound: 10, totalMatches: 380 },
   worldcup: { leagueId: 1635, competition: "worldcup" as const, competitionName: "Copa Mundial FIFA", matchesPerRound: 16, totalMatches: 104 },
 } as const;
 const MAX_DATE_RANGE_DAYS = 31;
@@ -21,6 +22,12 @@ const TEAM_ALIASES: Record<string, string[]> = {
   "slovan bratislava": ["ŠK Slovan Bratislava"], porto: ["FC. Oporto"], "fc porto": ["FC. Oporto"],
   napoli: ["Napoles"], espanyol: ["RCD. Espanyol"], alaves: ["Deportivo Alavés"],
   "celta de vigo": ["RC. Celta de Vigo"], lille: ["LOSC Lille"], lens: ["RC Lens"],
+  arsenal: ["Arsenal FC."], "aston villa": ["Aston Villa FC."], bournemouth: ["AFC Bournemouth"],
+  brighton: ["Brighton & Hove Albion FC."], "manchester city": ["Manchester City FC."],
+  "manchester united": ["Manchester United FC."], "newcastle united": ["Newcastle United FC."],
+  "nottingham forest": ["Nottingham Forest FC."], tottenham: ["Tottenham Hotspur FC."],
+  sunderland: ["Sunderland Association FC."], "west ham": ["West Ham United FC."],
+  wolves: ["Wolverhampton Wanderers FC."],
   fenerbahce: ["Fenerbahçe"], inter: ["Inter de Milán"], como: ["Como 1907"],
   "slavia praha": ["SK Slavia Praga"], "sabah fa": ["Sabah FK"], viking: ["Viking FK"],
   feyenoord: ["Feyenoord Rotterdam"], "aek athens fc": ["AEK Athens"], "bodø/glimt": ["Bodo/Glimt"],
@@ -50,9 +57,9 @@ function roundNumber(round: string) {
   return match ? Number(match[1]) : null;
 }
 
-function stageName(competition: "laliga" | "champions" | "worldcup" | "other", round: string) {
+function stageName(competition: "laliga" | "champions" | "premier" | "worldcup" | "other", round: string) {
   const number = roundNumber(round);
-  if (number != null && (competition === "laliga" || competition === "other" || /league\s+stage|group\s+stage/i.test(round))) return `Jornada ${number}`;
+  if (number != null && (competition === "laliga" || competition === "premier" || competition === "other" || /league\s+stage|group\s+stage/i.test(round))) return `Jornada ${number}`;
   if (competition === "worldcup") {
     const normalized = normalize(round);
     if (/roundof32|roundofthirtytwo|dieciseisavos/.test(normalized)) return "Dieciseisavos de final";
@@ -239,7 +246,7 @@ export async function POST(request: NextRequest) {
     const competitionKind = legacyTarget?.competition ?? (genericWorldCup ? "worldcup" : "other");
     let fetched: { matches: HighlightlyMatch[]; remaining: string | null; limit: string | null; requests: number; quotaExhausted: boolean };
     if (input.mode === "round") {
-      const maxRound = legacyTarget?.competition === "laliga" ? 38 : legacyTarget?.competition === "champions" ? 8 : legacyTarget?.competition === "worldcup" ? 3 : 50;
+      const maxRound = legacyTarget?.competition === "laliga" || legacyTarget?.competition === "premier" ? 38 : legacyTarget?.competition === "champions" ? 8 : legacyTarget?.competition === "worldcup" ? 3 : 50;
       if (!Number.isInteger(input.round) || Number(input.round) < 1 || Number(input.round) > maxRound) {
         return NextResponse.json({ error: `Selecciona una jornada entre 1 y ${maxRound}.` }, { status: 400 });
       }
@@ -298,6 +305,7 @@ export async function POST(request: NextRequest) {
       const name = normalize(`${item.name} ${item.short_name ?? ""}`);
       if (legacyTarget?.competition === "laliga") return name.includes("laliga") || name.includes("primeradivision");
       if (legacyTarget?.competition === "champions") return name.includes("championsleague");
+      if (legacyTarget?.competition === "premier") return name.includes("premierleague");
       return (name.includes("mundial") && name.includes("fifa")) || name.includes("worldcup");
     });
     if (!competition) throw new Error(`No se encontró la competición «${providerName}» en Value90. Créala primero en Configuración > Competiciones.`);
@@ -307,13 +315,16 @@ export async function POST(request: NextRequest) {
     if (existingMatchesResult.error) throw new Error(`No se pudieron preparar las asociaciones existentes: ${existingMatchesResult.error.message}`);
     const existingMatches = existingMatchesResult.data ?? [];
     const externalIds = targetMatches.map((match) => Number(match.id));
-    const existingMappings = new Map<number, number>();
+    const existingMappings = new Map<number, { matchId: number; finalSyncedAt: string | null; nextResultSyncAt: string | null; resultAttempts: number }>();
     for (let offset = 0; offset < externalIds.length; offset += 100) {
       const { data, error } = await supabase.from("external_match_mappings")
-        .select("external_match_id,match_id").eq("provider", "highlightly")
+        .select("external_match_id,match_id,final_synced_at,next_result_sync_at,result_attempts").eq("provider", "highlightly")
         .in("external_match_id", externalIds.slice(offset, offset + 100));
       if (error) throw new Error(`No se pudieron consultar las asociaciones de Highlightly: ${error.message}`);
-      for (const mapping of data ?? []) existingMappings.set(Number(mapping.external_match_id), Number(mapping.match_id));
+      for (const mapping of data ?? []) existingMappings.set(Number(mapping.external_match_id), {
+        matchId: Number(mapping.match_id), finalSyncedAt: mapping.final_synced_at == null ? null : String(mapping.final_synced_at),
+        nextResultSyncAt: mapping.next_result_sync_at == null ? null : String(mapping.next_result_sync_at), resultAttempts: Number(mapping.result_attempts ?? 0),
+      });
     }
 
     const imported: Array<{ round: string; home: string; away: string; date: string }> = [];
@@ -323,10 +334,10 @@ export async function POST(request: NextRequest) {
     for (const match of targetMatches) {
       let home = findTeam(teamsResult.data ?? [], match.homeTeam.name);
       let away = findTeam(teamsResult.data ?? [], match.awayTeam.name);
-      // UCL seasons contain qualifying clubs which may never have appeared
-      // in Value90. Keep these generated records inactive until an admin adds
-      // their country/stadium details; the fixtures can still be imported.
-      if (legacyTarget?.competition === "champions") {
+      // International calendars can include clubs that have not appeared in
+      // Value90 yet. Keep generated records inactive until an admin adds their
+      // country/stadium details; the fixtures can still be imported.
+      if (legacyTarget?.competition === "champions" || legacyTarget?.competition === "premier") {
         for (const [side, teamName] of [["home", match.homeTeam.name], ["away", match.awayTeam.name]] as const) {
           if ((side === "home" ? home : away) || !teamName?.trim()) continue;
           let provisional = findTeam(teamsResult.data ?? [], teamName);
@@ -360,7 +371,8 @@ export async function POST(request: NextRequest) {
         stagesResult.data?.push(stage);
       }
 
-      let localMatchId = existingMappings.get(Number(match.id));
+      const previousMapping = existingMappings.get(Number(match.id));
+      let localMatchId = previousMapping?.matchId;
       const kickoff = new Date(match.date).getTime();
       const possibleDuplicate = existingMatches.find((candidate) => Number(candidate.home_team_id) === home.id
         && Number(candidate.away_team_id) === away.id
@@ -371,7 +383,9 @@ export async function POST(request: NextRequest) {
       // so repeating a calendar import updates the original instead of cloning it.
       if (possibleDuplicate && (!localMatchId || Number(possibleDuplicate.id) < Number(localMatchId))) {
         localMatchId = Number(possibleDuplicate.id);
-        existingMappings.set(Number(match.id), localMatchId);
+        existingMappings.set(Number(match.id), previousMapping
+          ? { ...previousMapping, matchId: localMatchId }
+          : { matchId: localMatchId, finalSyncedAt: null, nextResultSyncAt: null, resultAttempts: 0 });
       }
 
       const score = parseScore(match.state?.score?.current);
@@ -399,7 +413,18 @@ export async function POST(request: NextRequest) {
       for (const team of [{ external: match.homeTeam.id, local: home.id }, { external: match.awayTeam.id, local: away.id }]) {
         teamMappings.set(Number(team.external), team.local);
       }
-      const savedMapping = await supabase.from("external_match_mappings").upsert({ provider: "highlightly", external_match_id: match.id, match_id: localMatchId }, { onConflict: "provider,external_match_id" });
+      const scheduledAt = kickoff + 2 * 60 * 60_000;
+      const shouldSchedule = !previousMapping?.finalSyncedAt && previousMapping?.resultAttempts !== 5
+        && scheduledAt >= Date.now() - 48 * 60 * 60_000;
+      const nextResultSyncAt = previousMapping?.finalSyncedAt
+        ? null
+        : previousMapping?.resultAttempts && previousMapping.resultAttempts > 0
+          ? previousMapping.nextResultSyncAt
+          : shouldSchedule ? new Date(scheduledAt).toISOString() : null;
+      const savedMapping = await supabase.from("external_match_mappings").upsert({
+        provider: "highlightly", external_match_id: match.id, match_id: localMatchId,
+        next_result_sync_at: nextResultSyncAt,
+      }, { onConflict: "provider,external_match_id" });
       if (savedMapping.error) throw new Error(`No se pudo guardar la referencia externa del partido ${match.id}: ${savedMapping.error.message}`);
       imported.push({ round: match.round, home: match.homeTeam.name, away: match.awayTeam.name, date: match.date });
     }

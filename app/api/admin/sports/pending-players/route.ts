@@ -58,17 +58,38 @@ function playerSuggestions(sourceName: string, players: Array<{ id: number; name
   }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, "es")).slice(0, 5);
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Inicia sesión para revisar jugadores." }, { status: 401 });
 
+  const requestedPage = Number(request.nextUrl.searchParams.get("page") ?? 1);
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const pageSize = 10;
+  const incidentKeys = new Map<string, { provider: string; external_player_key: string; source_name: string; created_at: string }>();
+  for (let from = 0; ; from += 1000) {
+    const keyPage = await supabase.from("external_player_mappings")
+      .select("provider,external_player_key,source_name,created_at")
+      .eq("status", "pending").order("created_at", { ascending: false }).order("external_player_key").range(from, from + 999);
+    if (keyPage.error) return NextResponse.json({ error: keyPage.error.message }, { status: 500 });
+    for (const row of keyPage.data ?? []) {
+      const key = `${row.provider}:${row.external_player_key}`;
+      if (!incidentKeys.has(key)) incidentKeys.set(key, row);
+    }
+    if ((keyPage.data ?? []).length < 1000) break;
+  }
+  const orderedKeys = [...incidentKeys.entries()].sort((a, b) => String(b[1].created_at).localeCompare(String(a[1].created_at)) || a[0].localeCompare(b[0]));
+  const total = orderedKeys.length;
+  const selectedKeys = orderedKeys.slice((page - 1) * pageSize, page * pageSize);
+  if (!selectedKeys.length) return NextResponse.json({ pending: [], total, page, pageSize });
+
+  const selectedIdentities = new Set(selectedKeys.map(([key]) => key));
   const { data: mappings, error } = await supabase.from("external_player_mappings")
     .select("provider,external_player_key,external_player_id,player_id,status,source_name,team_id,season_id,shirt_number,position_id,match_id,is_starting_xi,captain,minutes_played,substitute_in_minute,substitute_out_minute,review_decision")
-    .eq("status", "pending").order("created_at", { ascending: false }).limit(500);
+    .eq("status", "pending").in("external_player_key", selectedKeys.map(([, row]) => row.external_player_key)).order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const rows = mappings ?? [];
-  if (!rows.length) return NextResponse.json({ pending: [] });
+  const rows = (mappings ?? []).filter((row) => selectedIdentities.has(`${row.provider}:${row.external_player_key}`));
+  if (!rows.length) return NextResponse.json({ pending: [], total, page, pageSize });
 
   const teamIds = [...new Set(rows.map((row) => Number(row.team_id)))];
   const matchIds = [...new Set(rows.map((row) => Number(row.match_id)))];
@@ -200,7 +221,7 @@ export async function GET() {
       _key: groupKey,
     };
   });
-  return NextResponse.json({ pending });
+  return NextResponse.json({ pending, total, page, pageSize });
 }
 
 export async function POST(request: NextRequest) {

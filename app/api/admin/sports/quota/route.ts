@@ -5,7 +5,7 @@ import { getHighlightlyLeagues, getHighlightlyMatches } from "@/lib/highlightly.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const LEAGUES = { laliga: 119924, champions: 2486, worldcup: 1635 } as const;
+const LEAGUES = { laliga: 119924, champions: 2486, premier: 33973, worldcup: 1635 } as const;
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
 
 function madridToday() {

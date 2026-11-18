@@ -10,9 +10,9 @@ La configuración de producción se administra en Vercel > Project > Settings > 
 
 ## Sincronización de partidos
 
-La importación de calendario y la consulta de resultado, alineaciones, minutos y estadísticas se hacen manualmente desde el administrador. Al sincronizar un partido finalizado, el sistema calcula la nota propia desde las estadísticas, actualiza la columna de valoración final y ejecuta el cálculo V90. No es necesario configurar `CRON_SECRET`, Vault ni un cron de Highlightly.
+La consulta automática de resultado, alineaciones, minutos y estadísticas está disponible para LaLiga, Premier League y Champions League. Se programa para dos horas después del inicio del partido. Si Highlightly aún no ha publicado datos importables, el sistema reintenta cada 30 minutos hasta un máximo de cinco llamadas automáticas por partido. El cron de Supabase consulta los vencimientos cada cinco minutos; no consume llamadas a Highlightly si no hay partidos pendientes.
 
-Para retirar trabajos antiguos de sincronización, ejecutar `database/setup/highlightly_cron.sql` en SQL Editor. Para confirmar que no queda ninguno, ejecutar `database/setup/verify_highlightly_cron.sql`; debe devolver `status = manual_only`. El trabajo mensual de valor de mercado no se elimina: se comprueba diariamente y solo se ejecuta el primer martes en `Europe/Madrid`.
+Para activarlo en el proyecto nuevo, guardar en Supabase Vault los secretos `value90_app_url` (`https://www.value90.es`) y `value90_cron_secret` (el mismo valor que `CRON_SECRET` en Vercel Production), y ejecutar `database/setup/highlightly_automatic_sync.sql` en SQL Editor. `database/setup/verify_highlightly_cron.sql` debe mostrar `status = automatic_sync_ready`. El cron mensual de valor de mercado se mantiene independiente.
 
 ## Archivos de importación
 

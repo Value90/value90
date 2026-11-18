@@ -309,21 +309,25 @@ async function getRankingBase() {
 }
 
 async function getRankingMatchScope(competitionId: number | null, seasonId: number | null) {
-  return readAll<Row>((from, to) => {
-    let query = supabase.from("matches").select("id,season_id,home_team_id,away_team_id,status").order("id");
-    if (competitionId) query = query.eq("competition_id", competitionId);
-    if (seasonId) query = query.eq("season_id", seasonId);
-    return query.range(from, to);
-  });
+  return cached(`ranking-matches:${competitionId ?? "all"}:${seasonId ?? "all"}`, () =>
+    readAll<Row>((from, to) => {
+      let query = supabase.from("matches").select("id,season_id,home_team_id,away_team_id,status").order("id");
+      if (competitionId) query = query.eq("competition_id", competitionId);
+      if (seasonId) query = query.eq("season_id", seasonId);
+      return query.range(from, to);
+    }),
+  );
 }
 
 async function getRankingParticipations(competitionId: number | null, seasonId: number | null) {
-  return readAll<Row>((from, to) => {
-    let query = supabase.from("participations").select("id,player_id,match_id,team_id,match:matches!inner(season_id,competition_id)").order("id");
-    if (competitionId) query = query.eq("match.competition_id", competitionId);
-    if (seasonId) query = query.eq("match.season_id", seasonId);
-    return query.range(from, to);
-  });
+  return cached(`ranking-participations:${competitionId ?? "all"}:${seasonId ?? "all"}`, () =>
+    readAll<Row>((from, to) => {
+      let query = supabase.from("participations").select("id,player_id,match_id,team_id,match:matches!inner(season_id,competition_id)").order("id");
+      if (competitionId) query = query.eq("match.competition_id", competitionId);
+      if (seasonId) query = query.eq("match.season_id", seasonId);
+      return query.range(from, to);
+    }),
+  );
 }
 
 export async function getPublicRankings(params: URLSearchParams) {
@@ -341,7 +345,7 @@ export async function getPublicRankings(params: URLSearchParams) {
   const sortDirection = params.get("sortDirection") === "asc" ? "asc" : "desc";
 
   const ranked = await cached(
-    `public-ranking:${query}:${teamId ?? "all"}:${competitionId ?? "all"}:${seasonId ?? "all"}:${positionId ?? "all"}:${minMatches}`,
+    `public-ranking:${teamId ?? "all"}:${competitionId ?? "all"}:${seasonId ?? "all"}:${positionId ?? "all"}`,
     async () => {
   const matchScopePromise = getRankingMatchScope(competitionId, seasonId);
   const [base, matchScope, eligibilityMatchScope, participationRows, positionPlayerIds, marketValueRows] = await Promise.all([
@@ -350,16 +354,18 @@ export async function getPublicRankings(params: URLSearchParams) {
     !teamId && competitionId ? getRankingMatchScope(null, seasonId) : matchScopePromise,
     teamId ? Promise.resolve([] as Row[]) : getRankingParticipations(null, seasonId),
     positionId
-      ? readAll<Row>((from, to) => {
-          let request = supabase
-            .from("hist_player_teams")
-            .select("id,player_id")
-            .eq("active", true)
-            .eq("position_id", positionId);
-          if (teamId) request = request.eq("team_id", teamId);
-          if (seasonId) request = request.eq("season_id", seasonId);
-          return request.order("id").range(from, to);
-        }).then((rows) => new Set(rows.map((row) => Number(row.player_id))))
+      ? cached(`ranking-position:${positionId}:${teamId ?? "all"}:${seasonId ?? "all"}`, () =>
+          readAll<Row>((from, to) => {
+            let request = supabase
+              .from("hist_player_teams")
+              .select("id,player_id")
+              .eq("active", true)
+              .eq("position_id", positionId);
+            if (teamId) request = request.eq("team_id", teamId);
+            if (seasonId) request = request.eq("season_id", seasonId);
+            return request.order("id").range(from, to);
+          }).then((rows) => new Set(rows.map((row) => Number(row.player_id)))),
+        )
       : Promise.resolve(null),
     cached("public-current-market-values", () => readAll<Row>((from, to) =>
       supabase.from("player_market_values").select("player_id,current_value_eur").order("player_id").range(from, to),
@@ -445,13 +451,14 @@ export async function getPublicRankings(params: URLSearchParams) {
         const teamMatchCount = teamMatches.get(teamSeasonKey(team, season)) ?? 0;
         return teamMatchCount > 0 && playedMatches.size / teamMatchCount >= 0.5;
       });
-      return (teamId != null || meetsTeamThreshold) && item.score > 0 && item.matches >= minMatches && (!query || item.playerName.toLocaleLowerCase("es").includes(query));
+      return (teamId != null || meetsTeamThreshold) && item.score > 0;
     });
     },
   );
 
+  const visibleRanked = ranked.filter((item) => item.matches >= minMatches && (!query || item.playerName.toLocaleLowerCase("es").includes(query)));
   const direction = sortDirection === "asc" ? 1 : -1;
-  const sortedRanked = [...ranked].sort((a, b) => {
+  const sortedRanked = [...visibleRanked].sort((a, b) => {
     const primaryA = sortBy === "marketValue" ? a.marketValueEur : a.score;
     const primaryB = sortBy === "marketValue" ? b.marketValueEur : b.score;
     if (primaryA == null && primaryB != null) return 1;

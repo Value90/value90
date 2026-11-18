@@ -21,6 +21,29 @@ export const maxDuration = 120;
 type SyncMapping = { external_match_id: number | string; match_id: number | string; result_attempts?: number | null; lineup_synced_at?: string | null };
 type SyncMatch = { season_id: number | string; competition_id: number | string; home_team_id: number | string };
 
+const MAX_AUTOMATIC_RESULT_ATTEMPTS = 5;
+const AUTOMATIC_RETRY_DELAY_MS = 30 * 60_000;
+
+async function scheduleAutomaticRetry(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  mapping: SyncMapping,
+  attempt: number,
+  reason: string,
+) {
+  const nextResultSyncAt = attempt < MAX_AUTOMATIC_RESULT_ATTEMPTS
+    ? new Date(Date.now() + AUTOMATIC_RETRY_DELAY_MS).toISOString()
+    : null;
+  const update = await supabase.from("external_match_mappings").update({
+    next_result_sync_at: nextResultSyncAt,
+    last_sync_error: attempt < MAX_AUTOMATIC_RESULT_ATTEMPTS
+      ? `${reason} Reintento automático ${attempt}/${MAX_AUTOMATIC_RESULT_ATTEMPTS}; próximo intento ${nextResultSyncAt}.`
+      : `${reason} Se agotaron los ${MAX_AUTOMATIC_RESULT_ATTEMPTS} intentos automáticos; se puede volver a sincronizar manualmente.`,
+    updated_at: new Date().toISOString(),
+  }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
+  if (update.error) throw new Error(update.error.message);
+  return nextResultSyncAt;
+}
+
 function normalize(value: string | null | undefined) {
   if (typeof value !== "string") return "";
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -224,7 +247,7 @@ async function syncHighlightlyResult(
   supabase: ReturnType<typeof createAdminSupabaseClient>,
   mapping: SyncMapping,
   match: SyncMatch,
-  options: { deferV90?: boolean } = {},
+  options: { deferV90?: boolean; automaticAttempt?: boolean } = {},
 ) {
   const matchResponse = await getHighlightlyMatch(Number(mapping.external_match_id));
   let callsUsed = 1;
@@ -236,10 +259,15 @@ async function syncHighlightlyResult(
   const detail = matchRecord as HighlightlyMatch & { events?: HighlightlyEvent[] };
   const state = detail.state?.description ?? "Unknown";
   if (!isTerminal(state)) {
-    const retry = await supabase.from("external_match_mappings").update({ next_result_sync_at: null, last_sync_error: `Highlightly aún indica «${state}». Reintenta manualmente cuando el partido haya finalizado.`, updated_at: new Date().toISOString() })
-      .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
-    if (retry.error) throw new Error(retry.error.message);
-    return { matchId: mapping.match_id, waiting: true, callsUsed, callsRemaining, callsLimit };
+    const nextAttemptAt = options.automaticAttempt
+      ? await scheduleAutomaticRetry(supabase, mapping, Number(mapping.result_attempts ?? 0), `Highlightly todavía indica «${state}».`)
+      : null;
+    if (!options.automaticAttempt) {
+      const retry = await supabase.from("external_match_mappings").update({ next_result_sync_at: null, last_sync_error: `Highlightly todavía indica «${state}». Reintenta manualmente cuando haya finalizado.`, updated_at: new Date().toISOString() })
+        .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
+      if (retry.error) throw new Error(retry.error.message);
+    }
+    return { matchId: mapping.match_id, waiting: true, nextAttemptAt, attempts: Number(mapping.result_attempts ?? 0), callsUsed, callsRemaining, callsLimit };
   }
 
   const [homeScore, awayScore] = score(detail.state?.score?.current);
@@ -269,6 +297,7 @@ async function syncHighlightlyResult(
   callsRemaining = boxScoreResponse.remaining;
   callsLimit = boxScoreResponse.limit;
   const boxScoreTeams = boxScoreResponse.body;
+  const providerHasIndividualStats = boxScoreTeams.some((team) => (team.players ?? []).some((player) => player.statistics != null));
   let events = Array.isArray(detail.events) ? detail.events : [];
   if (!isCancelled(state) && !events.length && boxScoreTeams.some((team) => (team.players ?? []).some((player) => player.isSubstitute && Number(player.minutesPlayed) === 0))) {
     const eventResponse = await getHighlightlyEvents(Number(mapping.external_match_id));
@@ -441,6 +470,12 @@ async function syncHighlightlyResult(
     }
   }
 
+  if (options.automaticAttempt && !isCancelled(state) && !providerHasIndividualStats) {
+    const attempt = Number(mapping.result_attempts ?? 0);
+    const nextAttemptAt = await scheduleAutomaticRetry(supabase, mapping, attempt, "El partido terminó, pero Highlightly todavía no devolvió estadísticas individuales importables.");
+    return { matchId: mapping.match_id, waiting: true, pendingStatistics: true, attempts: attempt, nextAttemptAt, callsUsed, callsRemaining, callsLimit };
+  }
+
   const ownRating = await recalculateMatchOwnRating(supabase, Number(mapping.match_id), match, {
     calculateV90: options.deferV90 !== true,
   });
@@ -460,7 +495,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
   try {
-    const body = await request.json().catch(() => ({})) as { matchId?: number | string; deferV90?: boolean };
+    const body = await request.json().catch(() => ({})) as { matchId?: number | string; deferV90?: boolean; automaticAttempt?: boolean };
     const manualMatchId = body.matchId == null ? null : Number(body.matchId);
     if (manualMatchId == null || !Number.isSafeInteger(manualMatchId) || manualMatchId <= 0) {
       return NextResponse.json({ error: "Selecciona un partido para sincronizar manualmente." }, { status: 400 });
@@ -468,9 +503,9 @@ export async function POST(request: NextRequest) {
     const supabase = cronAuthorized || !sessionClient ? createAdminSupabaseClient() : sessionClient;
     const { data: mappings, error } = await supabase.from("external_match_mappings")
       .select("provider,external_match_id,match_id,lineup_synced_at,final_synced_at,next_result_sync_at,result_attempts,last_sync_error,match:matches!inner(id,date,status,season_id,competition_id,home_team_id,away_team_id)")
-      .eq("provider", "highlightly").order("external_match_id", { ascending: true }).limit(1000);
+      .eq("provider", "highlightly").eq("match_id", manualMatchId).order("external_match_id", { ascending: true }).limit(1000);
     if (error) throw error;
-    const candidates = (mappings ?? []).filter((item) => Number(item.match_id) === manualMatchId);
+    const candidates = mappings ?? [];
     if (manualMatchId != null && !candidates.length) {
       return NextResponse.json({ error: "Este partido no está asociado a Highlightly. Impórtalo primero desde su fecha." }, { status: 404 });
     }
@@ -478,11 +513,28 @@ export async function POST(request: NextRequest) {
     for (const mapping of candidates) {
       const match = Array.isArray(mapping.match) ? mapping.match[0] : mapping.match;
       if (!match) continue;
+      let attemptMapping: SyncMapping = mapping;
       try {
-        results.push({ phase: "resultado-final-y-participaciones", ...await syncHighlightlyResult(supabase, mapping, match, { deferV90: cronAuthorized && body.deferV90 === true }) });
+        if (cronAuthorized && body.automaticAttempt === true) {
+          const attempts = Number(mapping.result_attempts ?? 0) + 1;
+          const started = await supabase.from("external_match_mappings").update({ result_attempts: attempts, updated_at: new Date().toISOString() })
+            .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id)
+            .is("final_synced_at", null).select("external_match_id").maybeSingle();
+          if (started.error) throw new Error(started.error.message);
+          if (!started.data) continue;
+          attemptMapping = { ...mapping, result_attempts: attempts };
+        }
+        results.push({ phase: "resultado-final-y-participaciones", ...await syncHighlightlyResult(supabase, attemptMapping, match, {
+          deferV90: cronAuthorized && body.deferV90 === true,
+          automaticAttempt: cronAuthorized && body.automaticAttempt === true,
+        }) });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Error sincronizando resultado.";
-        await supabase.from("external_match_mappings").update({ last_sync_error: message, updated_at: new Date().toISOString() }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
+        if (cronAuthorized && body.automaticAttempt === true) {
+          await scheduleAutomaticRetry(supabase, attemptMapping, Number(attemptMapping.result_attempts ?? 0), message);
+        } else {
+          await supabase.from("external_match_mappings").update({ last_sync_error: message, updated_at: new Date().toISOString() }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
+        }
         results.push({ phase: "resultado", matchId: mapping.match_id, error: message });
       }
     }
