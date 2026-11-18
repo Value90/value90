@@ -13,6 +13,7 @@ import {
 
 import { getPlayers } from "@/services/player.service";
 import { getMatches } from "@/services/match.service";
+import { getSeasons } from "@/services/season.service";
 
 import {
   getTeams,
@@ -101,6 +102,9 @@ export default function RankingsPage() {
 
   const [competitions, setCompetitions] =
     useState<Competition[]>([]);
+
+  const [currentSeasonId, setCurrentSeasonId] = useState<number | null>(null);
+  const [currentSeasonName, setCurrentSeasonName] = useState("");
 
   const [v90Facts, setV90Facts] =
     useState<PlayerV90MatchFact[]>([]);
@@ -205,6 +209,7 @@ export default function RankingsPage() {
           participationsData,
           competitionsData,
           v90FactsData,
+          seasonsData,
         ] = await Promise.all([
           getMatchRatings(),
           getPlayers(),
@@ -213,7 +218,13 @@ export default function RankingsPage() {
           getParticipations(),
           getCompetitions(),
           getPlayerV90MatchFacts(),
+          getSeasons(),
         ]);
+
+        const today = new Date().toISOString().slice(0, 10);
+        const currentSeason = seasonsData.find((season) => season.active && season.startDate <= today && season.endDate >= today)
+          ?? [...seasonsData].filter((season) => season.active).sort((a, b) => b.startDate.localeCompare(a.startDate))[0]
+          ?? [...seasonsData].sort((a, b) => b.startDate.localeCompare(a.startDate))[0];
 
         const ownMatchRatingsData = await getLatestOwnMatchRatings(
           matchesData.map((match) => match.id)
@@ -249,6 +260,8 @@ export default function RankingsPage() {
         setCompetitions(
           competitionsData
         );
+        setCurrentSeasonId(currentSeason?.id ?? null);
+        setCurrentSeasonName(currentSeason?.name ?? "");
 
         setV90Facts(
           v90FactsData
@@ -271,6 +284,8 @@ export default function RankingsPage() {
         setTeams([]);
         setParticipations([]);
         setCompetitions([]);
+        setCurrentSeasonId(null);
+        setCurrentSeasonName("");
         setV90Facts([]);
         setOwnMatchRatings([]);
       } finally {
@@ -449,29 +464,18 @@ export default function RankingsPage() {
 
   const filteredMatchRatings =
     useMemo(() => {
-      if (
-        selectedCompetitionId === ""
-      ) {
-        return matchRatings;
-      }
-
-      return matchRatings.filter(
-        (rating) => {
-          const match =
-            matchesMap.get(
-              rating.matchId
-            );
-
-          return (
-            match?.competitionId ===
-            selectedCompetitionId
-          );
-        }
-      );
+      return matchRatings.filter((rating) => {
+        const match = matchesMap.get(rating.matchId);
+        const matchesCompetition = selectedCompetitionId === "" || match?.competitionId === selectedCompetitionId;
+        const matchesSeason = mode === "total" || match?.seasonId === currentSeasonId;
+        return matchesCompetition && matchesSeason;
+      });
     }, [
       matchRatings,
       matchesMap,
       selectedCompetitionId,
+      mode,
+      currentSeasonId,
     ]);
 
   const calculateAccumulatedV90 = (
@@ -1497,7 +1501,7 @@ export default function RankingsPage() {
                 : "text-slate-700 hover:bg-slate-100"
             }`}
           >
-            Total
+            Trayectoria
           </button>
 
           <button
@@ -1514,12 +1518,18 @@ export default function RankingsPage() {
                 : "text-slate-700 hover:bg-slate-100"
             }`}
           >
-            Histórico
+            Temporada actual
           </button>
 
         </div>
 
       </div>
+
+      <p className="mb-4 text-sm text-slate-500">
+        {mode === "total"
+          ? "Vista: trayectoria completa del jugador."
+          : `Vista: temporada actual${currentSeasonName ? ` (${currentSeasonName})` : ""}.`}
+      </p>
 
       {/* ======================================================
           CARGANDO
@@ -1531,7 +1541,7 @@ export default function RankingsPage() {
           Cargando rankings...
         </div>
 
-      ) : mode === "total" ? (
+      ) : mode === "total" || mode === "historical" ? (
 
         /* ====================================================
            TOTAL

@@ -10,8 +10,8 @@ interface RankedPlayer { playerId: number; playerName: string; teamName: string;
 
 const euro = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
-function SelectFilter({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ id: number; name: string }> }) {
-  return <label className="min-w-0"><span className="mb-1 block text-[11px] font-bold text-slate-600">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"><option value="">Todas</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>;
+function SelectFilter({ label, value, onChange, options, allLabel = "Todas" }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ id: number; name: string }>; allLabel?: string }) {
+  return <label className="min-w-0"><span className="mb-1 block text-[11px] font-bold text-slate-600">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100"><option value="">{allLabel}</option>{options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>;
 }
 
 export default function PublicRankings({ initialFilters, initialResult }: { initialFilters?: PublicFilters; initialResult?: PublicPageResult<RankedPlayer> }) {
@@ -80,7 +80,7 @@ export default function PublicRankings({ initialFilters, initialResult }: { init
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
           <label className="col-span-2 min-w-0 lg:col-span-1"><span className="mb-1 block text-[11px] font-bold text-slate-600">Buscar jugador</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Nombre del jugador" className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" /></label>
           <SelectFilter label="Competición" value={competitionId} onChange={(value) => setFilter(setCompetitionId, value)} options={filters?.competitions ?? []} />
-          <SelectFilter label="Temporada" value={seasonId === "all" ? "" : seasonId} onChange={(value) => setFilter(setSeasonId, value || "all")} options={(filters?.seasons ?? []).map((season) => ({ id: season.id, name: season.name }))} />
+          <SelectFilter label="Tipo de ranking / temporada" value={seasonId === "all" ? "" : seasonId} onChange={(value) => setFilter(setSeasonId, value || "all")} allLabel="Trayectoria completa" options={(filters?.seasons ?? []).map((season) => ({ id: season.id, name: season.name }))} />
           <SelectFilter label="Equipo" value={teamId} onChange={(value) => setFilter(setTeamId, value)} options={filters?.teams ?? []} />
           <SelectFilter label="Posición" value={positionId} onChange={(value) => setFilter(setPositionId, value)} options={(filters?.positions ?? []).map((position) => ({ id: position.id, name: position.name }))} />
           <label className="min-w-0"><span className="mb-1 block text-[11px] font-bold text-slate-600">Mínimo de partidos</span><input type="number" inputMode="numeric" min="1" max="1000" value={minMatches} onChange={(event) => setFilter(setMinMatches, event.target.value || "1")} className="h-10 w-full rounded-lg border border-slate-200 px-2.5 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-100" /></label>

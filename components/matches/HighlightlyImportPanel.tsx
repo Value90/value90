@@ -192,6 +192,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     const matchDate = matchDateInMadrid(match.date);
     return Boolean(startDate && endDate && matchDate >= startDate && matchDate <= endDate);
   }), [pastMatches, competition, seasonYear, importMode, round, startDate, endDate]);
+  const pendingSyncMatches = useMemo(() => filteredPastMatches.filter((match) => !match.finalSynced), [filteredPastMatches]);
 
   useEffect(() => {
     if (filteredPastMatches.some((match) => String(match.matchId) === selectedPastMatch)) return;
@@ -418,12 +419,19 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         {filteredPastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.syncError && <p role="status" className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
           La última sincronización automática de este partido tuvo un problema ({filteredPastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.resultAttempts ?? 0} intentos). Puedes volver a solicitarla con el botón. Detalle: {filteredPastMatches.find((match) => String(match.matchId) === selectedPastMatch)?.syncError}
         </p>}
-        <span className="mt-1 block text-xs text-amber-900">Consulta Highlightly ahora mismo y actualiza resultado, alineaciones y minutos. Cada llamada utilizada se descuenta del saldo diario.</span>
+        <span className="mt-1 block text-xs text-amber-900">Este control vuelve a consultar un partido ya importado y actualiza resultado, alineaciones y minutos. Cada llamada utilizada se descuenta del saldo diario.</span>
       </label>
       <div className="flex flex-col gap-2 sm:w-auto">
         <button type="button" onClick={syncPastMatchNow} disabled={!selectedPastMatch || syncingPastMatch || syncingFilteredMatches} className="min-h-11 w-full rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto">{syncingPastMatch ? "Consultando Highlightly…" : "Sincronizar ahora"}</button>
-        <button type="button" onClick={syncFilteredMatches} disabled={syncingPastMatch || syncingFilteredMatches || !filteredPastMatches.some((match) => !match.finalSynced)} className="min-h-11 w-full rounded-lg border border-amber-700 px-4 py-2 text-sm font-semibold text-amber-950 disabled:opacity-60 sm:w-auto">{syncingFilteredMatches ? "Sincronizando lote…" : `Sincronizar pendientes visibles (${filteredPastMatches.filter((match) => !match.finalSynced).length})`}</button>
+        <button type="button" onClick={syncFilteredMatches} disabled={syncingPastMatch || syncingFilteredMatches || pendingSyncMatches.length === 0} className="min-h-11 w-full rounded-lg border border-amber-700 px-4 py-2 text-sm font-semibold text-amber-950 disabled:opacity-60 sm:w-auto">{syncingFilteredMatches ? "Sincronizando lote…" : `Sincronizar pendientes visibles (${pendingSyncMatches.length})`}</button>
       </div>
+      <p className="text-xs text-amber-950 sm:col-span-2">
+        {pendingSyncMatches.length > 0
+          ? `Hay ${pendingSyncMatches.length} partido(s) ya importado(s) y disputado(s) pendiente(s). Esta acción los sincroniza, pero no importa el calendario.`
+          : filteredPastMatches.length > 0
+            ? `No hay sincronizaciones pendientes: los ${filteredPastMatches.length} partido(s) disputado(s) importado(s) para estos filtros ya tienen sincronización final. Usa «Sincronizar ahora» para volver a consultar uno.`
+            : "No hay partidos disputados importados para estos filtros. Primero usa «Importar partidos» arriba para cargar el calendario; los partidos futuros podrán sincronizarse cuando se hayan disputado."}
+      </p>
     </div>
     {message && <p role="status" className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{message}</p>}
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getHighlightlyMatches, type HighlightlyMatch } from "@/lib/highlightly.server";
 
 export const runtime = "nodejs";
@@ -201,12 +202,17 @@ async function fetchMatchesForDates(leagueId: number, seasonYear: number, dates:
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Inicia sesión para importar partidos." }, { status: 401 });
+    const cronSecret = process.env.CRON_SECRET;
+    const cronAuthorized = Boolean(cronSecret && request.headers.get("authorization") === `Bearer ${cronSecret}`);
+    const session = cronAuthorized ? null : await createClient();
+    if (!cronAuthorized) {
+      const { data: { user } } = await session!.auth.getUser();
+      if (!user) return NextResponse.json({ error: "Inicia sesión para importar partidos." }, { status: 401 });
+    }
+    const supabase = cronAuthorized ? createAdminSupabaseClient() : session!;
 
     const input = await request.json().catch(() => null) as {
-      competition?: string; mode?: string; round?: number; startDate?: string; endDate?: string; seasonYear?: number;
+      competition?: string; mode?: string; round?: number; startDate?: string; endDate?: string; seasonYear?: number; onlyMissing?: boolean;
     } | null;
     if (!input || typeof input.competition !== "string" || !Object.prototype.hasOwnProperty.call(TARGETS, input.competition)) {
       return NextResponse.json({ error: "Selecciona una competición compatible con Highlightly." }, { status: 400 });
@@ -280,13 +286,43 @@ export async function POST(request: NextRequest) {
       .eq("season_id", season.id).eq("competition_id", competition.id).order("id");
     if (existingMatchesResult.error) throw new Error(`No se pudieron preparar las asociaciones existentes: ${existingMatchesResult.error.message}`);
     const existingMatches = existingMatchesResult.data ?? [];
+    const externalIds = targetMatches.map((match) => Number(match.id));
+    const existingMappings = new Map<number, number>();
+    for (let offset = 0; offset < externalIds.length; offset += 100) {
+      const { data, error } = await supabase.from("external_match_mappings")
+        .select("external_match_id,match_id").eq("provider", "highlightly")
+        .in("external_match_id", externalIds.slice(offset, offset + 100));
+      if (error) throw new Error(`No se pudieron consultar las asociaciones de Highlightly: ${error.message}`);
+      for (const mapping of data ?? []) existingMappings.set(Number(mapping.external_match_id), Number(mapping.match_id));
+    }
 
     const imported: Array<{ round: string; home: string; away: string; date: string }> = [];
     const skipped: Array<{ round: string; home: string; away: string; reason: string }> = [];
     const missingTeams = new Set<string>();
+    const teamMappings = new Map<number, number>();
     for (const match of targetMatches) {
-      const home = findTeam(teamsResult.data ?? [], match.homeTeam.name);
-      const away = findTeam(teamsResult.data ?? [], match.awayTeam.name);
+      let home = findTeam(teamsResult.data ?? [], match.homeTeam.name);
+      let away = findTeam(teamsResult.data ?? [], match.awayTeam.name);
+      // UCL seasons contain qualifying clubs which may never have appeared
+      // in Value90. Keep these generated records inactive until an admin adds
+      // their country/stadium details; the fixtures can still be imported.
+      if (target.competition === "champions") {
+        for (const [side, teamName] of [["home", match.homeTeam.name], ["away", match.awayTeam.name]] as const) {
+          if ((side === "home" ? home : away) || !teamName?.trim()) continue;
+          let provisional = findTeam(teamsResult.data ?? [], teamName);
+          if (!provisional) {
+            const created = await supabase.from("teams").insert({
+              name: teamName.trim(), short_name: teamName.trim(), type: "Club", active: false,
+              country_id: null, confederation: null, city: null, stadium: null,
+            }).select("id,name,short_name,stadium").single();
+            if (created.error) throw new Error(`No se pudo guardar el club provisional ${teamName}: ${created.error.message}`);
+            teamsResult.data?.push(created.data);
+            provisional = created.data;
+          }
+          if (side === "home") home = provisional;
+          else away = provisional;
+        }
+      }
       if (!home || !away) {
         if (!home) missingTeams.add(match.homeTeam.name);
         if (!away) missingTeams.add(match.awayTeam.name);
@@ -304,21 +340,18 @@ export async function POST(request: NextRequest) {
         stagesResult.data?.push(stage);
       }
 
-      const { data: existingMapping, error: mappingError } = await supabase.from("external_match_mappings")
-        .select("match_id").eq("provider", "highlightly").eq("external_match_id", match.id).maybeSingle();
-      if (mappingError) throw new Error(`No se pudo consultar la asociación Highlightly: ${mappingError.message}`);
-      let localMatchId = existingMapping?.match_id as number | undefined;
+      let localMatchId = existingMappings.get(Number(match.id));
       const kickoff = new Date(match.date).getTime();
       const possibleDuplicate = existingMatches.find((candidate) => Number(candidate.home_team_id) === home.id
         && Number(candidate.away_team_id) === away.id
         && Math.abs(new Date(String(candidate.date)).getTime() - kickoff) <= 36 * 60 * 60_000);
+      if (input.onlyMissing && (localMatchId || possibleDuplicate)) continue;
       // Historical fixtures can have kickoff times corrected by the provider.
       // Match the same teams within 36 hours, preferring the oldest local row,
       // so repeating a calendar import updates the original instead of cloning it.
       if (possibleDuplicate && (!localMatchId || Number(possibleDuplicate.id) < Number(localMatchId))) {
         localMatchId = Number(possibleDuplicate.id);
-        const savedMapping = await supabase.from("external_match_mappings").upsert({ provider: "highlightly", external_match_id: match.id, match_id: localMatchId });
-        if (savedMapping.error) throw new Error(`No se pudo asociar el partido existente: ${savedMapping.error.message}`);
+        existingMappings.set(Number(match.id), localMatchId);
       }
 
       const score = parseScore(match.state?.score?.current);
@@ -340,16 +373,23 @@ export async function POST(request: NextRequest) {
         const { data: localMatch, error: insertError } = await supabase.from("matches").insert(matchData).select("id").single();
         if (insertError) throw new Error(`No se pudo crear ${match.homeTeam.name}–${match.awayTeam.name}: ${insertError.message}`);
         localMatchId = Number(localMatch.id);
-        const savedMapping = await supabase.from("external_match_mappings").insert({ provider: "highlightly", external_match_id: match.id, match_id: localMatchId });
-        if (savedMapping.error) throw new Error(`Partido creado, pero no se pudo guardar su referencia externa: ${savedMapping.error.message}`);
         existingMatches.push({ id: localMatchId, home_team_id: home.id, away_team_id: away.id, date: match.date });
       }
 
       for (const team of [{ external: match.homeTeam.id, local: home.id }, { external: match.awayTeam.id, local: away.id }]) {
-        const mapped = await supabase.from("external_team_mappings").upsert({ provider: "highlightly", external_team_id: team.external, team_id: team.local }, { onConflict: "provider,external_team_id" });
-        if (mapped.error) throw new Error(`No se pudo asociar el equipo ${team.local}: ${mapped.error.message}`);
+        teamMappings.set(Number(team.external), team.local);
       }
+      const savedMapping = await supabase.from("external_match_mappings").upsert({ provider: "highlightly", external_match_id: match.id, match_id: localMatchId }, { onConflict: "provider,external_match_id" });
+      if (savedMapping.error) throw new Error(`No se pudo guardar la referencia externa del partido ${match.id}: ${savedMapping.error.message}`);
       imported.push({ round: match.round, home: match.homeTeam.name, away: match.awayTeam.name, date: match.date });
+    }
+
+    if (teamMappings.size) {
+      const mapped = await supabase.from("external_team_mappings").upsert(
+        [...teamMappings].map(([external_team_id, team_id]) => ({ provider: "highlightly", external_team_id, team_id })),
+        { onConflict: "provider,external_team_id" },
+      );
+      if (mapped.error) throw new Error(`No se pudieron asociar los equipos de Highlightly: ${mapped.error.message}`);
     }
 
     return NextResponse.json({

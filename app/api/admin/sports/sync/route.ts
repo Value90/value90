@@ -220,7 +220,12 @@ async function syncLineup(supabase: ReturnType<typeof createAdminSupabaseClient>
   return { matchId: mapping.match_id, participants: participants.length, pendingPlayers: pending };
 }
 
-async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>, mapping: SyncMapping, match: SyncMatch) {
+async function syncHighlightlyResult(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  mapping: SyncMapping,
+  match: SyncMatch,
+  options: { deferV90?: boolean } = {},
+) {
   const matchResponse = await getHighlightlyMatch(Number(mapping.external_match_id));
   let callsUsed = 1;
   let callsRemaining = matchResponse.remaining;
@@ -436,7 +441,9 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
     }
   }
 
-  const ownRating = await recalculateMatchOwnRating(supabase, Number(mapping.match_id), match);
+  const ownRating = await recalculateMatchOwnRating(supabase, Number(mapping.match_id), match, {
+    calculateV90: options.deferV90 !== true,
+  });
   const marked = await supabase.from("external_match_mappings").update({ final_synced_at: new Date().toISOString(), next_result_sync_at: null, last_sync_error: null, updated_at: new Date().toISOString() })
     .eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);
   if (marked.error) throw new Error(marked.error.message);
@@ -444,19 +451,21 @@ async function syncResult(supabase: ReturnType<typeof createAdminSupabaseClient>
 }
 
 export async function POST(request: NextRequest) {
-  const sessionClient = await createClient();
-  const { data: { user } } = await sessionClient.auth.getUser();
-  if (!user) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  const cronSecret = process.env.CRON_SECRET;
+  const cronAuthorized = Boolean(cronSecret && request.headers.get("authorization") === `Bearer ${cronSecret}`);
+  const sessionClient = cronAuthorized ? null : await createClient();
+  const user = sessionClient ? (await sessionClient.auth.getUser()).data.user : null;
+  if (!cronAuthorized && !user) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   if (!process.env.SUPABASE_SECRET_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
   try {
-    const body = await request.json().catch(() => ({})) as { matchId?: number | string };
+    const body = await request.json().catch(() => ({})) as { matchId?: number | string; deferV90?: boolean };
     const manualMatchId = body.matchId == null ? null : Number(body.matchId);
     if (manualMatchId == null || !Number.isSafeInteger(manualMatchId) || manualMatchId <= 0) {
       return NextResponse.json({ error: "Selecciona un partido para sincronizar manualmente." }, { status: 400 });
     }
-    const supabase = createAdminSupabaseClient();
+    const supabase = cronAuthorized || !sessionClient ? createAdminSupabaseClient() : sessionClient;
     const { data: mappings, error } = await supabase.from("external_match_mappings")
       .select("provider,external_match_id,match_id,lineup_synced_at,final_synced_at,next_result_sync_at,result_attempts,last_sync_error,match:matches!inner(id,date,status,season_id,competition_id,home_team_id,away_team_id)")
       .eq("provider", "highlightly").order("external_match_id", { ascending: true }).limit(1000);
@@ -470,7 +479,7 @@ export async function POST(request: NextRequest) {
       const match = Array.isArray(mapping.match) ? mapping.match[0] : mapping.match;
       if (!match) continue;
       try {
-        results.push({ phase: "resultado-final-y-participaciones", ...await syncResult(supabase, mapping, match) });
+        results.push({ phase: "resultado-final-y-participaciones", ...await syncHighlightlyResult(supabase, mapping, match, { deferV90: cronAuthorized && body.deferV90 === true }) });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Error sincronizando resultado.";
         await supabase.from("external_match_mappings").update({ last_sync_error: message, updated_at: new Date().toISOString() }).eq("provider", "highlightly").eq("external_match_id", mapping.external_match_id);

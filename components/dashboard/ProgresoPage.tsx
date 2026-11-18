@@ -94,6 +94,9 @@ export default function ProgresoPage() {
   const [loading, setLoading] =
     useState(true);
 
+  const [recalculatingRound, setRecalculatingRound] = useState(false);
+  const [roundCalculationMessage, setRoundCalculationMessage] = useState("");
+
   /*
    * ============================================================
    * PLANTILLAS
@@ -765,6 +768,29 @@ export default function ProgresoPage() {
     );
   };
 
+  const handleCalculateRoundV90 = async () => {
+    if (selectedSeasonId === "" || selectedCompetitionId === "" || selectedStageId === "") {
+      setRoundCalculationMessage("Selecciona una temporada, una competición y una jornada concreta.");
+      return;
+    }
+    setRecalculatingRound(true);
+    setRoundCalculationMessage("");
+    try {
+      const response = await fetch("/api/admin/own-ratings/recalculate-round", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ seasonId: selectedSeasonId, competitionId: selectedCompetitionId, stageId: selectedStageId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "No se pudo calcular el V90 de la jornada.");
+      setRoundCalculationMessage(`${result.message} V90 calculados: ${result.v90.calculated}; pendientes: ${result.v90.pending}.`);
+    } catch (error) {
+      setRoundCalculationMessage(error instanceof Error ? error.message : "No se pudo calcular el V90 de la jornada.");
+    } finally {
+      setRecalculatingRound(false);
+    }
+  };
+
   /*
    * ============================================================
    * RENDER
@@ -1182,7 +1208,14 @@ export default function ProgresoPage() {
               ) : (
                 <div>
                   <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
-                    <h3 className="text-base font-bold text-slate-800">{availableStages.find((stage) => stage.id === selectedStageId)?.name ?? "Jornada seleccionada"}</h3>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <h3 className="text-base font-bold text-slate-800">{availableStages.find((stage) => stage.id === selectedStageId)?.name ?? "Jornada seleccionada"}</h3>
+                      <button type="button" onClick={handleCalculateRoundV90} disabled={recalculatingRound || selectedCompetitionId === ""} className="min-h-10 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                        {recalculatingRound ? "Calculando jornada…" : "Calcular V90 de la jornada"}
+                      </button>
+                    </div>
+                    {selectedCompetitionId === "" && <p className="mt-2 text-sm text-amber-700">Selecciona una competición para calcular una jornada concreta.</p>}
+                    {roundCalculationMessage && <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">{roundCalculationMessage}</p>}
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">

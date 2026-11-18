@@ -1,13 +1,18 @@
 import "server-only";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { OWN_RATING_MODEL_VERSION, calculateOwnRatingFromStats } from "@/lib/own-ratings.server";
-import { calculateV90Stage } from "@/services/v90-engine.service";
+import { recalculateV90Forward } from "@/lib/recalculate-v90-forward.server";
 
 type AdminSupabase = ReturnType<typeof createAdminSupabaseClient>;
 type SyncMatch = { season_id: number | string; competition_id: number | string; home_team_id: number | string };
 
 /** Rebuilds own match ratings and contextual V90 without calling Highlightly. */
-export async function recalculateMatchOwnRating(supabase: AdminSupabase, matchId: number, match: SyncMatch) {
+export async function recalculateMatchOwnRating(
+  supabase: AdminSupabase,
+  matchId: number,
+  match: SyncMatch,
+  options: { calculateV90?: boolean } = {},
+) {
   const [participationsResult, positionsResult] = await Promise.all([
     supabase.from("participations").select("id,match_id,player_id,position_id,minutes_played").eq("match_id", matchId),
     supabase.from("positions").select("id,name,short_name"),
@@ -69,12 +74,12 @@ export async function recalculateMatchOwnRating(supabase: AdminSupabase, matchId
   }));
   const savedFinal = await supabase.from("match_ratings").upsert(finalRows, { onConflict: "participation_id" });
   if (savedFinal.error) throw new Error(`No se pudo actualizar la valoración final: ${savedFinal.error.message}`);
-  const v90 = await calculateV90Stage([matchId], supabase);
-  if (!v90.success && v90.status === "ERROR") throw new Error(`Valoración propia guardada, pero falló el cálculo contextual: ${v90.message}`);
+  const v90 = options.calculateV90 === false ? null : await recalculateV90Forward(supabase, matchId);
   return {
     calculated: ratings.length,
-    v90Calculated: v90.matches.reduce((sum, row) => sum + row.calculated, 0),
-    v90Pending: v90.matches.reduce((sum, row) => sum + row.pending, 0),
-    pendingReasons: [...new Set(v90.matches.flatMap((row) => row.participationResults.filter((item) => item.status === "PENDING").map((item) => item.message)))],
+    v90Calculated: v90?.calculated ?? 0,
+    v90Pending: v90?.pending ?? 0,
+    v90StagesRecalculated: v90?.stagesRecalculated ?? 0,
+    pendingReasons: [],
   };
 }

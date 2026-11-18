@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { compareV90Stages } from "@/lib/v90-stage-chronology";
 
 /*
  * ============================================================
@@ -942,6 +943,7 @@ export async function calculateV90Stage(
     const firstStageDate = stageMatches[0].date;
     const stageCompetitionId = stageMatches[0].competition_id;
     const stageId = stageMatches[0].stage_id;
+    const stageNameById = new Map<number, string>();
 
     /*
      * Determinamos si un partido pertenece al histórico disponible para
@@ -956,16 +958,9 @@ export async function calculateV90Stage(
       }
 
       if (match.competition_id === stageCompetitionId) {
-        if (match.stage_id < stageId) {
-          return true;
-        }
-
-        if (match.stage_id > stageId) {
-          return false;
-        }
-
-        return new Date(match.date).getTime() <
-          new Date(firstStageDate).getTime();
+        const stageOrder = compareV90Stages(stageNameById.get(match.stage_id), stageNameById.get(stageId));
+        if (stageOrder != null && stageOrder !== 0) return stageOrder < 0;
+        if (stageOrder === 0) return new Date(match.date).getTime() < new Date(firstStageDate).getTime();
       }
 
       return new Date(match.date).getTime() <
@@ -978,6 +973,7 @@ export async function calculateV90Stage(
 
     const [
       seasonMatchesData,
+      seasonStagesData,
       competitionWeightsData,
       participationWeightsData,
       rivalWeightsData,
@@ -1000,6 +996,10 @@ export async function calculateV90Stage(
         .eq("season_id", seasonId)
         .order("date", { ascending: true }),
       client
+        .from("stages")
+        .select("id,name")
+        .eq("season_id", seasonId),
+      client
         .from("competition_weights")
         .select("competition_id, peso_v90, active")
         .eq("active", true),
@@ -1021,6 +1021,10 @@ export async function calculateV90Stage(
       throw new Error(`Error cargando partidos de la temporada: ${seasonMatchesData.error.message}`);
     }
 
+    if (seasonStagesData.error) {
+      throw new Error(`Error cargando las jornadas/fases de la temporada: ${seasonStagesData.error.message}`);
+    }
+
     if (competitionWeightsData.error) {
       throw new Error(`Error cargando pesos de competición: ${competitionWeightsData.error.message}`);
     }
@@ -1034,6 +1038,7 @@ export async function calculateV90Stage(
     }
 
     const seasonMatches = (seasonMatchesData.data ?? []) as MatchRow[];
+    for (const stage of seasonStagesData.data ?? []) stageNameById.set(Number(stage.id), String(stage.name));
     const competitionWeights = (competitionWeightsData.data ?? []) as CompetitionWeightRow[];
     const participationWeights = (participationWeightsData.data ?? []) as ParticipationWeightRow[];
     const rivalWeights = (rivalWeightsData.data ?? []) as RivalWeightRow[];
@@ -1360,17 +1365,13 @@ export async function calculateV90Stage(
           );
 
           const previousTeamMatch = teamPreviousMatch.get(teamId);
-
-          const currentIsNewer =
-            !previousTeamMatch ||
-            (match.competition_id === stageCompetitionId &&
-              previousTeamMatch.competition_id === stageCompetitionId
-              ? match.stage_id > previousTeamMatch.stage_id ||
-                (match.stage_id === previousTeamMatch.stage_id &&
-                  new Date(match.date).getTime() >
-                    new Date(previousTeamMatch.date).getTime())
-              : new Date(match.date).getTime() >
-                new Date(previousTeamMatch.date).getTime());
+          const chronology = previousTeamMatch && match.competition_id === previousTeamMatch.competition_id
+            ? compareV90Stages(stageNameById.get(match.stage_id), stageNameById.get(previousTeamMatch.stage_id))
+            : null;
+          const currentIsNewer = !previousTeamMatch
+            || (chronology != null
+              ? chronology > 0 || (chronology === 0 && new Date(match.date).getTime() > new Date(previousTeamMatch.date).getTime())
+              : new Date(match.date).getTime() > new Date(previousTeamMatch.date).getTime());
 
           if (currentIsNewer) {
             teamPreviousV90.set(teamId, value);

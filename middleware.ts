@@ -6,9 +6,20 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = pathname === "/" || pathname === "/public" || pathname.startsWith("/public/");
   const isPublicApiRoute = pathname === "/api/public" || pathname.startsWith("/api/public/");
   const isPublicCrawlerFile = pathname === "/ads.txt" || pathname === "/robots.txt" || pathname === "/sitemap.xml";
+  const cronProtectedRoutes = new Set([
+    "/api/admin/sports/import",
+    "/api/admin/sports/sync",
+    "/api/admin/sports/sync-season",
+    "/api/admin/own-ratings/recalculate-round",
+  ]);
+  const cronSecret = process.env.CRON_SECRET;
+  const isAuthorizedCronRoute = Boolean(
+    cronSecret && cronProtectedRoutes.has(pathname)
+      && request.headers.get("authorization") === `Bearer ${cronSecret}`,
+  );
 
   // Public pages do not need a Supabase auth round trip on every navigation.
-  if (isPublicRoute || isPublicApiRoute || isPublicCrawlerFile) {
+  if (isPublicRoute || isPublicApiRoute || isPublicCrawlerFile || isAuthorizedCronRoute) {
     return NextResponse.next({ request });
   }
 
