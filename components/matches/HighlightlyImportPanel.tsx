@@ -82,6 +82,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   const [endDate, setEndDate] = useState(madridToday);
   const [quota, setQuota] = useState<QuotaState | null>(null);
   const [checkingQuota, setCheckingQuota] = useState(false);
+  const [quotaFeedback, setQuotaFeedback] = useState("");
   const [pastMatches, setPastMatches] = useState<ImportedMatch[]>([]);
   const [selectedPastMatch, setSelectedPastMatch] = useState("");
   const [syncingPastMatch, setSyncingPastMatch] = useState(false);
@@ -158,16 +159,18 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
 
   async function refreshQuota() {
     setCheckingQuota(true);
+    setQuotaFeedback("");
     try {
-      const response = await fetch(`/api/admin/sports/quota?competition=${competition}&seasonYear=${seasonYear}`, { cache: "no-store" });
+      const response = await fetch(`/api/admin/sports/quota?competition=${competition}&seasonYear=${seasonYear}`, { cache: "no-store", headers: { "cache-control": "no-cache" } });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo consultar el saldo.");
       if (payload.remaining == null) throw new Error("Highlightly no informó el saldo en esta respuesta.");
       const next: QuotaState = { remaining: Number(payload.remaining), limit: payload.limit == null ? null : Number(payload.limit), checkedAt: payload.checkedAt };
       setQuota(next);
       localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(next));
+      setQuotaFeedback(`Saldo actualizado: ${next.remaining}${next.limit != null ? ` / ${next.limit}` : ""}. Esta consulta consume 1 llamada.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo consultar el saldo de Highlightly.");
+      setQuotaFeedback(error instanceof Error ? `No se pudo actualizar el saldo: ${error.message}` : "No se pudo consultar el saldo de Highlightly.");
     } finally {
       setCheckingQuota(false);
     }
@@ -404,6 +407,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       </div>
       <p className="text-xs text-slate-500 sm:col-span-2">Para una jornada se consultan las páginas necesarias del calendario; por fechas se realiza una llamada por día y una temporada completa usa las páginas del calendario. La Copa Mundial usa la temporada del proveedor 2026 asociada a Value90 2025/26. Actualizar el saldo también consume 1 llamada.</p>
     </div>
+    {quotaFeedback && <p role="status" className={`mt-2 rounded-lg p-3 text-sm ${quotaFeedback.startsWith("No se pudo") ? "border border-amber-300 bg-amber-50 text-amber-950" : "border border-emerald-200 bg-emerald-50 text-emerald-900"}`}>{quotaFeedback}</p>}
     <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:p-4">
       <label className="block min-w-0">
         <span className="mb-1 block text-sm font-semibold text-amber-950">Sincronizar ahora un partido ya importado</span>

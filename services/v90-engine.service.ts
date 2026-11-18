@@ -538,28 +538,6 @@ async function getTeamPreviousV90(
   );
 }
 
-async function hasPreviousTeamMatch(
-  teamId: number,
-  seasonId: number,
-  matchDate: string,
-  matchId: number
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("matches")
-    .select("id")
-    .eq("season_id", seasonId)
-    .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
-    .lt("date", matchDate)
-    .neq("id", matchId)
-    .limit(1);
-
-  if (error) {
-    throw new Error(`Error comprobando partidos previos del equipo: ${error.message}`);
-  }
-
-  return Boolean(data && data.length > 0);
-}
-
 async function saveV90Match(
   calculation: SaveCalculation
 ): Promise<void> {
@@ -1294,15 +1272,7 @@ export async function calculateV90Stage(
      * no forman parte del histórico V90.
      * ---------------------------------------------------------- */
 
-    const matchDateById = new Map<number, string>();
-
-    for (const match of seasonMatches) {
-      matchDateById.set(match.id, match.date);
-    }
-
     for (const fact of historicalFacts) {
-      const factDate = matchDateById.get(fact.match_id);
-
       const factMatch = matchesById.get(fact.match_id);
       if (!factMatch || !isBeforeStage(factMatch)) {
         continue;
@@ -1589,24 +1559,24 @@ export async function calculateV90Stage(
               0,
               0
             );
-          } else if (ownTeamV90 !== null && rivalV90 !== null) {
+          } else {
+            /*
+             * A team can have no prior V90 even when its opponent does,
+             * especially when the first imported match is in a new
+             * competition (for example, a domestic club's first European
+             * fixture). Treat the missing side as equal in strength to the
+             * known side. That gives a neutral rival differential while
+             * retaining the known team's level, instead of leaving every
+             * player in the match pending forever.
+             */
+            const knownV90 = ownTeamV90 ?? rivalV90 ?? 0;
+            const effectiveOwnV90 = ownTeamV90 ?? knownV90;
+            const effectiveRivalV90 = rivalV90 ?? knownV90;
             rivalWeightResult = getRivalWeightFromRows(
               rivalWeights,
-              rivalV90 - ownTeamV90,
-              rivalV90
+              effectiveRivalV90 - effectiveOwnV90,
+              effectiveRivalV90
             );
-          } else {
-            pending += 1;
-            participationResults.push({
-              participationId: participation.id,
-              playerId: participation.player_id,
-              status: "PENDING",
-              message:
-                ownTeamV90 === null
-                  ? "Pendiente: todavía no existe V90 previo suficiente para el equipo propio."
-                  : "Pendiente: todavía no existe V90 previo suficiente para el rival.",
-            });
-            continue;
           }
 
           if (!rivalWeightResult) {
