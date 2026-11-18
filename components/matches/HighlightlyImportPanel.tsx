@@ -5,6 +5,7 @@ import { getPlayers, type Player } from "@/services/player.service";
 import PlayerForm from "@/components/players/PlayerForm";
 import { getPositions, type Position } from "@/services/position.service";
 import { getSeasons, type Season } from "@/services/season.service";
+import { getCompetitions, type Competition } from "@/services/competition.service";
 
 type PendingOccurrence = { match_id: number; date: string | null; fixture: string; status: string | null; is_starting_xi: boolean; minutes_played: number | null };
 type Candidate = { id: number; name: string; score: number; countryId: number | null; birthDate: string | null; teamName?: string | null; shirtNumber?: number | null };
@@ -13,7 +14,6 @@ type PendingPlayer = {
   shirt_number: number | null; position_id: number | null; is_starting_xi: boolean; provisional_player: Player | null;
   suggestions: Candidate[]; occurrences: PendingOccurrence[]; auto_match: { player_id: number; player_name: string; position_id: number } | null;
 };
-type CompetitionKey = "laliga" | "champions" | "worldcup";
 type ImportMode = "round" | "dates" | "season";
 type QuotaState = { remaining: number | null; limit: number | null; checkedAt: string };
 type ImportedMatch = { matchId: number; date: string; seasonYear?: number | null; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; competitionId: number; competition: string; stageId: number; stage: string; finalSynced: boolean; syncError: string | null; resultAttempts: number; nextAttemptAt: string | null };
@@ -46,20 +46,18 @@ function matchDateInMadrid(value: string) {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
-function competitionKey(value: string): CompetitionKey | null {
-  const normalized = normalize(value);
-  if (normalized.includes("champions")) return "champions";
-  if (normalized.includes("mundial") || normalized.includes("worldcup")) return "worldcup";
-  if (normalized.includes("laliga") || normalized.includes("primeradivision")) return "laliga";
-  return null;
-}
-
 function incidentKey(item: PendingPlayer) { return `${item.provider}:${item.external_player_key}`; }
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").replace(/[^a-z0-9]/g, ""); }
 function formatDate(value: string | null) {
   if (!value) return "Fecha pendiente";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function formatBirthDate(value: string | null) {
+  if (!value) return "Nacimiento no registrado";
+  const parts = value.slice(0, 10).split("-");
+  return parts.length === 3 ? `Nacimiento: ${parts[2]}/${parts[1]}/${parts[0]}` : `Nacimiento: ${value}`;
 }
 
 export default function HighlightlyImportPanel({ onImported }: { onImported?: () => void }) {
@@ -73,7 +71,8 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   const [selectedCandidates, setSelectedCandidates] = useState<Record<string, Candidate>>({});
   const [savingKey, setSavingKey] = useState("");
   const [creatingFor, setCreatingFor] = useState<PendingPlayer | null>(null);
-  const [competition, setCompetition] = useState<CompetitionKey>("laliga");
+  const [competitionId, setCompetitionId] = useState("");
+  const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [seasonYear, setSeasonYear] = useState(currentFootballSeasonYear);
   const [seasonOptions, setSeasonOptions] = useState<Array<{ year: number; name: string }>>([]);
   const [importMode, setImportMode] = useState<ImportMode>("round");
@@ -143,6 +142,12 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     loadPlayers().catch(() => undefined);
     loadPastMatches().catch(() => undefined);
     getPositions().then(setPositions).catch(() => undefined);
+    getCompetitions().then((rows) => {
+      setCompetitions(rows);
+      const defaultCompetition = rows.find((row) => /laliga|primera division/.test(normalize(`${row.name} ${row.shortName}`)))
+        ?? rows.find((row) => row.competitionType === "League");
+      if (defaultCompetition) setCompetitionId(String(defaultCompetition.id));
+    }).catch((error) => console.error("No se pudieron cargar las competiciones para importar:", error));
     getSeasons().then((seasons: Season[]) => {
       const years = new Map<number, string>();
       for (const season of seasons) {
@@ -161,14 +166,14 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     setCheckingQuota(true);
     setQuotaFeedback("");
     try {
-      const response = await fetch(`/api/admin/sports/quota?competition=${competition}&seasonYear=${seasonYear}`, { cache: "no-store", headers: { "cache-control": "no-cache" } });
+      const response = await fetch(`/api/admin/sports/quota?${quotaQuery}&seasonYear=${seasonYear}`, { cache: "no-store", headers: { "cache-control": "no-cache" } });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo consultar el saldo.");
       if (payload.remaining == null) throw new Error("Highlightly no informó el saldo en esta respuesta.");
       const next: QuotaState = { remaining: Number(payload.remaining), limit: payload.limit == null ? null : Number(payload.limit), checkedAt: payload.checkedAt };
       setQuota(next);
       localStorage.setItem(QUOTA_STORAGE_KEY, JSON.stringify(next));
-      setQuotaFeedback(`Saldo actualizado: ${next.remaining}${next.limit != null ? ` / ${next.limit}` : ""}. Esta consulta consume 1 llamada.`);
+      setQuotaFeedback(`Saldo actualizado: ${next.remaining}${next.limit != null ? ` / ${next.limit}` : ""}. Esta consulta consume ${legacyCompetitionKey ? 1 : 2} llamada(s).`);
     } catch (error) {
       setQuotaFeedback(error instanceof Error ? `No se pudo actualizar el saldo: ${error.message}` : "No se pudo consultar el saldo de Highlightly.");
     } finally {
@@ -176,22 +181,39 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     }
   }
 
-  const totalMatches = competition === "laliga" ? 380 : competition === "champions" ? 144 : 104;
-  const matchesPerRound = competition === "laliga" ? 10 : competition === "champions" ? 18 : 16;
+  const selectedCompetition = competitions.find((item) => String(item.id) === competitionId) ?? null;
+  const normalizedCompetition = normalize(selectedCompetition?.name ?? "");
+  const isChampions = normalizedCompetition.includes("championsleague");
+  const isWorldCup = normalizedCompetition.includes("mundial") || normalizedCompetition.includes("worldcup");
+  const isLaLiga = normalizedCompetition.includes("laliga") || normalizedCompetition.includes("primeradivision");
+  const legacyCompetitionKey = isLaLiga ? "laliga" : isChampions ? "champions" : isWorldCup ? "worldcup" : null;
+  const importCompetitionPayload = legacyCompetitionKey
+    ? { competition: legacyCompetitionKey }
+    : { competitionId: Number(competitionId), competitionName: selectedCompetition?.name ?? "" };
+  const quotaQuery = selectedCompetition && legacyCompetitionKey
+    ? `competition=${legacyCompetitionKey}`
+    : `competitionId=${competitionId}&competitionName=${encodeURIComponent(selectedCompetition?.name ?? "")}`;
+  const totalMatches = isLaLiga ? 380 : isChampions ? 144 : isWorldCup ? 104 : selectedCompetition?.competitionType === "League" ? 380 : 160;
+  const matchesPerRound = isLaLiga ? 10 : isChampions ? 18 : isWorldCup ? 16 : selectedCompetition?.competitionType === "League" ? 10 : 16;
   const estimatedCalls = importMode === "season"
-    ? Math.ceil(totalMatches / 100)
+    ? Math.ceil(totalMatches / 100) + (legacyCompetitionKey ? 0 : 1)
     : importMode === "round"
-      ? 1 + (Math.floor(Math.max(0, totalMatches - Number(round) * matchesPerRound) / 100) > 0 ? 1 : 0)
-      : Math.max(0, Math.floor((new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86_400_000) + 1);
-  const invalidDateRange = importMode === "dates" && (!startDate || !endDate || endDate < startDate || estimatedCalls > 31);
+      ? legacyCompetitionKey
+        ? 1 + (Math.floor(Math.max(0, totalMatches - Number(round) * matchesPerRound) / 100) > 0 ? 1 : 0)
+        : Math.ceil(totalMatches / 100) + 1
+      : Math.max(0, Math.floor((new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86_400_000) + 1) + (legacyCompetitionKey ? 0 : 1);
+  const dateRangeDays = startDate && endDate && endDate >= startDate
+    ? Math.floor((new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86_400_000) + 1
+    : 0;
+  const invalidDateRange = importMode === "dates" && (!dateRangeDays || dateRangeDays > 31);
   const filteredPastMatches = useMemo(() => pastMatches.filter((match) => {
-    if (competitionKey(match.competition) !== competition) return false;
+    if (match.competitionId !== Number(competitionId)) return false;
     if ((match.seasonYear ?? footballSeasonYear(match.date)) !== seasonYear) return false;
     if (importMode === "round") return Number(match.stage.match(/\d+/)?.[0]) === Number(round);
     if (importMode === "season") return true;
     const matchDate = matchDateInMadrid(match.date);
     return Boolean(startDate && endDate && matchDate >= startDate && matchDate <= endDate);
-  }), [pastMatches, competition, seasonYear, importMode, round, startDate, endDate]);
+  }), [pastMatches, competitionId, seasonYear, importMode, round, startDate, endDate]);
   const pendingSyncMatches = useMemo(() => filteredPastMatches.filter((match) => !match.finalSynced), [filteredPastMatches]);
 
   useEffect(() => {
@@ -207,10 +229,10 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(importMode === "round"
-          ? { competition, mode: importMode, round: Number(round), seasonYear }
+          ? { ...importCompetitionPayload, mode: importMode, round: Number(round), seasonYear }
           : importMode === "dates"
-            ? { competition, mode: importMode, startDate, endDate, seasonYear }
-            : { competition, mode: importMode, seasonYear }),
+            ? { ...importCompetitionPayload, mode: importMode, startDate, endDate, seasonYear }
+            : { ...importCompetitionPayload, mode: importMode, seasonYear }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "No se pudo importar el calendario.");
@@ -274,7 +296,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     let processed = 0;
     let errors = 0;
     try {
-      const quotaResponse = await fetch(`/api/admin/sports/quota?competition=${competition}&seasonYear=${seasonYear}`, { cache: "no-store" });
+      const quotaResponse = await fetch(`/api/admin/sports/quota?${quotaQuery}&seasonYear=${seasonYear}`, { cache: "no-store" });
       const quotaPayload = await quotaResponse.json();
       if (!quotaResponse.ok) throw new Error(quotaPayload.error ?? "No se pudo comprobar el saldo de Highlightly.");
       remaining = quotaPayload.remaining == null ? null : Number(quotaPayload.remaining);
@@ -359,23 +381,22 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       </div>
       <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
         <button type="button" onClick={refreshQuota} disabled={checkingQuota || importing} className="min-h-11 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60 sm:w-auto">{checkingQuota ? "Consultando saldo…" : "Actualizar saldo"}</button>
-        <button type="button" onClick={importFixtures} disabled={importing || invalidDateRange} className="min-h-11 w-full rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto">{importing ? "Importando…" : "Importar partidos"}</button>
+        <button type="button" onClick={importFixtures} disabled={importing || invalidDateRange || !selectedCompetition} className="min-h-11 w-full rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto">{importing ? "Importando…" : "Importar partidos"}</button>
       </div>
     </div>
 
     <div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2 sm:p-4">
       <label className="block min-w-0">
         <span className="mb-1 block text-sm font-medium text-slate-700">Temporada</span>
-        <select value={seasonYear} onChange={(event) => { const nextYear = Number(event.target.value); setSeasonYear(nextYear); if (nextYear !== 2025 && competition === "worldcup") { setCompetition("laliga"); setImportMode("round"); } }} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+        <select value={seasonYear} onChange={(event) => setSeasonYear(Number(event.target.value))} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
           {seasonOptions.map((season) => <option key={season.year} value={season.year}>{season.name}</option>)}
         </select>
       </label>
       <label className="block min-w-0">
         <span className="mb-1 block text-sm font-medium text-slate-700">Competición</span>
-        <select value={competition} onChange={(event) => { setCompetition(event.target.value as CompetitionKey); setRound("1"); if (event.target.value === "worldcup") setImportMode("season"); }} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
-          <option value="laliga">LaLiga</option>
-          <option value="champions">Champions League</option>
-          {seasonYear === 2025 && <option value="worldcup">Copa Mundial FIFA</option>}
+        <select value={competitionId} onChange={(event) => { const nextId = event.target.value; setCompetitionId(nextId); setRound("1"); const nextCompetition = competitions.find((item) => String(item.id) === nextId); if (normalize(nextCompetition?.name ?? "").includes("mundial")) setImportMode("season"); }} disabled={!competitions.length} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">
+          {!competitions.length && <option value="">Cargando competiciones…</option>}
+          {competitions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </label>
       <label className="block min-w-0">
@@ -389,7 +410,7 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       {importMode === "round" ? <label className="block min-w-0 sm:col-span-2">
         <span className="mb-1 block text-sm font-medium text-slate-700">Jornada</span>
         <select value={round} onChange={(event) => setRound(event.target.value)} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm sm:max-w-sm">
-          {Array.from({ length: competition === "laliga" ? 38 : competition === "champions" ? 8 : 3 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{competition === "champions" ? `League stage · Jornada ${value}` : `Jornada ${value}`}</option>)}
+          {Array.from({ length: isLaLiga ? 38 : isChampions ? 8 : isWorldCup ? 3 : selectedCompetition?.competitionType === "League" ? 38 : 50 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{isChampions ? `League stage · Jornada ${value}` : `Jornada ${value}`}</option>)}
         </select>
       </label> : importMode === "dates" ? <>
         <label className="block min-w-0">
@@ -454,9 +475,9 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
 
           <div className="mt-4 rounded-lg border border-white/80 bg-white p-3">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Posibles coincidencias de nombre · orientativas</p>
-            {item.suggestions.length ? <div className="mt-2 flex flex-wrap gap-2">{item.suggestions.map((candidate) => <button key={candidate.id} type="button" onClick={() => setSelectedCandidates((current) => ({ ...current, [key]: candidate }))} disabled={isSaving} aria-pressed={selectedCandidates[key]?.id === candidate.id} className={`min-h-10 rounded-lg border px-3 py-2 text-left text-sm font-medium disabled:opacity-50 ${selectedCandidates[key]?.id === candidate.id ? "border-emerald-600 bg-emerald-100 text-emerald-950 ring-2 ring-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-950"}`}><span>{candidate.name}</span><span className="ml-2 text-xs text-emerald-800">{candidate.score}%</span></button>)}</div> : <p className="mt-2 text-sm text-slate-500">No hay coincidencias claras; busca manualmente o confirma una ficha nueva.</p>}
+            {item.suggestions.length ? <div className="mt-2 flex flex-wrap gap-2">{item.suggestions.map((candidate) => <button key={candidate.id} type="button" onClick={() => setSelectedCandidates((current) => ({ ...current, [key]: candidate }))} disabled={isSaving} aria-pressed={selectedCandidates[key]?.id === candidate.id} className={`min-h-14 rounded-lg border px-3 py-2 text-left text-sm font-medium disabled:opacity-50 ${selectedCandidates[key]?.id === candidate.id ? "border-emerald-600 bg-emerald-100 text-emerald-950 ring-2 ring-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-950"}`}><span className="flex items-center justify-between gap-3"><span>{candidate.name}</span><span className="shrink-0 text-xs text-emerald-800">{candidate.score}%</span></span><span className="mt-1 block text-xs font-normal text-slate-600">{formatBirthDate(candidate.birthDate)}</span></button>)}</div> : <p className="mt-2 text-sm text-slate-500">No hay coincidencias claras; busca manualmente o confirma una ficha nueva.</p>}
             <label className="mt-3 block"><span className="mb-1 block text-xs font-semibold text-slate-600">Buscar en las fichas existentes</span><input value={search[key] ?? ""} onChange={(event) => setSearch((current) => ({ ...current, [key]: event.target.value }))} placeholder="Escribe el nombre del jugador" className="min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100" /></label>
-            {searchedPlayers.length > 0 && <div className="mt-2 grid gap-2 sm:grid-cols-2">{searchedPlayers.map((player) => <button key={player.id} type="button" onClick={() => setSelectedCandidates((current) => ({ ...current, [key]: item.suggestions.find((candidate) => candidate.id === player.id) ?? { id: player.id, name: player.name, score: 0, countryId: null, birthDate: null } }))} disabled={isSaving} aria-pressed={selectedCandidates[key]?.id === player.id} className={`min-h-10 rounded-lg border px-3 py-2 text-left text-sm font-medium disabled:opacity-50 ${selectedCandidates[key]?.id === player.id ? "border-emerald-600 bg-emerald-100" : "border-slate-200 hover:border-emerald-400"}`}>{player.name}</button>)}</div>}
+            {searchedPlayers.length > 0 && <div className="mt-2 grid gap-2 sm:grid-cols-2">{searchedPlayers.map((player) => <button key={player.id} type="button" onClick={() => setSelectedCandidates((current) => ({ ...current, [key]: item.suggestions.find((candidate) => candidate.id === player.id) ?? { id: player.id, name: player.name, score: 0, countryId: player.countryId, birthDate: player.birthDate } }))} disabled={isSaving} aria-pressed={selectedCandidates[key]?.id === player.id} className={`min-h-14 rounded-lg border px-3 py-2 text-left text-sm font-medium disabled:opacity-50 ${selectedCandidates[key]?.id === player.id ? "border-emerald-600 bg-emerald-100" : "border-slate-200 hover:border-emerald-400"}`}><span className="block">{player.name}</span><span className="mt-1 block text-xs font-normal text-slate-600">{formatBirthDate(player.birthDate)}</span></button>)}</div>}
             {selectedCandidates[key] && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950"><p className="font-semibold">Ficha seleccionada: {selectedCandidates[key].name}</p><p className="mt-1">En Value90: {selectedCandidates[key].teamName ?? "sin plantilla asociada para esta temporada"}{selectedCandidates[key].shirtNumber != null ? ` · dorsal ${selectedCandidates[key].shirtNumber}` : " · sin dorsal registrado"}</p><p>En la incidencia: {item.team_name}{item.shirt_number != null ? ` · dorsal ${item.shirt_number}` : " · dorsal no identificado"}</p><p className="mt-1 text-xs">La ficha del jugador ya existe en Value90. Al vincularla, se conservará su nombre y se guardarán el equipo, dorsal, participación y futuras asociaciones reconocidas.</p></div>}
           </div>
 

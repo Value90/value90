@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { getHighlightlyMatches, type HighlightlyMatch } from "@/lib/highlightly.server";
+import { getHighlightlyLeagues, getHighlightlyMatches, type HighlightlyMatch } from "@/lib/highlightly.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,9 +50,9 @@ function roundNumber(round: string) {
   return match ? Number(match[1]) : null;
 }
 
-function stageName(competition: "laliga" | "champions" | "worldcup", round: string) {
+function stageName(competition: "laliga" | "champions" | "worldcup" | "other", round: string) {
   const number = roundNumber(round);
-  if (number != null && (competition === "laliga" || /league\s+stage|group\s+stage/i.test(round))) return `Jornada ${number}`;
+  if (number != null && (competition === "laliga" || competition === "other" || /league\s+stage|group\s+stage/i.test(round))) return `Jornada ${number}`;
   if (competition === "worldcup") {
     const normalized = normalize(round);
     if (/roundof32|roundofthirtytwo|dieciseisavos/.test(normalized)) return "Dieciseisavos de final";
@@ -63,7 +63,7 @@ function stageName(competition: "laliga" | "champions" | "worldcup", round: stri
     if (/final/.test(normalized)) return "Final";
     return round;
   }
-  return `Champions League - ${round}`;
+  return competition === "champions" ? `Champions League - ${round}` : round;
 }
 
 function providerSeasonYear(competition: keyof typeof TARGETS, seasonYear: number) {
@@ -212,33 +212,51 @@ export async function POST(request: NextRequest) {
     const supabase = cronAuthorized ? createAdminSupabaseClient() : session!;
 
     const input = await request.json().catch(() => null) as {
-      competition?: string; mode?: string; round?: number; startDate?: string; endDate?: string; seasonYear?: number; onlyMissing?: boolean;
+      competition?: string; competitionId?: number; competitionName?: string; mode?: string; round?: number; startDate?: string; endDate?: string; seasonYear?: number; onlyMissing?: boolean;
     } | null;
-    if (!input || typeof input.competition !== "string" || !Object.prototype.hasOwnProperty.call(TARGETS, input.competition)) {
-      return NextResponse.json({ error: "Selecciona una competición compatible con Highlightly." }, { status: 400 });
+    const legacyTarget = input?.competition && Object.prototype.hasOwnProperty.call(TARGETS, input.competition)
+      ? TARGETS[input.competition as keyof typeof TARGETS]
+      : null;
+    if (!input || (!legacyTarget && (!Number.isInteger(input.competitionId) || Number(input.competitionId) <= 0 || !input.competitionName?.trim()))) {
+      return NextResponse.json({ error: "Selecciona una competición disponible en Value90." }, { status: 400 });
     }
     const seasonYear = Number(input.seasonYear ?? DEFAULT_SEASON_YEAR);
     if (!Number.isInteger(seasonYear) || seasonYear < 1990 || seasonYear > 2100) {
       return NextResponse.json({ error: "Selecciona una temporada válida." }, { status: 400 });
     }
-    const target = TARGETS[input.competition as keyof typeof TARGETS];
-    const providerYear = providerSeasonYear(target.competition, seasonYear);
+    const providerName = legacyTarget?.competitionName ?? input.competitionName!.trim();
+    const genericWorldCup = !legacyTarget && /world cup|mundial/i.test(providerName);
+    const providerYear = legacyTarget ? providerSeasonYear(legacyTarget.competition, seasonYear) : genericWorldCup ? seasonYear + 1 : seasonYear;
+    let providerLeagueId: number | null = legacyTarget?.leagueId ?? null;
+    if (!providerLeagueId) {
+      const leagueResponse = await getHighlightlyLeagues({ leagueName: providerName, season: providerYear });
+      const requestedName = normalize(providerName);
+      const league = leagueResponse.body?.data?.find((item) => normalize(item.name) === requestedName && item.seasons?.some((entry) => entry.season === providerYear));
+      if (!league) return NextResponse.json({ error: `Highlightly no ofrece «${providerName}» para la temporada ${providerYear}.` }, { status: 404 });
+      providerLeagueId = league.id;
+    }
+    if (providerLeagueId == null) return NextResponse.json({ error: "No se pudo resolver la competición en Highlightly." }, { status: 404 });
+    const competitionKind = legacyTarget?.competition ?? (genericWorldCup ? "worldcup" : "other");
     let fetched: { matches: HighlightlyMatch[]; remaining: string | null; limit: string | null; requests: number; quotaExhausted: boolean };
     if (input.mode === "round") {
-      const maxRound = target.competition === "laliga" ? 38 : target.competition === "champions" ? 8 : 3;
+      const maxRound = legacyTarget?.competition === "laliga" ? 38 : legacyTarget?.competition === "champions" ? 8 : legacyTarget?.competition === "worldcup" ? 3 : 50;
       if (!Number.isInteger(input.round) || Number(input.round) < 1 || Number(input.round) > maxRound) {
         return NextResponse.json({ error: `Selecciona una jornada entre 1 y ${maxRound}.` }, { status: 400 });
       }
-      fetched = await fetchMatchesForRound(target.leagueId, providerYear, Number(input.round), target.matchesPerRound);
+      if (legacyTarget) fetched = await fetchMatchesForRound(providerLeagueId, providerYear, Number(input.round), legacyTarget.matchesPerRound);
+      else {
+        fetched = await fetchMatchesForSeason(providerLeagueId, providerYear);
+        fetched.matches = fetched.matches.filter((match) => roundNumber(match.round) === Number(input.round));
+      }
     } else if (input.mode === "dates") {
       if (!isDate(input.startDate) || !isDate(input.endDate)) {
         return NextResponse.json({ error: "Indica una fecha inicial y final válidas." }, { status: 400 });
       }
       const dates = dateRange(input.startDate, input.endDate);
-      fetched = await fetchMatchesForDates(target.leagueId, providerYear, dates);
+      fetched = await fetchMatchesForDates(providerLeagueId, providerYear, dates);
       fetched.matches = fetched.matches.filter((match) => Number(match.league?.season) === providerYear);
     } else if (input.mode === "season") {
-      fetched = await fetchMatchesForSeason(target.leagueId, providerYear);
+      fetched = await fetchMatchesForSeason(providerLeagueId, providerYear);
       fetched.matches = fetched.matches.filter((match) => Number(match.league?.season) === providerYear);
     } else {
       return NextResponse.json({ error: "Selecciona si quieres importar una jornada o un periodo." }, { status: 400 });
@@ -246,7 +264,7 @@ export async function POST(request: NextRequest) {
 
     const targetMatches = [...new Map(fetched.matches.map((match) => [Number(match.id), match])).values()];
     if (!targetMatches.length) {
-      return NextResponse.json({ ok: true, imported: 0, skipped: 0, callsUsed: fetched.requests, callsRemaining: fetched.remaining, callsLimit: fetched.limit, quotaExhausted: fetched.quotaExhausted, message: "Highlightly no devolvió partidos para esos filtros." });
+      return NextResponse.json({ ok: true, imported: 0, skipped: 0, callsUsed: fetched.requests + (legacyTarget ? 0 : 1), callsRemaining: fetched.remaining, callsLimit: fetched.limit, quotaExhausted: fetched.quotaExhausted, message: "Highlightly no devolvió partidos para esos filtros." });
     }
 
     const [seasonsResult, competitionsResult, stagesResult, teamsResult] = await Promise.all([
@@ -274,13 +292,15 @@ export async function POST(request: NextRequest) {
       season = created.data;
     }
 
-    const competition = (competitionsResult.data ?? []).find((item) => {
+    const competition = input.competitionId != null
+      ? (competitionsResult.data ?? []).find((item) => Number(item.id) === Number(input.competitionId))
+      : (competitionsResult.data ?? []).find((item) => {
       const name = normalize(`${item.name} ${item.short_name ?? ""}`);
-      if (target.competition === "laliga") return name.includes("laliga") || name.includes("primeradivision");
-      if (target.competition === "champions") return name.includes("championsleague");
+      if (legacyTarget?.competition === "laliga") return name.includes("laliga") || name.includes("primeradivision");
+      if (legacyTarget?.competition === "champions") return name.includes("championsleague");
       return (name.includes("mundial") && name.includes("fifa")) || name.includes("worldcup");
     });
-    if (!competition) throw new Error(`Crea o activa ${target.competitionName} en Value90 antes de importar.`);
+    if (!competition) throw new Error(`No se encontró la competición «${providerName}» en Value90. Créala primero en Configuración > Competiciones.`);
     const existingMatchesResult = await supabase.from("matches")
       .select("id,home_team_id,away_team_id,date")
       .eq("season_id", season.id).eq("competition_id", competition.id).order("id");
@@ -306,7 +326,7 @@ export async function POST(request: NextRequest) {
       // UCL seasons contain qualifying clubs which may never have appeared
       // in Value90. Keep these generated records inactive until an admin adds
       // their country/stadium details; the fixtures can still be imported.
-      if (target.competition === "champions") {
+      if (legacyTarget?.competition === "champions") {
         for (const [side, teamName] of [["home", match.homeTeam.name], ["away", match.awayTeam.name]] as const) {
           if ((side === "home" ? home : away) || !teamName?.trim()) continue;
           let provisional = findTeam(teamsResult.data ?? [], teamName);
@@ -330,7 +350,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const currentStageName = stageName(target.competition, match.round);
+      const currentStageName = stageName(competitionKind, match.round);
       let stage = (stagesResult.data ?? []).find((item) => item.season_id === season.id && item.name === currentStageName);
       if (!stage) {
         const displayOrder = Math.max(0, ...(stagesResult.data ?? []).filter((item) => item.season_id === season.id).map((item) => Number(item.display_order))) + 1;
@@ -394,9 +414,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true, imported: imported.length, skipped: skipped.length, importedMatches: imported,
-      skippedMatches: skipped, missingTeams: [...missingTeams], callsUsed: fetched.requests,
+      skippedMatches: skipped, missingTeams: [...missingTeams], callsUsed: fetched.requests + (legacyTarget ? 0 : 1),
       callsRemaining: fetched.remaining, callsLimit: fetched.limit, quotaExhausted: fetched.quotaExhausted,
-      message: `Importación completada${fetched.quotaExhausted ? " parcialmente: se alcanzó el límite diario de llamadas" : ""}. Se utilizaron ${fetched.requests} llamada(s) a Highlightly.`,
+      message: `Importación completada${fetched.quotaExhausted ? " parcialmente: se alcanzó el límite diario de llamadas" : ""}. Se utilizaron ${fetched.requests + (legacyTarget ? 0 : 1)} llamada(s) a Highlightly.`,
     });
   } catch (error) {
     console.error("Error importando calendario Highlightly:", error);

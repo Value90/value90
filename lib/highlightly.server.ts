@@ -118,7 +118,7 @@ async function request<T>(path: string, params?: Record<string, string | number>
   };
 }
 
-export async function getHighlightlyLeagues(params: { leagueName?: string; countryCode?: string; season?: number }) {
+export async function getHighlightlyLeagues(params: { leagueName?: string; countryCode?: string; season?: number; limit?: number; offset?: number }) {
   const query: Record<string, string | number> = { limit: 100, ...params };
   return request<HighlightlyPage<HighlightlyLeague>>("/leagues", query);
 }
