@@ -1089,8 +1089,8 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th),
           .matches-responsive-table :global(td) {
-            padding: 0.6rem 0.3rem;
-            font-size: 0.7rem;
+            padding: 0.55rem 0.25rem;
+            font-size: 0.75rem;
           }
 
           .matches-responsive-table :global(th) {
@@ -1104,28 +1104,28 @@ export default function MatchesTable({
 
           .matches-responsive-table :global(th:nth-child(2)),
           .matches-responsive-table :global(td:nth-child(2)) {
-            width: 14%;
+            width: 18%;
           }
 
           .matches-responsive-table :global(th:nth-child(3)),
           .matches-responsive-table :global(td:nth-child(3)) {
-            width: 20%;
+            width: 19%;
           }
 
           .matches-responsive-table :global(th:nth-child(4)),
           .matches-responsive-table :global(td:nth-child(4)) {
-            width: 20%;
+            width: 19%;
           }
 
           .matches-responsive-table :global(th:nth-child(5)),
           .matches-responsive-table :global(td:nth-child(5)) {
-            width: 15%;
+            width: 14%;
             text-align: center;
           }
 
           .matches-responsive-table :global(th:nth-child(8)),
           .matches-responsive-table :global(td:nth-child(8)) {
-            width: 31%;
+            width: 30%;
           }
 
           /*
@@ -1156,8 +1156,8 @@ export default function MatchesTable({
           .matches-responsive-table :global(td:nth-child(8) button) {
             width: 100%;
             min-width: 0;
-            padding: 0.35rem 0.2rem;
-            font-size: 0.65rem;
+            padding: 0.35rem 0.15rem;
+            font-size: 0.7rem;
             line-height: 1.2;
           }
 

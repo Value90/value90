@@ -89,7 +89,7 @@ export default function Sidebar({
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         aria-label={mobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
         aria-expanded={mobileMenuOpen}
-        className="fixed left-4 top-4 z-[60] flex h-11 w-11 items-center justify-center rounded-xl bg-slate-800 text-xl text-white shadow-lg transition hover:bg-slate-700 md:hidden"
+        className="fixed left-4 top-1 z-[60] flex h-11 w-11 items-center justify-center rounded-xl bg-slate-800 text-xl text-white shadow-lg transition hover:bg-slate-700 md:hidden"
       >
         {mobileMenuOpen ? "×" : "☰"}
       </button>

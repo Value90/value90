@@ -9,7 +9,6 @@ import { getStages } from "@/services/stage.service";
 import { getMatches } from "@/services/match.service";
 import { getParticipations } from "@/services/participation.service";
 import { getPlayerMatchStats } from "@/services/player-match-stat.service";
-import OwnRatingsProgress from "@/components/dashboard/OwnRatingsProgress";
 import HighlightlyProgress from "@/components/dashboard/HighlightlyProgress";
 import {
   getHistPlayerTeamsByTeamAndSeason,
@@ -24,7 +23,7 @@ import type { Participation } from "@/services/participation.service";
 import type { PlayerMatchStat } from "@/services/player-match-stat.service";
 import type { HistPlayerTeam } from "@/services/hist-player-team.service";
 
-type Tab = "teams" | "stages" | "highlightly" | "own-ratings";
+type Tab = "teams" | "stages" | "highlightly";
 
 interface TeamProgress {
   team: Team;
@@ -945,18 +944,6 @@ export default function ProgresoPage() {
 
         <button
           type="button"
-          onClick={() => setActiveTab("own-ratings")}
-          className={`shrink-0 px-4 py-3 text-sm font-semibold transition sm:px-5 ${
-            activeTab === "own-ratings"
-              ? "border-b-2 border-slate-800 text-slate-800"
-              : "text-slate-500 hover:text-slate-800"
-          }`}
-        >
-          Valoración propia
-        </button>
-
-        <button
-          type="button"
           onClick={() => setActiveTab("highlightly")}
           className={`shrink-0 px-4 py-3 text-sm font-semibold transition sm:px-5 ${
             activeTab === "highlightly"
@@ -1230,8 +1217,6 @@ export default function ProgresoPage() {
               )}
             </div>
           )}
-
-          {activeTab === "own-ratings" && <OwnRatingsProgress />}
 
           {activeTab === "highlightly" && (
             <HighlightlyProgress

@@ -51,7 +51,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-dvh min-h-svh flex-col">
       <Header />
 
       <div className="flex min-h-0 flex-1">
@@ -65,7 +65,7 @@ export default function Home() {
           }}
         />
 
-        <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-slate-100">
+        <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain bg-slate-100 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
           <AdminContent
             page={page}
             editTeamId={editTeamId}
