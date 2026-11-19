@@ -58,6 +58,7 @@ interface ImportRow {
   existingPlayer?: Player;
   candidatePlayers?: Player[];
   duplicateReason?: "input" | "identity" | "similar";
+  manualNoLink?: boolean;
   status: "existing" | "new" | "duplicate";
   playerId?: number;
 }
@@ -1469,6 +1470,13 @@ export default function PlayerSquadImportForm({
     setCandidateSearch((current) => ({ ...current, [rowIndex]: "" }));
   };
 
+  const markImportRowAsNew = (rowIndex: number) => {
+    setRows((current) => current.map((row, index) => index === rowIndex
+      ? { ...row, existingPlayer: undefined, playerId: undefined, manualNoLink: true, status: "new" }
+      : row));
+    setCandidateSearch((current) => ({ ...current, [rowIndex]: "" }));
+  };
+
   /*
    * ============================================================
    * CREAR JUGADORES + PLANTILLA
@@ -2599,7 +2607,7 @@ Pedro Porro`}
                               <td className="px-3 py-3">{row.birthDate ?? "—"}</td>
                               <td className="px-3 py-3">
                                 {row.status === "existing" && <span className="font-medium text-green-600">✓ Vinculado: {row.existingPlayer?.name ?? "ya existe"}</span>}
-                                {row.status === "new" && <span className="font-medium text-blue-600">+ Se creará</span>}
+                                {row.status === "new" && <span className="font-medium text-blue-600">{row.manualNoLink ? "✓ No vinculada: se creará nueva ficha" : "+ Se creará"}</span>}
                                 {row.status === "duplicate" && <span className="font-medium text-amber-700">⚠ Revisar coincidencia</span>}
                               </td>
                             </tr>
@@ -2625,10 +2633,22 @@ Pedro Porro`}
                                               Vincular: {candidate.name}{candidate.shortName && candidate.shortName !== candidate.name ? ` (${candidate.shortName})` : ""}
                                             </button>
                                           ))}
+                                          <button type="button" onClick={() => markImportRowAsNew(index)} className="min-h-9 rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                                            No vincular: crear jugador nuevo
+                                          </button>
                                         </div>
                                       ) : query.length >= 2 ? (
-                                        <p className="text-xs text-slate-600">No hay coincidencias con esa búsqueda.</p>
-                                      ) : null}
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <p className="text-xs text-slate-600">No hay coincidencias con esa búsqueda.</p>
+                                          <button type="button" onClick={() => markImportRowAsNew(index)} className="min-h-9 rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                                            No vincular: crear jugador nuevo
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button type="button" onClick={() => markImportRowAsNew(index)} className="min-h-9 rounded-lg border border-amber-400 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                                          No vincular: crear jugador nuevo
+                                        </button>
+                                      )}
                                     </div>
                                   )}
                                 </td>
