@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useMemo,
   useState,
@@ -55,6 +56,8 @@ interface ImportRow {
   countryId: number | null;
   birthDate: string | null;
   existingPlayer?: Player;
+  candidatePlayers?: Player[];
+  duplicateReason?: "input" | "identity" | "similar";
   status: "existing" | "new" | "duplicate";
   playerId?: number;
 }
@@ -85,10 +88,32 @@ function normalizeName(value: string): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("es")
-    .replace(/[.'’`´]/g, "")
-    .replace(/[-_/]/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function nameSimilarity(left: string, right: string): number {
+  const a = normalizeName(left).replace(/\s/g, "");
+  const b = normalizeName(right).replace(/\s/g, "");
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let diagonal = previous[0];
+    previous[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const above = previous[j];
+      previous[j] = Math.min(
+        previous[j] + 1,
+        previous[j - 1] + 1,
+        diagonal + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+      diagonal = above;
+    }
+  }
+  return 1 - previous[b.length] / Math.max(a.length, b.length);
 }
 
 /*
@@ -534,6 +559,9 @@ export default function PlayerSquadImportForm({
 
   const [rows, setRows] =
     useState<ImportRow[]>([]);
+
+  const [candidateSearch, setCandidateSearch] =
+    useState<Record<number, string>>({});
 
   /*
    * ============================================================
@@ -1120,22 +1148,13 @@ export default function PlayerSquadImportForm({
 
       players.forEach(
         (player) => {
-          const key =
-            normalizeName(
-              player.name
-            );
-
-          const list =
-            playerMap.get(
-              key
-            ) ?? [];
-
-          list.push(player);
-
-          playerMap.set(
-            key,
-            list
-          );
+          [player.name, player.shortName].forEach((name) => {
+            const key = normalizeName(name ?? "");
+            if (!key) return;
+            const list = playerMap.get(key) ?? [];
+            if (!list.some((candidate) => candidate.id === player.id)) list.push(player);
+            playerMap.set(key, list);
+          });
         }
       );
 
@@ -1201,8 +1220,24 @@ export default function PlayerSquadImportForm({
           const effectiveCountryName =
             effectiveCountry?.name ?? null;
 
-          const matches =
-            playerMap.get(normalizedName) ?? [];
+          const matches = playerMap.get(normalizedName) ?? [];
+          const similarCandidates = matches.length > 0
+            ? matches
+            : players
+                .map((player) => ({
+                  player,
+                  similarity: [player.name, player.shortName ?? ""].reduce((best, candidateName) => {
+                    const sourceParts = normalizeName(inputName).split(" ");
+                    const candidateParts = normalizeName(candidateName).split(" ");
+                    const mayMatch = sourceParts[0]?.[0] === candidateParts[0]?.[0]
+                      || sourceParts.at(-1)?.[0] === candidateParts.at(-1)?.[0];
+                    return mayMatch ? Math.max(best, nameSimilarity(inputName, candidateName)) : best;
+                  }, 0),
+                }))
+                .filter((candidate) => candidate.similarity >= 0.78)
+                .sort((a, b) => b.similarity - a.similarity)
+                .slice(0, 8)
+                .map(({ player }) => player);
 
           /*
            * ========================================================
@@ -1248,6 +1283,7 @@ export default function PlayerSquadImportForm({
               countryId: effectiveCountryId,
               birthDate: item.birthDate,
               status: "duplicate",
+              duplicateReason: "input",
             };
           }
 
@@ -1309,17 +1345,17 @@ export default function PlayerSquadImportForm({
               countryName: effectiveCountryName,
               countryId: effectiveCountryId,
               birthDate: item.birthDate,
+              candidatePlayers: identityMatches,
+              duplicateReason: "identity",
               status: "duplicate",
             };
           }
 
           /*
-           * El nombre existe, pero ninguno de esos jugadores
-           * coincide con el país/fecha proporcionados.
-           *
-           * Esto NO es un duplicado:
-           * significa que estamos importando otro jugador
-           * con el mismo nombre.
+           * Si el nombre coincide pero los metadatos no, nunca
+           * creamos otra ficha automáticamente. Se deja para
+           * vinculación manual, evitando duplicados por países,
+           * fechas o diferencias en los datos de origen.
            */
           if (
             matches.length > 0 &&
@@ -1332,7 +1368,9 @@ export default function PlayerSquadImportForm({
               countryName: effectiveCountryName,
               countryId: effectiveCountryId,
               birthDate: item.birthDate,
-              status: "new",
+              candidatePlayers: matches,
+              duplicateReason: "identity",
+              status: "duplicate",
             };
           }
 
@@ -1348,6 +1386,21 @@ export default function PlayerSquadImportForm({
               countryName: effectiveCountryName,
               countryId: effectiveCountryId,
               birthDate: item.birthDate,
+              candidatePlayers: matches,
+              duplicateReason: "identity",
+              status: "duplicate",
+            };
+          }
+
+          if (similarCandidates.length > 0) {
+            return {
+              inputName,
+              normalizedName,
+              countryName: effectiveCountryName,
+              countryId: effectiveCountryId,
+              birthDate: item.birthDate,
+              candidatePlayers: similarCandidates,
+              duplicateReason: "similar",
               status: "duplicate",
             };
           }
@@ -1408,6 +1461,13 @@ export default function PlayerSquadImportForm({
         row.status ===
         "duplicate"
     ).length;
+
+  const linkImportRow = (rowIndex: number, player: Player) => {
+    setRows((current) => current.map((row, index) => index === rowIndex
+      ? { ...row, existingPlayer: player, playerId: player.id, status: "existing" }
+      : row));
+    setCandidateSearch((current) => ({ ...current, [rowIndex]: "" }));
+  };
 
   /*
    * ============================================================
@@ -2522,45 +2582,61 @@ Pedro Porro`}
                       (
                         row,
                         index
-                      ) => (
-                        <tr
-                          key={`${row.normalizedName}-${index}`}
-                          className="border-b border-slate-100"
-                        >
+                      ) => {
+                        const query = normalizeName(candidateSearch[index] ?? "");
+                        const searchResults = query.length >= 2
+                          ? players.filter((player) =>
+                              normalizeName(player.name).includes(query)
+                              || normalizeName(player.shortName ?? "").includes(query)
+                            ).slice(0, 8)
+                          : row.candidatePlayers ?? [];
 
-                          <td className="px-3 py-3 font-medium text-slate-800">
-                            {
-                              row.inputName
-                            }
-                          </td>
-
-                          <td className="px-3 py-3">
-
-                            {row.status ===
-                              "existing" && (
-                              <span className="font-medium text-green-600">
-                                ✓ Ya existe
-                              </span>
+                        return (
+                          <Fragment key={`${row.normalizedName}-${index}`}>
+                            <tr className="border-b border-slate-100">
+                              <td className="px-3 py-3 font-medium text-slate-800">{row.inputName}</td>
+                              <td className="px-3 py-3">{row.countryName ?? "—"}</td>
+                              <td className="px-3 py-3">{row.birthDate ?? "—"}</td>
+                              <td className="px-3 py-3">
+                                {row.status === "existing" && <span className="font-medium text-green-600">✓ Vinculado: {row.existingPlayer?.name ?? "ya existe"}</span>}
+                                {row.status === "new" && <span className="font-medium text-blue-600">+ Se creará</span>}
+                                {row.status === "duplicate" && <span className="font-medium text-amber-700">⚠ Revisar coincidencia</span>}
+                              </td>
+                            </tr>
+                            {row.status === "duplicate" && (
+                              <tr className="border-b border-slate-100 bg-amber-50/60">
+                                <td colSpan={4} className="px-3 py-3">
+                                  {row.duplicateReason === "input" ? (
+                                    <p className="text-sm text-amber-900">Esta persona aparece repetida en el listado. Elimina la línea duplicada para continuar.</p>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      <p className="text-sm text-amber-900">No se creará una ficha automáticamente. Vincula el jugador existente si corresponde:</p>
+                                      <input
+                                        type="search"
+                                        value={candidateSearch[index] ?? ""}
+                                        onChange={(event) => setCandidateSearch((current) => ({ ...current, [index]: event.target.value }))}
+                                        placeholder="Buscar en jugadores existentes"
+                                        className="min-h-10 w-full rounded-lg border border-amber-200 bg-white px-3 text-sm"
+                                      />
+                                      {searchResults.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
+                                          {searchResults.map((candidate) => (
+                                            <button key={candidate.id} type="button" onClick={() => linkImportRow(index, candidate)} className="min-h-9 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-900 hover:bg-emerald-50">
+                                              Vincular: {candidate.name}{candidate.shortName && candidate.shortName !== candidate.name ? ` (${candidate.shortName})` : ""}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      ) : query.length >= 2 ? (
+                                        <p className="text-xs text-slate-600">No hay coincidencias con esa búsqueda.</p>
+                                      ) : null}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
                             )}
-
-                            {row.status ===
-                              "new" && (
-                              <span className="font-medium text-blue-600">
-                                + Se creará
-                              </span>
-                            )}
-
-                            {row.status ===
-                              "duplicate" && (
-                              <span className="font-medium text-red-600">
-                                ⚠ Revisar
-                              </span>
-                            )}
-
-                          </td>
-
-                        </tr>
-                      )
+                          </Fragment>
+                        );
+                      }
                     )}
 
                   </tbody>

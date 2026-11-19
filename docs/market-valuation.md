@@ -11,7 +11,7 @@ La cifra que muestra Value90 es una **estimación orientativa propia**, no una p
 5. Ajuste por edad: curva definida en la migración, con el tramo de mayor valor entre 22 y 27 años.
 6. Redondeo: múltiplos de 50.000 €, con límites de 50.000 € y 500.000.000 €.
 
-Se conservan la valoración reciente, la de temporada, la nota combinada, los partidos incluidos, el importe anterior y el histórico de cada ejecución. La tarea automática se comprueba a diario y solo se ejecuta el primer martes del mes según la fecha de Madrid. El administrador también permite recalcular manualmente.
+Se conservan la valoración reciente, la de temporada, la nota combinada, los partidos incluidos, el importe anterior y el histórico de cada ejecución. La tarea automática se programa los martes a las 05:00 UTC; la función solo calcula el primer martes de cada mes según la fecha de Madrid. El administrador también permite recalcular manualmente.
 
 ## Alcance y límites
 
@@ -23,4 +23,4 @@ Referencia mundial de escala (consulta 21/10/2026): [CIES Football Observatory, 
 
 ## Puesta en marcha
 
-Aplicar `database/migrations/20261023_market_valuation.sql` en Supabase antes de desplegar el código. Después, abrir **Administrador → Mercado** y ejecutar **Actualizar estimaciones** para generar el primer conjunto. La actualización automática queda programada por `pg_cron` para el primer martes de cada mes a las 06:00–07:00 hora de Madrid.
+Aplicar `database/migrations/20261023_market_valuation.sql` y las migraciones posteriores en Supabase antes de desplegar el código. Para corregir una programación diaria existente, ejecutar `database/migrations/20261119_market_valuation_first_tuesday_schedule.sql` en el SQL Editor de Supabase. El trabajo se ejecutará los martes a las 05:00 UTC y la función limitará el cálculo al primer martes del mes en Europe/Madrid (06:00 en invierno, 07:00 en verano).
