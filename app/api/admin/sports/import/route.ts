@@ -247,8 +247,6 @@ const providerYear = legacyTarget
 let providerLeagueId: number | null =
   legacyTarget?.leagueId ?? null;
 
-let providerLeagueName = providerName;
-
 // Comprobar primero si ya existe una equivalencia vinculada.
 if (!providerLeagueId && input.competitionId) {
   const { data: mappings, error: mappingError } = await supabase
@@ -272,8 +270,6 @@ if (!providerLeagueId && input.competitionId) {
 
   if (mapping) {
     providerLeagueId = Number(mapping.external_competition_id);
-    providerLeagueName =
-      mapping.external_competition_name ?? providerName;
   }
 }
 
@@ -302,7 +298,7 @@ if (!providerLeagueId) {
     const league = exactMatches[0];
 
     providerLeagueId = league.id;
-    providerLeagueName = league.name;
+  
 
     if (input.competitionId) {
       const { error: mappingSaveError } = await supabase

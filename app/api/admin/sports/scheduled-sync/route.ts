@@ -28,7 +28,26 @@ export async function GET(request: NextRequest) {
       .eq("competitions.active", true);
     if (configuredError) throw new Error(configuredError.message);
     const competitionIds = (configuredCompetitions ?? [])
-      .filter((item) => scope !== "champions" || /champions/i.test(String(Array.isArray(item.competitions) ? item.competitions[0]?.name : item.competitions?.name ?? "")))
+      .filter((item) => {
+    const relation = (
+      item as unknown as {
+        competitions?:
+          | { name?: string }
+          | Array<{ name?: string }>
+          | null;
+      }
+    ).competitions;
+
+    const competitionName = Array.isArray(relation)
+      ? relation[0]?.name ?? ""
+      : relation?.name ?? "";
+
+    return (
+      scope !== "champions" ||
+      /champions/i.test(String(competitionName))
+    );
+  })
+
       .map((item) => Number(item.competition_id));
     if (!competitionIds.length) return NextResponse.json({ ok: true, due: 0, processed: 0, skipped: "No hay competiciones activas vinculadas a Highlightly para esta programación." });
     const { data: dueMappings, error } = await supabase.from("external_match_mappings")
