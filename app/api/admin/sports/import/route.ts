@@ -231,18 +231,172 @@ export async function POST(request: NextRequest) {
     if (!Number.isInteger(seasonYear) || seasonYear < 1990 || seasonYear > 2100) {
       return NextResponse.json({ error: "Selecciona una temporada válida." }, { status: 400 });
     }
-    const providerName = legacyTarget?.competitionName ?? input.competitionName!.trim();
-    const genericWorldCup = !legacyTarget && /world cup|mundial/i.test(providerName);
-    const providerYear = legacyTarget ? providerSeasonYear(legacyTarget.competition, seasonYear) : genericWorldCup ? seasonYear + 1 : seasonYear;
-    let providerLeagueId: number | null = legacyTarget?.leagueId ?? null;
-    if (!providerLeagueId) {
-      const leagueResponse = await getHighlightlyLeagues({ leagueName: providerName, season: providerYear });
-      const requestedName = normalize(providerName);
-      const league = leagueResponse.body?.data?.find((item) => normalize(item.name) === requestedName && item.seasons?.some((entry) => entry.season === providerYear));
-      if (!league) return NextResponse.json({ error: `Highlightly no ofrece «${providerName}» para la temporada ${providerYear}.` }, { status: 404 });
-      providerLeagueId = league.id;
+    
+const providerName =
+  legacyTarget?.competitionName ?? input.competitionName!.trim();
+
+const genericWorldCup =
+  !legacyTarget && /world cup|mundial/i.test(providerName);
+
+const providerYear = legacyTarget
+  ? providerSeasonYear(legacyTarget.competition, seasonYear)
+  : genericWorldCup
+    ? seasonYear + 1
+    : seasonYear;
+
+let providerLeagueId: number | null =
+  legacyTarget?.leagueId ?? null;
+
+let providerLeagueName = providerName;
+
+// Comprobar primero si ya existe una equivalencia vinculada.
+if (!providerLeagueId && input.competitionId) {
+  const { data: mappings, error: mappingError } = await supabase
+    .from("external_competition_mappings")
+    .select(
+      "external_competition_id, external_competition_name, status"
+    )
+    .eq("provider", "highlightly")
+    .eq("competition_id", input.competitionId)
+    .eq("status", "linked")
+    .order("reviewed_at", { ascending: false })
+    .limit(1);
+
+  if (mappingError) {
+    throw new Error(
+      `No se pudo leer la vinculación con Highlightly: ${mappingError.message}`
+    );
+  }
+
+  const mapping = mappings?.[0];
+
+  if (mapping) {
+    providerLeagueId = Number(mapping.external_competition_id);
+    providerLeagueName =
+      mapping.external_competition_name ?? providerName;
+  }
+}
+
+// Si no existe equivalencia, buscar la competición en Highlightly.
+if (!providerLeagueId) {
+  const leagueResponse = await getHighlightlyLeagues({
+    leagueName: providerName,
+    season: providerYear,
+  });
+
+  const availableLeagues = (leagueResponse.body?.data ?? [])
+    .filter((league) =>
+      league.seasons?.some(
+        (entry) => entry.season === providerYear
+      )
+    );
+
+  const requestedName = normalize(providerName);
+
+  const exactMatches = availableLeagues.filter(
+    (league) => normalize(league.name) === requestedName
+  );
+
+  // Coincidencia exacta: podemos guardar la equivalencia.
+  if (exactMatches.length === 1) {
+    const league = exactMatches[0];
+
+    providerLeagueId = league.id;
+    providerLeagueName = league.name;
+
+    if (input.competitionId) {
+      const { error: mappingSaveError } = await supabase
+        .from("external_competition_mappings")
+        .upsert(
+          {
+            provider: "highlightly",
+            external_competition_id: league.id,
+            external_competition_name: league.name,
+            competition_id: input.competitionId,
+            status: "linked",
+            reviewed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "provider,external_competition_id",
+          }
+        );
+
+      if (mappingSaveError) {
+        throw new Error(
+          `No se pudo guardar la equivalencia: ${mappingSaveError.message}`
+        );
+      }
     }
-    if (providerLeagueId == null) return NextResponse.json({ error: "No se pudo resolver la competición en Highlightly." }, { status: 404 });
+  } else {
+    // Si hay varias coincidencias, no elegimos una automáticamente.
+    // Si hay una única candidata, registramos una incidencia pendiente.
+    if (availableLeagues.length === 1 && input.competitionId) {
+      const league = availableLeagues[0];
+
+      const { error: pendingError } = await supabase
+        .from("external_competition_mappings")
+        .upsert(
+          {
+            provider: "highlightly",
+            external_competition_id: league.id,
+            external_competition_name: league.name,
+            competition_id: null,
+            status: "pending",
+            reviewed_at: null,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "provider,external_competition_id",
+            ignoreDuplicates: true,
+          }
+        );
+
+      if (pendingError) {
+        throw new Error(
+          `No se pudo registrar la incidencia: ${pendingError.message}`
+        );
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          pendingCompetition: true,
+          externalCompetitionId: league.id,
+          externalCompetitionName: league.name,
+          message:
+            `La competición «${league.name}» de Highlightly necesita vincularse manualmente con «${providerName}» en Value90.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        error:
+          availableLeagues.length === 0
+            ? `Highlightly no ofrece «${providerName}» para la temporada ${providerYear}.`
+            : `Se encontraron varias competiciones para «${providerName}». No se ha seleccionado ninguna para evitar una asociación incorrecta.`,
+        candidates: availableLeagues.map((league) => ({
+          id: league.id,
+          name: league.name,
+        })),
+      },
+      { status: 409 }
+    );
+  }
+}
+
+if (providerLeagueId == null) {
+  return NextResponse.json(
+    {
+      error:
+        "No se pudo resolver la competición en Highlightly.",
+    },
+    { status: 404 }
+  );
+}
+
     const competitionKind = legacyTarget?.competition ?? (genericWorldCup ? "worldcup" : "other");
     let fetched: { matches: HighlightlyMatch[]; remaining: string | null; limit: string | null; requests: number; quotaExhausted: boolean };
     if (input.mode === "round") {

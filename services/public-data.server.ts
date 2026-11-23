@@ -449,7 +449,7 @@ export async function getPublicRankings(params: URLSearchParams) {
         const [season, team] = key.split(":").map(Number);
         if (teamId && team !== teamId) return false;
         const teamMatchCount = teamMatches.get(teamSeasonKey(team, season)) ?? 0;
-        return teamMatchCount > 0 && playedMatches.size / teamMatchCount >= 0.5;
+        return teamMatchCount > 0 && playedMatches.size / teamMatchCount >= 0.85;
       });
       return (teamId != null || meetsTeamThreshold) && item.score > 0;
     });

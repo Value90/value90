@@ -7,7 +7,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const AUTO_SYNC_COMPETITION_IDS = [1, 2, 3]; // LaLiga, Premier League, Champions League
 const MAX_MATCHES_PER_RUN = 12;
 const MATCHES_PER_GROUP = 4;
 const CLAIM_LEASE_MS = 10 * 60_000;
@@ -20,12 +19,23 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createAdminSupabaseClient();
+    const scope = request.nextUrl.searchParams.get("scope") ?? "all";
     const now = new Date();
+    const { data: configuredCompetitions, error: configuredError } = await supabase
+      .from("external_competition_mappings")
+      .select("competition_id,competitions!inner(name,active)")
+      .eq("provider", "highlightly")
+      .eq("competitions.active", true);
+    if (configuredError) throw new Error(configuredError.message);
+    const competitionIds = (configuredCompetitions ?? [])
+      .filter((item) => scope !== "champions" || /champions/i.test(String(Array.isArray(item.competitions) ? item.competitions[0]?.name : item.competitions?.name ?? "")))
+      .map((item) => Number(item.competition_id));
+    if (!competitionIds.length) return NextResponse.json({ ok: true, due: 0, processed: 0, skipped: "No hay competiciones activas vinculadas a Highlightly para esta programación." });
     const { data: dueMappings, error } = await supabase.from("external_match_mappings")
       .select("provider,external_match_id,match_id,next_result_sync_at,result_attempts,final_synced_at,match:matches!inner(id,date,status,competition_id)")
       .eq("provider", "highlightly").is("final_synced_at", null)
       .lte("next_result_sync_at", now.toISOString()).or("result_attempts.is.null,result_attempts.lt.5")
-      .in("match.competition_id", AUTO_SYNC_COMPETITION_IDS)
+      .in("match.competition_id", competitionIds)
       .order("next_result_sync_at", { ascending: true }).limit(MAX_MATCHES_PER_RUN);
     if (error) throw new Error(error.message);
 

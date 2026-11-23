@@ -14,6 +14,15 @@ type PendingPlayer = {
   shirt_number: number | null; position_id: number | null; is_starting_xi: boolean; provisional_player: Player | null;
   suggestions: Candidate[]; occurrences: PendingOccurrence[]; auto_match: { player_id: number; player_name: string; position_id: number } | null;
 };
+type PendingCompetition = {
+  id: number;
+  provider: string;
+  external_competition_id: number;
+  external_competition_name: string;
+  competition_id: number | null;
+  status: "pending" | "linked";
+  created_at: string;
+};
 type ImportMode = "round" | "dates" | "season";
 type QuotaState = { remaining: number | null; limit: number | null; checkedAt: string };
 type ImportedMatch = { matchId: number; date: string; seasonYear?: number | null; status: string; homeScore: number | null; awayScore: number | null; home: string; away: string; competitionId: number; competition: string; stageId: number; stage: string; finalSynced: boolean; syncError: string | null; resultAttempts: number; nextAttemptAt: string | null };
@@ -90,6 +99,10 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   const [syncingPastMatch, setSyncingPastMatch] = useState(false);
   const [syncingFilteredMatches, setSyncingFilteredMatches] = useState(false);
 
+  const [pendingCompetitions, setPendingCompetitions] = useState<PendingCompetition[]>([]);
+  const [selectedCompetitionMatches, setSelectedCompetitionMatches] = useState<Record<number, string>>({});
+  const [savingCompetitionId, setSavingCompetitionId] = useState<number | null>(null);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(QUOTA_STORAGE_KEY);
@@ -126,6 +139,24 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     setPending(rows);
     return autoLinked;
   }, []);
+  
+  const loadPendingCompetitions = useCallback(async () => {
+      const response = await fetch(
+      "/api/admin/sports/pending-competitions",
+      { cache: "no-store" }
+      );
+
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        payload.error ?? "No se pudieron cargar las incidencias de competiciones."
+      );
+    }
+
+    setPendingCompetitions(payload.pending ?? []);
+  }, []);
+  
 
   const loadPlayers = useCallback(async () => {
     const refreshed = await getPlayers();
@@ -168,6 +199,12 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   }, [loadPlayers, loadPastMatches]);
 
   useEffect(() => {
+    loadPendingCompetitions().catch((error) => {
+      console.error("Error cargando incidencias de competiciones:", error);
+    });
+  }, [loadPendingCompetitions]);
+
+  useEffect(() => {
     loadPending(incidentPage).catch((error) => setMessage(error instanceof Error ? error.message : "Error cargando incidencias."));
   }, [loadPending, incidentPage]);
 
@@ -197,10 +234,12 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
   const isWorldCup = normalizedCompetition.includes("mundial") || normalizedCompetition.includes("worldcup");
   const isLaLiga = normalizedCompetition.includes("laliga") || normalizedCompetition.includes("primeradivision");
   const legacyCompetitionKey = isLaLiga ? "laliga" : isChampions ? "champions" : isPremier ? "premier" : isWorldCup ? "worldcup" : null;
-  const importCompetitionPayload = legacyCompetitionKey
-    ? { competition: legacyCompetitionKey }
-    : { competitionId: Number(competitionId), competitionName: selectedCompetition?.name ?? "" };
-  const quotaQuery = selectedCompetition && legacyCompetitionKey
+  
+  const importCompetitionPayload = {
+  competitionId: Number(competitionId),
+  competitionName: selectedCompetition?.name ?? "",};
+  
+    const quotaQuery = selectedCompetition && legacyCompetitionKey
     ? `competition=${legacyCompetitionKey}`
     : `competitionId=${competitionId}&competitionName=${encodeURIComponent(selectedCompetition?.name ?? "")}`;
   const totalMatches = isLaLiga || isPremier ? 380 : isChampions ? 144 : isWorldCup ? 104 : selectedCompetition?.competitionType === "League" ? 380 : 160;
@@ -250,8 +289,25 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
             ? { ...importCompetitionPayload, mode: importMode, startDate, endDate, seasonYear }
             : { ...importCompetitionPayload, mode: importMode, seasonYear }),
       });
+      
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "No se pudo importar el calendario.");
+
+        if (response.status === 409 && payload.pendingCompetition) {
+          await loadPendingCompetitions();
+
+          setMessage(
+          `Competición pendiente de revisión: ${payload.externalCompetitionName}. No se han importado partidos. Resuelve la incidencia en el apartado de competiciones y vuelve a importar.`
+        );
+
+        return;
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            payload.error ?? "No se pudo importar el calendario."
+          );
+        }
+
       if (payload.callsRemaining != null) {
         const next: QuotaState = { remaining: Number(payload.callsRemaining), limit: payload.callsLimit == null ? quota?.limit ?? null : Number(payload.callsLimit), checkedAt: new Date().toISOString() };
         setQuota(next);
@@ -259,7 +315,10 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       }
       await loadPastMatches();
       onImported?.();
+      
       const autoLinked = await loadPending(incidentPage);
+      await loadPendingCompetitions();
+
       setMessage(`${payload.message} Partidos guardados o vinculados: ${payload.imported}. Pendientes por equipos no asociados: ${payload.skipped}. Jugadores asignados automáticamente: ${autoLinked}.${payload.missingTeams?.length ? ` Equipos por crear/asociar: ${payload.missingTeams.join(", ")}.` : ""}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo importar el calendario.");
@@ -389,6 +448,62 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
     await linkPlayer(item, player.id, "confirmed_new");
   }
 
+async function resolveCompetition(item: PendingCompetition) {
+  const selectedId = selectedCompetitionMatches[item.external_competition_id];
+
+  if (!selectedId) {
+    setMessage("Selecciona primero la competición correspondiente de Value90.");
+    return;
+  }
+
+  setSavingCompetitionId(item.external_competition_id);
+  setMessage("");
+
+  try {
+    const response = await fetch(
+      "/api/admin/sports/pending-competitions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          externalCompetitionId: item.external_competition_id,
+          competitionId: Number(selectedId),
+        }),
+      }
+    );
+
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        payload.error ?? "No se pudo vincular la competición."
+      );
+    }
+
+    await loadPendingCompetitions();
+
+    setSelectedCompetitionMatches((current) => {
+      const next = { ...current };
+      delete next[item.external_competition_id];
+      return next;
+    });
+
+    setMessage(
+      `Competición vinculada correctamente: ${item.external_competition_name} → ${payload.competitionName}. Ya puedes volver a importar sus partidos.`
+    );
+  } catch (error) {
+    setMessage(
+      error instanceof Error
+        ? error.message
+        : "Error al vincular la competición."
+    );
+  } finally {
+    setSavingCompetitionId(null);
+  }
+}
+
   return <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
@@ -471,6 +586,92 @@ export default function HighlightlyImportPanel({ onImported }: { onImported?: ()
       </p>
     </div>
     {message && <p role="status" className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{message}</p>}
+
+    
+{pendingCompetitions.length > 0 && (
+  <div className="mt-5 border-t border-slate-200 pt-4">
+    <h3 className="font-semibold text-orange-900">
+      Incidencias de competiciones ({pendingCompetitions.length})
+    </h3>
+
+    <p className="mt-1 text-sm text-slate-600">
+      Estas competiciones de Highlightly necesitan asociarse
+      manualmente con una competición de Value90.
+    </p>
+
+    <ul className="mt-3 space-y-3">
+      {pendingCompetitions.map((item) => (
+        <li
+          key={item.id}
+          className="rounded-xl border border-orange-200 bg-orange-50 p-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="font-semibold text-slate-900">
+                {item.external_competition_name}
+              </p>
+              <p className="mt-1 text-xs text-slate-600">
+                Highlightly · ID {item.external_competition_id}
+              </p>
+            </div>
+
+            <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-900">
+              Pendiente de vincular
+            </span>
+          </div>
+
+          <label className="mt-3 block">
+            <span className="mb-1 block text-sm font-medium text-slate-700">
+              Selecciona la competición de Value90
+            </span>
+
+            <select
+              value={
+                selectedCompetitionMatches[item.external_competition_id] ?? ""
+              }
+              onChange={(event) =>
+                setSelectedCompetitionMatches((current) => ({
+                  ...current,
+                  [item.external_competition_id]: event.target.value,
+                }))
+              }
+              className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"
+            >
+              <option value="">
+                Selecciona una competición
+              </option>
+
+              {competitions.map((competition) => (
+                <option
+                  key={competition.id}
+                  value={competition.id}
+                >
+                  {competition.name}
+                  {!competition.active ? " (Inactiva)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => resolveCompetition(item)}
+            disabled={
+              !selectedCompetitionMatches[item.external_competition_id] ||
+              savingCompetitionId === item.external_competition_id
+            }
+            className="mt-3 min-h-11 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {savingCompetitionId === item.external_competition_id
+              ? "Guardando vínculo…"
+              : "Confirmar competición"}
+          </button>
+        </li>
+      ))}
+    </ul>
+  </div>
+)}
+
 
     {pendingTotal > 0 && <div className="mt-5 border-t border-slate-200 pt-4">
       <h3 className="font-semibold text-amber-900">Incidencias de jugadores ({pendingTotal})</h3>

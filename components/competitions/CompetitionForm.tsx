@@ -132,8 +132,38 @@ export default function CompetitionForm({
   const [error, setError] =
     useState("");
 
+  const [highlightlyLoading, setHighlightlyLoading] = useState(false);
+  const [highlightlyError, setHighlightlyError] = useState("");
+  const [highlightlyOptions, setHighlightlyOptions] = useState<Array<{ id: number; name: string; country: string }>>([]);
+  const [highlightlyLeagueId, setHighlightlyLeagueId] = useState("");
+
   const isEditing =
     competition !== null;
+
+  const searchHighlightly = async () => {
+    if (!name.trim()) {
+      setHighlightlyError("Escribe primero el nombre de la competición.");
+      return;
+    }
+    setHighlightlyLoading(true);
+    setHighlightlyError("");
+    try {
+      const season = new Date().getFullYear();
+      const params = new URLSearchParams({ query: name.trim(), season: String(season) });
+      if (competition) params.set("competitionId", String(competition.id));
+      const response = await fetch(`/api/admin/sports/competition-mappings?${params.toString()}`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "No se pudo consultar Highlightly.");
+      const options = payload.leagues ?? [];
+      setHighlightlyOptions(options);
+      setHighlightlyLeagueId(payload.mappedId ? String(payload.mappedId) : options.length === 1 ? String(options[0].id) : "");
+      if (!options.length) setHighlightlyError("Highlightly no devolvió una competición compatible para la temporada actual.");
+    } catch (lookupError) {
+      setHighlightlyError(lookupError instanceof Error ? lookupError.message : "No se pudo consultar Highlightly.");
+    } finally {
+      setHighlightlyLoading(false);
+    }
+  };
 
   /*
    * ============================================================
@@ -324,6 +354,18 @@ export default function CompetitionForm({
         active
       );
 
+      if (highlightlyLeagueId) {
+        const selectedLeague = highlightlyOptions.find((league) => league.id === Number(highlightlyLeagueId));
+        if (!selectedLeague) throw new Error("La competición seleccionada de Highlightly ya no está disponible.");
+        const mappingResponse = await fetch("/api/admin/sports/competition-mappings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competitionId, externalCompetitionId: selectedLeague.id, externalName: selectedLeague.name }),
+        });
+        const mappingPayload = await mappingResponse.json();
+        if (!mappingResponse.ok) throw new Error(mappingPayload.error ?? "No se pudo guardar la vinculación con Highlightly.");
+      }
+
       onSaved?.();
       onClose();
     } catch (error) {
@@ -417,6 +459,23 @@ export default function CompetitionForm({
             placeholder="LaLiga"
           />
 
+        </div>
+
+        <div className="md:col-span-2 rounded-lg border border-sky-200 bg-sky-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Vinculación con Highlightly</p>
+              <p className="mt-1 text-xs text-slate-600">Consulta el proveedor y elige la competición que corresponde a esta ficha. Es opcional, pero necesaria para importar y sincronizar partidos.</p>
+            </div>
+            <button type="button" onClick={() => void searchHighlightly()} disabled={highlightlyLoading} className="min-h-10 rounded-lg border border-sky-300 bg-white px-4 py-2 text-sm font-semibold text-sky-900 disabled:opacity-60">
+              {highlightlyLoading ? "Consultando…" : "Buscar en Highlightly"}
+            </button>
+          </div>
+          {highlightlyError && <p className="mt-3 text-sm text-red-700">{highlightlyError}</p>}
+          {highlightlyOptions.length > 0 && <select value={highlightlyLeagueId} onChange={(event) => setHighlightlyLeagueId(event.target.value)} className="mt-3 min-h-11 w-full rounded-lg border border-sky-300 bg-white px-3 text-sm">
+            <option value="">No vincular por ahora</option>
+            {highlightlyOptions.map((league) => <option key={league.id} value={league.id}>{league.name} · {league.country} · ID {league.id}</option>)}
+          </select>}
         </div>
 
         {/* ABREVIATURA */}
